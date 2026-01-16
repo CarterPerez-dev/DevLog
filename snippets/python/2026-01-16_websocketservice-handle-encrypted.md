@@ -1,0 +1,134 @@
+# WebSocketService.handle_encrypted_message
+
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/encrypted-p2p-chat/backend/app/services/websocket_service.py
+**Language:** python
+**Lines:** 87-179
+**Complexity:** 11.0
+
+---
+
+## Source Code
+
+```python
+async def handle_encrypted_message(
+        self,
+        user_id: UUID,
+        message: dict[str,
+                      Any]
+    ) -> None:
+        """
+        Process client-encrypted message and forward to recipient (pass-through)
+        """
+        try:
+            recipient_id = UUID(message.get("recipient_id"))
+            room_id = message.get("room_id")
+            ciphertext = message.get("ciphertext")
+            nonce = message.get("nonce")
+            header = message.get("header")
+            temp_id = message.get("temp_id", "")
+
+            if not ciphertext or not nonce or not header:
+                logger.error("Missing encryption fields in message from %s", user_id)
+                return
+
+            if not room_id:
+                logger.error("Missing room_id in message from %s", user_id)
+                return
+
+            async with async_session_maker() as session:
+                result = await message_service.store_encrypted_message(
+                    session,
+                    user_id,
+                    recipient_id,
+                    ciphertext,
+                    nonce,
+                    header,
+                    room_id,
+                )
+
+            ws_message = EncryptedMessageWS(
+                message_id = result.id if hasattr(result, 'id') else "unknown",
+                sender_id = str(user_id),
+                recipient_id = str(recipient_id),
+                room_id = room_id,
+                content = "",
+                ciphertext = ciphertext,
+                nonce = nonce,
+                header = header,
+                sender_username = result.sender_username if hasattr(result, 'sender_username') else ""
+            )
+
+            is_recipient_connected = connection_manager.is_user_connected(recipient_id)
+            logger.debug(
+                "Sending to recipient %s - connected: %s",
+                recipient_id,
+                is_recipient_connected
+            )
+
+            await connection_manager.send_message(
+                recipient_id,
+                ws_message.model_dump(mode = "json")
+            )
+            logger.debug("Message sent to recipient %s", recipient_id)
+
+            confirmation = MessageSentWS(
+                temp_id = temp_id,
+                message_id = result.id if hasattr(result, 'id') else "unknown",
+                room_id = room_id,
+                status = "sent",
+                created_at = result.created_at if hasattr(result, 'created_at') else datetime.now(UTC)
+            )
+
+            await connection_manager.send_message(
+                user_id,
+                confirmation.model_dump(mode = "json")
+            )
+
+            logger.info(
+                "Encrypted message forwarded: %s -> %s in room %s",
+                user_id,
+                recipient_id,
+                room_id
+            )
+
+        except ValueError as e:
+            logger.error(
+                "Invalid UUID in encrypted message from %s: %s",
+                user_id,
+                e
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to handle encrypted message from %s: %s",
+                user_id,
+                e
+            )
+```
+
+---
+
+## Documentation
+
+### Documentation for `handle_encrypted_message`
+
+**Purpose and Behavior:**
+This asynchronous function processes encrypted messages received from clients, storing them in a database and then forwarding the message content to the intended recipient via WebSocket. It logs errors if any required fields are missing or if there's an issue with handling the message.
+
+**Key Implementation Details:**
+- The function uses type hints for `user_id` (UUID) and `message` (dict), ensuring strict typing.
+- It handles potential `ValueError` exceptions by validating UUIDs, and general exceptions to catch any unexpected errors.
+- Uses a context manager (`async_session_maker`) to manage database sessions efficiently.
+- Logs detailed information about the message handling process.
+
+**When/Why to Use:**
+Use this function in scenarios where encrypted messages need to be securely passed between users via WebSocket. It ensures that all necessary fields are present, logs critical errors, and maintains a record of sent messages.
+
+**Patterns and Gotchas:**
+- The use of `try-except` blocks for error handling is crucial but can lead to loss of context if not detailed in the logging.
+- Ensure that the `message_service.store_encrypted_message` function is correctly implemented as it handles database interactions.
+- Be cautious with the `temp_id` and `created_at` fields, which may need dynamic values based on actual use cases.
+
+---
+
+*Generated by CodeWorm on 2026-01-16 16:35*
