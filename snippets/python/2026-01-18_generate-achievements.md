@@ -1,0 +1,146 @@
+# generate_achievements
+
+**Repository:** CertGames-Core
+**File:** backend/api/domains/games/services/incident/achievement_engine.py
+**Language:** python
+**Lines:** 16-121
+**Complexity:** 17.0
+
+---
+
+## Source Code
+
+```python
+def generate_achievements(  # pylint: disable=too-many-positional-arguments
+    response_rating: int, time_bonus: int, is_first_completion: bool,
+    scenario: dict[str, Any], selected_actions: dict[str,
+                                                     str], user: User, score: int
+) -> list[dict[str, str]]:
+    """
+    Generate achievements based on performance
+    """
+    achievements = []
+
+    # Expert Responder
+    if response_rating >= 90:
+        achievements.append(
+            {
+                "id": "expert_responder",
+                "name": "Expert Responder",
+                "description": "Achieved 90%+ response rating"
+            }
+        )
+
+    # Swift Defender
+    if response_rating >= 70 and time_bonus > 0:
+        achievements.append(
+            {
+                "id": "swift_defender",
+                "name": "Swift Defender",
+                "description": "Good response with time bonus"
+            }
+        )
+
+    # First Response
+    if is_first_completion:
+        achievements.append(
+            {
+                "id": "first_response",
+                "name": "First Response",
+                "description": "Completed your first incident scenario"
+            }
+        )
+
+    # Master of All Threats
+    completed_types = set()
+    all_progress = IncidentProgress.objects(
+        userId = user.id,
+        completed = True
+    )
+    for prog in all_progress:
+        scenario_obj = IncidentScenario.objects(
+            scenario_id = prog.scenarioId
+        ).first()
+        if scenario_obj:
+            completed_types.add(scenario_obj.type)
+
+    if len(completed_types) >= 3:
+        achievements.append(
+            {
+                "id": "master_all_threats",
+                "name": "Master of All Threats",
+                "description": "Completed all scenario types"
+            }
+        )
+
+    # Perfect Decision Maker
+    poor_choices = sum(
+        1 for stage in scenario.get("stages", [])
+        for action in stage.get("actions", [])
+        if action.get("id") == selected_actions.get(stage.get("id"))
+        and action.get("points", 0) == 0
+    )
+
+    if poor_choices == 0 and len(selected_actions) > 0:
+        achievements.append(
+            {
+                "id": "perfect_decisions",
+                "name": "Perfect Decision Maker",
+                "description": "No poor choices made"
+            }
+        )
+
+    # Battle-Hardened Responder
+    if scenario.get("difficulty") == "hard" and score >= 80:
+        achievements.append(
+            {
+                "id": "battle_hardened",
+                "name": "Battle-Hardened Responder",
+                "description": "80%+ score on hard difficulty"
+            }
+        )
+
+    # Elite Response Team
+    high_score_count = IncidentProgress.objects(
+        userId = user.id,
+        completed = True,
+        responseRating__gte = 90
+    ).count()
+
+    if high_score_count >= 3:
+        achievements.append(
+            {
+                "id": "elite_team",
+                "name": "Elite Response Team",
+                "description": "3+ scenarios with 90%+ rating"
+            }
+        )
+
+    return achievements
+```
+
+---
+
+## Documentation
+
+### Documentation for `generate_achievements`
+
+**Purpose and Behavior:**
+The function `generate_achievements` evaluates a player's performance in an incident scenario and awards achievements based on various criteria such as response rating, time bonus, first completion, and more. It returns a list of achievement dictionaries.
+
+**Key Implementation Details:**
+- The function accepts parameters like response rating, time bonus, user data, selected actions, and the scenario details.
+- It checks for multiple conditions to award specific achievements, including expert responder, swift defender, first response, master of all threats, perfect decision maker, battle-hardened responder, and elite response team.
+- Uses sets and database queries (e.g., `IncidentProgress`, `IncidentScenario`) to track completed scenario types and high-score counts.
+
+**When/Why to Use:**
+Use this function in the backend API to dynamically generate achievements for players based on their performance in incident scenarios. It helps in gamifying the experience by providing immediate feedback and recognition.
+
+**Patterns and Gotchas:**
+- The function uses a mix of positional arguments and keyword arguments, which can be confusing if not documented properly.
+- Relies heavily on external database objects (`IncidentProgress`, `IncidentScenario`), so ensure these are correctly configured in your environment.
+- Performance could be an issue with large datasets due to multiple database queries. Consider optimizing by fetching all necessary data in a single query where possible.
+
+---
+
+*Generated by CodeWorm on 2026-01-18 13:56*
