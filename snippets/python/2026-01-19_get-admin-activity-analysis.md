@@ -1,0 +1,146 @@
+# get_admin_activity_analysis
+
+**Repository:** CertGames-Core
+**File:** backend/api/admin/domains/audit/controllers.py
+**Language:** python
+**Lines:** 165-264
+**Complexity:** 17.0
+
+---
+
+## Source Code
+
+```python
+def get_admin_activity_analysis() -> dict[str, Any]:
+    """
+    Get admin activity analysis and timeline
+    """
+    data = g.validated
+
+    admin_id = data.get("admin_id")
+
+    days = data.get("days", 30)
+    limit = data.get("limit", 100)
+    skip = data.get("skip", 0)
+    action_type = data.get("action_type")
+    success_only = data.get("success_only")
+
+    if admin_id:
+        timeline = AuditAnalysisService.get_admin_activity_timeline(
+            admin_id = admin_id,
+            days = days,
+            limit = limit
+        )
+    else:
+        logs = AuditAnalysisService.search_audit_logs(
+            admin_only = True,
+            action = action_type,
+            success = success_only,
+            limit = limit,
+            skip = skip,
+            start_date = datetime.now(UTC) - timedelta(days = days),
+            end_date = datetime.now(UTC)
+        )
+        timeline = logs
+
+    total_actions = len(timeline)
+    failed_actions = sum(
+        1 for log in timeline if log.get('success') is False
+    )
+    success_rate = (
+        (total_actions - failed_actions) / total_actions * 100
+    ) if total_actions > 0 else 0
+
+    unique_action_types = len({log.get('action', '') for log in timeline})
+    unique_ips = len(
+        {log.get('ip',
+                 '')
+         for log in timeline
+         if log.get('ip')}
+    )
+
+    if timeline:
+        timestamps = [
+            log.get('timestamp',
+                    '') for log in timeline if log.get('timestamp')
+        ]
+        if len(timestamps) >= 2:
+            earliest = min(timestamps)
+            latest = max(timestamps)
+            earliest_dt = datetime.fromisoformat(
+                earliest.replace('Z',
+                                 '+00:00')
+            )
+            latest_dt = datetime.fromisoformat(
+                latest.replace('Z',
+                               '+00:00')
+            )
+            activity_span_hours = (latest_dt -
+                                   earliest_dt).total_seconds() / 3600
+        else:
+            activity_span_hours = 0.0
+    else:
+        activity_span_hours = 0.0
+
+    summary = {
+        "admin_id": admin_id or "all",
+        "total_actions": total_actions,
+        "failed_actions": failed_actions,
+        "success_rate": round(success_rate,
+                              2),
+        "unique_action_types": unique_action_types,
+        "unique_ips": unique_ips,
+        "activity_span_hours": round(activity_span_hours,
+                                     2),
+        "most_common_action": "",
+        "last_action": timeline[0].get('timestamp',
+                                       '') if timeline else ""
+    }
+
+    action_distribution = {}
+    for log in timeline:
+        action = log.get('action', 'unknown')
+        if action not in action_distribution:
+            action_distribution[action] = 0
+        action_distribution[action] += 1
+
+    return {
+        "admin_id": admin_id or "all",
+        "period_days": days,
+        "summary": summary,
+        "timeline": timeline,
+        "action_distribution": action_distribution
+    }
+```
+
+---
+
+## Documentation
+
+### Documentation for `get_admin_activity_analysis`
+
+**Purpose and Behavior:**
+This function retrieves and analyzes admin activity logs, providing a summary of actions taken over a specified period. It calculates metrics such as success rate, unique action types, and the span of activity in hours.
+
+**Key Implementation Details:**
+- **Input Parameters:** Accepts `admin_id`, `days`, `limit`, `skip`, `action_type`, and `success_only` from query parameters.
+- **Logic Flow:** 
+  - If an admin ID is provided, it fetches a timeline for that specific admin.
+  - Otherwise, it searches through all audit logs with optional filters.
+- **Metrics Calculation:**
+  - Total actions, failed actions, success rate, unique action types, and unique IPs are calculated.
+  - Activity span in hours is determined based on the earliest and latest timestamps.
+
+**When/Why to Use This Code:**
+Use this function when you need a comprehensive analysis of admin activities within a given timeframe. It's particularly useful for security audits or performance monitoring.
+
+**Patterns/Gotchas:**
+- The use of `g.validated` suggests that this function relies on external validation logic.
+- The handling of optional parameters and default values ensures flexibility in usage.
+- Be cautious with the date calculations, as they rely on ISO format strings. Ensure timestamps are correctly formatted to avoid errors.
+
+This function encapsulates complex data retrieval and analysis into a single, reusable method, making it easier to maintain and extend.
+
+---
+
+*Generated by CodeWorm on 2026-01-19 23:31*
