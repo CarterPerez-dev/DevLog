@@ -1,0 +1,135 @@
+# collect_current_metrics
+
+**Repository:** CertGames-Core
+**File:** backend/devtools/scripts/collect_database_metrics.py
+**Language:** python
+**Lines:** 30-121
+**Complexity:** 14.0
+
+---
+
+## Source Code
+
+```python
+def collect_current_metrics():
+    """
+    Collect current database metrics for all collections.
+    """
+    config = get_config()
+    connect('certgames')
+
+    from mongoengine import get_db
+    db = get_db()
+
+    collections = db.list_collection_names()
+
+    collections_to_monitor = [
+        c for c in collections
+        if not c.startswith('system.') and not c.startswith('admin_')
+    ]
+
+    logger.info(
+        f"Found {len(collections_to_monitor)} collections to monitor"
+    )
+
+    now = datetime.now(UTC)
+    period_start = now.replace(
+        hour = 0,
+        minute = 0,
+        second = 0,
+        microsecond = 0
+    )
+
+    for collection_name in collections_to_monitor:
+        try:
+            from api.admin.domains.analytics.queries import DatabasePerformanceAggregator
+
+            metrics = DatabasePerformanceAggregator.aggregate_collection_metrics(
+                collection_name = collection_name,
+                period_type = 'daily',
+                start = period_start,
+                end = now
+            )
+
+            if metrics:
+                existing = DatabaseMetrics.objects(
+                    collection_name = collection_name,
+                    period_type = 'daily',
+                    period_start = period_start
+                ).first()
+
+                if existing:
+                    for key, value in metrics.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
+                    existing.save()
+                    logger.info(f"Updated metrics for {collection_name}")
+                else:
+                    DatabaseMetrics(**metrics).save()
+                    logger.info(f"Created metrics for {collection_name}")
+            else:
+                logger.warning(
+                    f"No metrics returned for {collection_name}"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to collect metrics for {collection_name}: {e}"
+            )
+
+    try:
+        result = AnalyticsService.get_realtime_database_performance(
+            collection_name = 'all',
+            period_type = 'hourly'
+        )
+        logger.info(
+            f"Realtime metrics: {result.get('operation_count', 0)} operations"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get realtime metrics: {e}")
+
+    logger.info("Metrics collection complete!")
+
+    total_metrics = DatabaseMetrics.objects.count()
+    logger.info(f"Total metrics in database: {total_metrics}")
+
+    try:
+        health = AnalyticsService.get_database_health()
+        if isinstance(health, list):
+            logger.info(f"Collections with health data: {len(health)}")
+            for item in health[: 3]:
+                logger.info(
+                    f"  - {item.get('collection')}: Health score {item.get('health_score')}"
+                )
+    except Exception as e:
+        logger.error(f"Failed to get health overview: {e}")
+```
+
+---
+
+## Documentation
+
+### Documentation for `collect_current_metrics`
+
+**Purpose and Behavior:**
+The function `collect_current_metrics` is designed to gather and update database performance metrics for specific collections in a MongoDB database. It logs the current state of each collection, aggregates daily performance metrics, updates existing records if necessary, or creates new ones as needed.
+
+**Key Implementation Details:**
+- **Configuration and Connection:** The script retrieves configuration settings and connects to the `certgames` database.
+- **Collection Filtering:** It filters out system collections like `system.` and `admin_`.
+- **Metric Aggregation:** Uses a custom aggregator class (`DatabasePerformanceAggregator`) to collect daily metrics for each monitored collection.
+- **Error Handling:** Logs errors if any step fails, ensuring robustness.
+
+**When/Why to Use:**
+This code is essential for monitoring database performance in real-time and maintaining up-to-date analytics. It should be run periodically as part of a scheduled task or during development to ensure the integrity of performance data.
+
+**Patterns/Gotchas:**
+- **Context Managers:** The script uses `datetime.now(UTC)` and `logger` effectively, ensuring consistent time zones.
+- **Error Logging:** Comprehensive error handling with detailed logging helps in diagnosing issues quickly.
+- **Potential Performance Impact:** Running this function on large databases could be resource-intensive. Optimize by adjusting the frequency or filtering criteria as needed.
+
+This script is particularly useful for backend developers and database administrators who need to ensure that performance metrics are accurate and up-to-date.
+
+---
+
+*Generated by CodeWorm on 2026-01-21 17:20*
