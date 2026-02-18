@@ -1,0 +1,141 @@
+# PrekeyService.store_client_keys
+
+**Type:** Security Review
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/encrypted-p2p-chat/backend/app/services/prekey_service.py
+**Language:** python
+**Lines:** 45-150
+**Complexity:** 8.0
+
+---
+
+## Source Code
+
+```python
+async def store_client_keys(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        identity_key: str,
+        identity_key_ed25519: str,
+        signed_prekey: str,
+        signed_prekey_signature: str,
+        one_time_prekeys: list[str]
+    ) -> IdentityKey:
+        """
+        Stores client-generated public keys for E2E encryption.
+        Only stores PUBLIC keys - private keys remain on client.
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await session.execute(statement)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.error("User not found: %s", user_id)
+            raise UserNotFoundError("User not found")
+
+        existing_ik_statement = select(IdentityKey).where(
+            IdentityKey.user_id == user_id
+        )
+        existing_ik_result = await session.execute(existing_ik_statement)
+        existing_ik = existing_ik_result.scalar_one_or_none()
+
+        if existing_ik:
+            existing_ik.public_key = identity_key
+            existing_ik.public_key_ed25519 = identity_key_ed25519
+            logger.info("Updated existing identity key for user %s", user_id)
+        else:
+            existing_ik = IdentityKey(
+                user_id = user_id,
+                public_key = identity_key,
+                private_key = "",
+                public_key_ed25519 = identity_key_ed25519,
+                private_key_ed25519 = ""
+            )
+            session.add(existing_ik)
+            logger.info("Created identity key for user %s", user_id)
+
+        old_spks_statement = select(SignedPrekey).where(
+            SignedPrekey.user_id == user_id,
+            SignedPrekey.is_active
+        )
+        old_spks_result = await session.execute(old_spks_statement)
+        old_spks = old_spks_result.scalars().all()
+
+        for old_spk in old_spks:
+            old_spk.is_active = False
+
+        max_key_id_statement = select(SignedPrekey.key_id).where(
+            SignedPrekey.user_id == user_id
+        ).order_by(SignedPrekey.key_id.desc()).limit(1)
+        max_key_id_result = await session.execute(max_key_id_statement)
+        max_key_id = max_key_id_result.scalar_one_or_none()
+        new_spk_key_id = (max_key_id + 1) if max_key_id is not None else 1
+
+        expires_at = datetime.now(UTC) + timedelta(
+            hours = SIGNED_PREKEY_ROTATION_HOURS
+        )
+
+        new_spk = SignedPrekey(
+            user_id = user_id,
+            key_id = new_spk_key_id,
+            public_key = signed_prekey,
+            private_key = "",
+            signature = signed_prekey_signature,
+            is_active = True,
+            expires_at = expires_at
+        )
+        session.add(new_spk)
+
+        max_opk_key_id_statement = select(OneTimePrekey.key_id).where(
+            OneTimePrekey.user_id == user_id
+        ).order_by(OneTimePrekey.key_id.desc()).limit(1)
+        max_opk_key_id_result = await session.execute(max_opk_key_id_statement)
+        max_opk_key_id 
+```
+
+---
+
+## Security Review
+
+### Security Review for `store_client_keys` Function
+
+#### Vulnerabilities and Recommendations:
+
+1. **Logging of Sensitive Information:**
+   - **Severity:** Low
+   - **Line 50, 62, 78, 93**:
+     - Logging user IDs and keys directly can expose sensitive information.
+   - **Fix**: Use placeholders for logging sensitive data or filter out sensitive fields.
+
+2. **Database Integrity Checks:**
+   - **Severity:** Medium
+   - **Line 104**:
+     - Handling `IntegrityError` without proper validation of the error context might lead to unexpected behavior.
+   - **Fix**: Ensure that the integrity check is specific and robust, possibly using custom exception handling.
+
+3. **Input Validation:**
+   - **Severity:** Medium
+   - **Line 27-40**:
+     - `one_time_prekeys` should be validated for length and format to prevent injection or unexpected behavior.
+   - **Fix**: Add input validation checks for `one_time_prekeys`.
+
+4. **Error Handling:**
+   - **Severity:** Low
+   - **Line 105-107**:
+     - Error messages can provide insights into the application structure.
+   - **Fix**: Use generic error handling and logging without exposing sensitive details.
+
+#### Overall Security Posture:
+
+The function is generally secure but could benefit from improved input validation, more robust error handling, and careful logging practices. Ensuring that all inputs are validated and sanitized will help mitigate potential vulnerabilities.
+
+### Attack Vectors:
+- **Sensitive Data Exposure**: Direct logging of user IDs and keys.
+- **Database Corruption**: Improper handling of `IntegrityError`.
+
+By addressing these issues, the overall security posture can be significantly improved.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 15:37*
