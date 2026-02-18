@@ -1,0 +1,138 @@
+# DataInputService
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/analytics/facets/data_input/service.py
+**Language:** python
+**Lines:** 29-164
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class DataInputService:
+    """
+    Service for TikTok video data input operations
+    """
+
+    @staticmethod
+    async def create_video(
+        session: AsyncSession,
+        data: TikTokVideoCreate,
+    ) -> TikTokVideoResponse:
+        """
+        Create a TikTok video record
+        """
+        video = await TikTokVideoRepository.create(
+            session,
+            rank=data.rank,
+            date_posted=data.date_posted,
+            video_url=data.video_url,
+            views=data.views,
+            comments=data.comments,
+            likes=data.likes,
+            bookmarks=data.bookmarks,
+            shares=data.shares,
+            avg_watch_time=data.avg_watch_time,
+            new_followers=data.new_followers,
+            watched_full_video_percentage=data.watched_full_video_percentage,
+            top_comment_words=data.top_comment_words,
+            search_queries=data.search_queries,
+            traffic_sources=data.traffic_sources,
+            hook=data.hook,
+            text_on_screen_hook=data.text_on_screen_hook,
+            length=data.length,
+            description=data.description,
+            hashtags=data.hashtags,
+            cta=data.cta,
+            full_transcription=data.full_transcription,
+            notes=data.notes,
+        )
+        return TikTokVideoResponse.model_validate(video)
+
+    @staticmethod
+    async def get_video(
+        session: AsyncSession,
+        video_id: UUID,
+    ) -> TikTokVideoResponse:
+        """
+        Get a single video by ID
+        """
+        video = await TikTokVideoRepository.get_by_id(session, video_id)
+        if not video:
+            raise TikTokVideoNotFound(video_id)
+        return TikTokVideoResponse.model_validate(video)
+
+    @staticmethod
+    async def get_all_videos(
+        session: AsyncSession,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> TikTokVideoListResponse:
+        """
+        Get all videos with pagination
+        """
+        skip = (page - 1) * page_size
+        videos = await TikTokVideoRepository.get_multi(session, skip=skip, limit=page_size)
+        total = await TikTokVideoRepository.count(session)
+
+        return TikTokVideoListResponse(
+            items=[TikTokVideoResponse.model_validate(v) for v in videos],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    @staticmethod
+    async def update_video(
+        session: AsyncSession,
+        video_id: UUID,
+        data: TikTokVideoUpdate,
+    ) -> TikTokVideoResponse:
+        """
+        Update a video record
+        """
+        video = await TikTokVideoRepository.get_by_id(session, video_id)
+        if not video:
+            raise TikTokVideoNotFound(video_id)
+
+        update_dict = data.model_dump(exclude_unset=True)
+        video = await TikTokVideoRepository.update(session, video, **update_dict)
+        return TikTokVideoResponse.model_validate(video)
+
+    @staticmethod
+    async def delete_video(
+        session: AsyncSession,
+        vide
+```
+
+---
+
+## Class Documentation
+
+### DataInputService Documentation
+
+**Class Responsibility and Purpose:**
+The `DataInputService` class is responsible for handling operations related to TikTok video data input, including creation, retrieval, updating, deletion, and searching of video records. This service ensures that all interactions with the database are encapsulated within a single interface.
+
+**Public Interface (Key Methods):**
+- **create_video**: Asynchronously creates a new TikTok video record.
+- **get_video**: Retrieves a single video by its ID.
+- **get_all_videos**: Fetches videos using pagination.
+- **update_video**: Updates an existing video record.
+- **delete_video**: Deletes a video record by its ID.
+- **search_videos**: Searches for videos based on a query string.
+- **get_videos_by_date_range**: Retrieves videos within a specified date range.
+- **get_videos_by_min_views**: Fetches videos with a minimum view count.
+
+**Design Patterns Used:**
+The class utilizes the **Factory Method** pattern through static methods, ensuring that specific operations are encapsulated and can be extended without modifying existing code. It also leverages the **Repository Pattern**, abstracting database interactions behind `TikTokVideoRepository`.
+
+**How it Fits in the Architecture:**
+`DataInputService` acts as a facade for data input operations, providing a clean interface to interact with TikTok video data. It is integrated into the broader analytics system, facilitating seamless data management and retrieval. The class ensures that all database interactions are managed through `TikTokVideoRepository`, promoting separation of concerns and making the codebase more maintainable.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 16:13*
