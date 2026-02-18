@@ -1,0 +1,115 @@
+# AuthScanner
+
+**Type:** Class Documentation
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/api-security-scanner/backend/scanners/auth_scanner.py
+**Language:** python
+**Lines:** 26-409
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class AuthScanner(BaseScanner):
+    """
+    Tests for broken authentication vulnerabilities
+
+    Detects:
+    - Missing authentication on endpoints
+    - Weak/invalid token acceptance
+    - JWT vulnerabilities (none algorithm, weak secrets)
+    - Missing rate limiting on auth endpoints
+
+    Maps to OWASP API Security Top 10 2023: API2:2023
+    """
+    def scan(self) -> TestResultCreate:
+        """
+        Execute authentication tests
+
+        Returns:
+            TestResultCreate: Scan result with findings
+        """
+        missing_auth_test = self._test_missing_authentication()
+        if missing_auth_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details = "Endpoint accessible without authentication",
+                evidence = missing_auth_test,
+                severity = Severity.HIGH,
+                recommendations = [
+                    "Require authentication for all sensitive endpoints",
+                    "Implement proper authentication middleware",
+                    "Return 401 Unauthorized for missing/invalid credentials",
+                ],
+            )
+
+        if self.auth_token:
+            jwt_test = self._test_jwt_vulnerabilities()
+            if jwt_test["vulnerable"]:
+                return self._create_vulnerable_result(
+                    details =
+                    f"JWT vulnerability: {jwt_test['vulnerability_type']}",
+                    evidence = jwt_test,
+                    severity = Severity.CRITICAL,
+                    recommendations = jwt_test.get(
+                        "recommendations",
+                        [
+                            "Properly validate JWT signatures",
+                            "Reject 'none' algorithm tokens",
+                            "Use strong secrets (256+ bits)",
+                            "Implement token expiration checks",
+                        ],
+                    ),
+                )
+
+        invalid_token_test = self._test_invalid_token_handling()
+        if invalid_token_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details = "Invalid tokens accepted by endpoint",
+                evidence = invalid_token_test,
+                severity = Severity.HIGH,
+                recommendations = [
+                    "Reject invalid/malformed tokens with 401 status",
+                    "Validate token format, signature, and expiration",
+                    "Log authentication failures for monitoring",
+                ],
+            )
+
+        return TestResultCreate(
+            test_name = TestType.AUTH,
+            status = ScanStatus.SAFE,
+            severity = Severity.INFO,
+            details = "Authentication properly implemented",
+            evidence_json = {
+                "missing_auth_test": missing_auth_test,
+                "invalid_token_test": invalid_token_test,
+            },
+            recommendations_json = [
+                "Authentication is properly config
+```
+
+---
+
+## Class Documentation
+
+### AuthScanner Class Documentation
+
+**Class Responsibility and Purpose:**
+The `AuthScanner` class is responsible for identifying broken authentication vulnerabilities within API endpoints. It performs a series of tests to detect issues such as missing authentication, weak token handling, JWT vulnerabilities, and improper rate limiting on authentication endpoints.
+
+**Public Interface (Key Methods):**
+- **`scan()`**: Executes comprehensive authentication tests and returns the scan results.
+- **`_test_missing_authentication()`**: Tests if an endpoint requires authentication by attempting access without credentials.
+- **`_test_jwt_vulnerabilities()`**: Detects JWT vulnerabilities, including weak algorithms or secrets.
+- **`_test_invalid_token_handling()`**: Checks for acceptance of invalid tokens.
+
+**Design Patterns Used:**
+The class employs the **Strategy Pattern** through its test methods, allowing different authentication tests to be executed based on specific conditions. It also uses **Factory Method** in `_create_vulnerable_result()` to generate `TestResultCreate` objects with detailed findings and recommendations.
+
+**How it Fits in the Architecture:**
+`AuthScanner` is a key component of the API security scanner architecture. It integrates with other classes like `BaseScanner`, which provides common functionalities, and interacts with `TestResultCreate` for storing scan results. The class fits into a modular design where each test method can be extended or replaced without altering the overall structure, ensuring flexibility and maintainability in the security testing process.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 09:32*
