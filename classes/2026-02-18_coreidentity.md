@@ -1,0 +1,126 @@
+# CoreIdentity
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/core/foundation/models/identity.py
+**Language:** python
+**Lines:** 50-125
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class CoreIdentity(Base, UUIDMixin, TimestampMixin):
+    """
+    Carter's core identity profile
+
+    SINGLETON: Only one row should exist
+    """
+    __tablename__ = "core_identity"
+    __table_args__ = (
+        sa.Index("idx_singleton_identity",
+                 "is_singleton",
+                 unique = True),
+    )
+
+    is_singleton: Mapped[bool] = mapped_column(Boolean, default = True)
+    name: Mapped[str] = mapped_column(
+        String(FULL_NAME_MAX_LENGTH),
+        nullable = False
+    )
+    age: Mapped[int] = mapped_column(Integer, nullable = False)
+    background: Mapped[str] = mapped_column(Text, nullable = False)
+    current_role: Mapped[str] = mapped_column(Text, nullable = False)
+    primary_goal: Mapped[str] = mapped_column(Text, nullable = False)
+    target_audience: Mapped[str] = mapped_column(Text, nullable = False)
+
+    skills: Mapped[list[IdentitySkill]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    interests: Mapped[list[IdentityInterest]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    certifications: Mapped[list[IdentityCertification]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    strengths: Mapped[list[IdentityStrength]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    weaknesses: Mapped[list[IdentityWeakness]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    brand_voice: Mapped[BrandVoice | None] = relationship(
+        back_populates = "identity",
+        uselist = False,
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    platform_goals: Mapped[list[PlatformGoal]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    revenue_goal: Mapped[RevenueGoal | None] = relationship(
+        back_populates = "identity",
+        uselist = False,
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    content_pillars: Mapped[list[ContentPillar]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+    content_preferences: Mapped[list[ContentPreference]] = relationship(
+        back_populates = "identity",
+        cascade = "all, delete-orphan",
+        lazy = "selectin",
+    )
+```
+
+---
+
+## Class Documentation
+
+### CoreIdentity Class Documentation
+
+**Class Responsibility and Purpose:**
+The `CoreIdentity` class represents a core identity profile for Carter, encapsulating essential personal details such as name, age, background, and professional information. It ensures that only one instance of this identity exists by enforcing the singleton pattern through the `is_singleton` column.
+
+**Public Interface (Key Methods):**
+- **Attributes:**
+  - `name`: The full name of the identity.
+  - `age`: The age of the identity.
+  - `background`: A detailed background description.
+  - `current_role`: The current role or position.
+  - `primary_goal`: The primary professional goal.
+  - `target_audience`: The target audience for content creation.
+
+- **Relationships:**
+  - `skills`, `interests`, `certifications`, `strengths`, and `weaknesses`: Lists of related entities that provide additional context to the identity.
+  - `brand_voice`: A single instance representing the brand voice associated with the identity.
+  - `platform_goals` and `content_pillars`: Lists of goals and content pillars relevant to different platforms or contexts.
+  - `content_preferences`: Preferences for content creation.
+
+**Design Patterns Used:**
+- **Singleton Pattern:** Enforced through the `is_singleton` column, ensuring that only one instance of this class can exist in the database.
+- **Relationships:** Utilizes SQLAlchemy relationships to manage associations with other entities like skills, interests, and goals. Lazy loading (`lazy = "selectin"`) is used to optimize query performance.
+
+**How it Fits in the Architecture:**
+`CoreIdentity` serves as a central hub for Carter's identity information within the system. It integrates with various modules such as content creation, platform-specific goals, and skill management through its relationships. This class plays a crucial role in maintaining consistency and providing a comprehensive view of Carter’s professional profile across different contexts.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 17:55*
