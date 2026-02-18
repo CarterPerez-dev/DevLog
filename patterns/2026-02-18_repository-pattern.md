@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/user/service.py
+**File:** TEMPLATES/fullstack-template/backend/app/core/base_repository.py
 **Language:** python
-**Lines:** 1-222
+**Lines:** 1-107
 **Complexity:** 0.0
 
 ---
@@ -14,169 +14,139 @@
 ```python
 """
 ⒸAngelaMos | 2025
-service.py
+base_repository.py
 """
 
+from collections.abc import Sequence
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+)
 from uuid import UUID
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-)
 
-from config import settings, UserRole
-from core.exceptions import (
-    EmailAlreadyExists,
-    InvalidCredentials,
-    UserNotFound,
-)
-from core.security import (
-    hash_password,
-    verify_password,
-)
-from .schemas import (
-    AdminUserCreate,
-    UserCreate,
-    UserListResponse,
-    UserResponse,
-    UserUpdate,
-    UserUpdateAdmin,
-)
-from .User import User
-from .repository import UserRepository
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .Base import Base
 
 
-class UserService:
+ModelT = TypeVar("ModelT", bound = Base)
+
+
+class BaseRepository(Generic[ModelT]):
     """
-    Business logic for user operations
+    Generic repository with common CRUD operations
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    model: type[ModelT]
 
-    async def create_user(
-        self,
-        user_data: UserCreate,
-    ) -> UserResponse:
+    @classmethod
+    async def get_by_id(
+        cls,
+        session: AsyncSession,
+        id: UUID,
+    ) -> ModelT | None:
         """
-        Register a new user
+        Get a single record by ID
         """
-        if await UserRepository.email_exists(self.session,
-                                             user_data.email):
-            raise EmailAlreadyExists(user_data.email)
+        return await session.get(cls.model, id)
 
-        role = UserRole.USER
-        if settings.ADMIN_EMAIL and user_data.email.lower(
-        ) == settings.ADMIN_EMAIL.lower():
-            role = UserRole.ADMIN
-
-        hashed = await hash_password(user_data.password)
-        user = await UserRepository.create_user(
-            self.session,
-            email = user_data.email,
-            hashed_password = hashed,
-            full_name = user_data.full_name,
-            role = role,
+    @classmethod
+    async def get_multi(
+        cls,
+        session: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[ModelT]:
+        """
+        Get multiple records with pagination
+        """
+        result = await session.execute(
+            select(cls.model).offset(skip).limit(limit)
         )
-        return UserResponse.model_validate(user)
+        return result.scalars().all()
 
-    async def get_user_by_id(
-        self,
-        user_id: UUID,
-    ) -> UserResponse:
+    @classmethod
+    async def count(cls, session: AsyncSession) -> int:
         """
-        Get user by ID
+        Count total records
         """
-        user = await UserRepository.get_by_id(self.session, user_id)
-        if not user:
-            raise UserNotFound(str(user_id))
-        return UserResponse.model_validate(user)
-
-    async def get_user_model_by_id(
-        self,
-        user_id: UUID,
-    ) -> User:
-        """
-        Get user model by ID (for internal use)
-        """
-        user = await UserRepository.get_by_id(self.session, user_id)
-        if not user:
-            raise UserNotFound(str(user_id))
-        return user
-
-    async def update_user(
-        self,
-        user: User,
-        user_data: UserUpdate,
-    ) -> UserResponse:
-        """
-        Update user profile
-        """
-        update_dict = user_data.model_dump(exclude_unset = True)
-        updated_user = await UserRepository.update(
-            self.session,
-            user,
-            **update_dict
+        result = await session.execute(
+            select(func.count()).select_from(cls.model)
         )
-        return UserResponse.model_validate(updated_user)
+        return result.scalar_one()
 
-    async def change_password(
-        self,
-        user: User,
-        current_password: str,
-        new_password: str,
+    @classmethod
+    async def create(
+        cls,
+        session: AsyncSession,
+        **kwargs: Any,
+    ) -> ModelT:
+        """
+        Create a new record
+        """
+        instance = cls.model(**kwargs)
+        session.add(instance)
+        await session.flush()
+        await session.refresh(instance)
+        return instance
+
+    @classmethod
+    async def update(
+        cls,
+        session: AsyncSession,
+        instance: ModelT,
+        **kwargs: Any,
+    ) -> ModelT:
+        """
+        Update an existing record
+        """
+        for key, value in kwargs.items():
+            setattr(instance, key, value)
+        await session.flush()
+        await session.refresh(instance)
+        return instance
+
+    @classmethod
+    async def delete(
+        cls,
+        session: AsyncSession,
+        instance: ModelT,
     ) -> None:
         """
-        Change user password
+        Delete a record
         """
-        is_valid, _ = await verify_password(current_password, user.hashed_password)
-        if not is_valid:
-            raise InvalidCredentials()
+        await session.delete(instance)
+        await session.flush()
 
-        hashed = await hash_password(new_password)
-        await UserRepository.updat
 ```
 
 ---
 
 ## Pattern Analysis
 
-### Pattern Analysis
+### Analysis of Repository Pattern Implementation
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:**
+The code implements a **Repository Pattern**, which abstracts data access operations, providing a consistent interface for accessing and manipulating data.
 
-The `UserService` class in this code implements the **Repository Pattern**, which abstracts data access logic to separate business logic from database operations.
+**Implementation Details:**
+- The `BaseRepository` class is generic (`Generic[ModelT]`) and defines common CRUD (Create, Read, Update, Delete) methods.
+- Each method is a class method (`@classmethod`) that operates on an `AsyncSession`, ensuring asynchronous operations.
+- Methods like `get_by_id`, `get_multi`, `count`, `create`, `update`, and `delete` provide specific functionalities for interacting with the database.
 
-#### Implementation Details:
-- The `UserService` interacts with a `UserRepository` for all user-related operations, such as creating, updating, and retrieving users.
-- Methods like `create_user`, `get_user_by_id`, `update_user`, etc., delegate the actual data manipulation to methods in `UserRepository`.
+**Benefits:**
+1. **Consistency:** Provides a uniform interface for data access, making it easier to switch between different data sources (e.g., SQL vs NoSQL).
+2. **Decoupling:** Abstracts the data layer from the business logic, allowing changes in storage mechanisms without affecting other parts of the application.
+3. **Testability:** Easier to mock and test repository methods independently.
 
-```python
-class UserService:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+**Deviations:**
+- The implementation uses SQLAlchemy's `AsyncSession` for asynchronous operations, which is a deviation from some standard implementations that might use synchronous sessions or different ORM frameworks.
+- The generic type `ModelT` bound by `Base` ensures that only models inheriting from the `Base` class can be used.
 
-    async def create_user(self, user_data: UserCreate) -> UserResponse:
-        # Delegate to UserRepository
-        user = await UserRepository.create_user(
-            self.session,
-            email=user_data.email,
-            hashed_password=hashed,
-            full_name=user_data.full_name,
-            role=role,
-        )
-        return UserResponse.model_validate(user)
-```
-
-#### Benefits:
-- **Encapsulation**: The `UserService` class focuses on business logic, while the `UserRepository` handles data access.
-- **Testability**: Repository methods can be easily mocked or replaced for unit testing.
-- **Flexibility**: Easier to change storage mechanisms (e.g., from SQL to NoSQL) without affecting business logic.
-
-#### Deviations:
-- The `UserService` class directly instantiates the session, which is not typical. Usually, a dependency injection mechanism would provide the session.
-- Some methods like `get_user_model_by_id` are used internally but could be refactored for clarity and consistency.
-
-#### Appropriateness:
-This pattern is **appropriate** in this context because it clearly separates concerns, making the code more maintainable and testable. It ensures that business logic remains focused on what needs to happen with users, while data access is handled by a dedicated repository class.
+**Appropriateness:**
+This pattern is highly appropriate in applications where data access needs to be abstracted and standardized, especially when working with relational databases using SQLAlchemy. It's particularly useful in microservices or large-scale applications where different parts of the system need to interact with various data sources consistently.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 07:30*
+*Generated by CodeWorm on 2026-02-18 12:37*
