@@ -2,9 +2,9 @@
 
 **Type:** Class Documentation
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/user/repository.py
+**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/user/repository.py
 **Language:** python
-**Lines:** 15-111
+**Lines:** 14-91
 **Complexity:** 0.0
 
 ---
@@ -63,8 +63,6 @@ class UserRepository(BaseRepository[User]):
         session: AsyncSession,
         email: str,
         hashed_password: str,
-        full_name: str | None = None,
-        role: UserRole = UserRole.USER,
     ) -> User:
         """
         Create a new user
@@ -72,8 +70,6 @@ class UserRepository(BaseRepository[User]):
         user = User(
             email = email,
             hashed_password = hashed_password,
-            full_name = full_name,
-            role = role,
         )
         session.add(user)
         await session.flush()
@@ -88,24 +84,9 @@ class UserRepository(BaseRepository[User]):
         hashed_password: str,
     ) -> User:
         """
-        Update user password and increment token version
+        Update user password
         """
         user.hashed_password = hashed_password
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
-
-    @classmethod
-    async def increment_token_version(
-        cls,
-        session: AsyncSession,
-        user: User,
-    ) -> User:
-        """
-        Invalidate all user tokens
-        """
-        user.increment_token_version()
         await session.flush()
         await session.refresh(user)
         return user
@@ -117,23 +98,24 @@ class UserRepository(BaseRepository[User]):
 
 ### UserRepository Documentation
 
-**Class Responsibility and Purpose**
-The `UserRepository` class is responsible for managing database operations related to the `User` model. It abstracts common CRUD operations, ensuring that user data can be efficiently retrieved, created, updated, and validated.
+**Class Responsibility and Purpose:**
+The `UserRepository` class is responsible for handling all database operations related to the `User` model within a Python application using SQLAlchemy. It provides methods to retrieve, create, update, and check the existence of user records.
 
-**Public Interface (Key Methods)**
-- **get_by_email**: Retrieves a user by their email address.
-- **get_by_id**: Fetches a user by their unique ID.
-- **email_exists**: Checks if an email is already registered in the database.
-- **create_user**: Adds a new user to the database with specified details.
-- **update_password**: Updates a user's password and increments their token version.
-- **increment_token_version**: Invalidates all tokens associated with a user by incrementing their token version.
+**Public Interface (Key Methods):**
+- **get_by_email(session: AsyncSession, email: str) -> User | None**: Fetches a user by their email address.
+- **get_by_id(session: AsyncSession, id: UUID) -> User | None**: Retrieves a user by their unique identifier.
+- **email_exists(session: AsyncSession, email: str) -> bool**: Checks if an email is already registered in the database.
+- **create_user(session: AsyncSession, email: str, hashed_password: str) -> User**: Creates a new user with the provided email and password hash.
+- **update_password(session: AsyncSession, user: User, hashed_password: str) -> User**: Updates a user's password.
 
-**Design Patterns Used**
-The class leverages the **Repository Pattern**, which encapsulates data access logic, ensuring that business logic remains separate from database operations. Additionally, it uses **AsyncIO** for asynchronous operations to handle database interactions efficiently without blocking the event loop.
+**Design Patterns Used:**
+The class employs the **Repository Pattern**, which abstracts database operations, ensuring that business logic remains separate from data access concerns. This pattern is particularly useful in maintaining clean architecture and promoting testability.
 
-**How It Fits in the Architecture**
-`UserRepository` serves as a central point of interaction with the `User` model's database representation. By providing a clean interface and handling complex operations like password updates and token version increments, it enables other parts of the application (e.g., user authentication services) to interact with users without needing to know the underlying database details. This separation enhances maintainability and testability.
+**How it Fits in the Architecture:**
+`UserRepository` acts as a central hub for all user-related database interactions. It interfaces with the `BaseRepository[User]` class to leverage generic repository functionalities while providing specific methods tailored to user management. This design ensures that any changes in database operations are encapsulated within this single class, making the application more maintainable and scalable.
+
+The use of asynchronous methods (`async def`) aligns with modern Python practices for handling I/O-bound tasks efficiently, which is crucial in web applications where performance is key.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 09:59*
+*Generated by CodeWorm on 2026-02-18 10:37*
