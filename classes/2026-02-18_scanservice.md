@@ -1,0 +1,135 @@
+# ScanService
+
+**Type:** Class Documentation
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/api-security-scanner/backend/services/scan_service.py
+**Language:** python
+**Lines:** 24-180
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class ScanService:
+    """
+    Orchestrates security scanning workflow
+    """
+
+    @staticmethod
+    def run_scan(db: Session, user_id: int, scan_request: ScanRequest) -> ScanResponse:
+        """
+        Execute security scan with selected tests
+
+        Args:
+            db: Database session
+            user_id: User ID initiating the scan
+            scan_request: Scan configuration and tests to run
+
+        Returns:
+            ScanResponse: Scan results with all test outcomes
+        """
+        scan = ScanRepository.create_scan(
+            db=db,
+            user_id=user_id,
+            target_url=str(scan_request.target_url),
+        )
+
+        scanner_mapping: dict[TestType, type[BaseScanner]] = {
+            TestType.RATE_LIMIT: RateLimitScanner,
+            TestType.AUTH: AuthScanner,
+            TestType.SQLI: SQLiScanner,
+            TestType.IDOR: IDORScanner,
+        }
+
+        results: list[TestResultCreate] = []
+
+        for test_type in scan_request.tests_to_run:
+            scanner_class: type[BaseScanner] | None = scanner_mapping.get(test_type)
+
+            if not scanner_class:
+                continue
+
+            try:
+                scanner = scanner_class(
+                    target_url=str(scan_request.target_url),
+                    auth_token=scan_request.auth_token,
+                    max_requests=scan_request.max_requests,
+                )
+
+                result = scanner.scan()
+                results.append(result)
+
+            except Exception as e:
+                results.append(
+                    TestResultCreate(
+                        test_name=test_type,
+                        status="error",
+                        severity="info",
+                        details=f"Scanner error: {str(e)}",
+                        evidence_json={"error": str(e)},
+                        recommendations_json=[
+                            "Check target URL is accessible",
+                            "Verify authentication token if provided",
+                        ],
+                    )
+                )
+
+        for result in results:
+            TestResultRepository.create_test_result(
+                db=db,
+                scan_id=scan.id,
+                test_name=result.test_name,
+                status=result.status,
+                severity=result.severity,
+                details=result.details,
+                evidence_json=result.evidence_json,
+                recommendations_json=result.recommendations_json,
+            )
+
+        db.refresh(scan)
+
+        return ScanResponse.model_validate(scan)
+
+    @staticmethod
+    def get_scan_by_id(db: Session, scan_id: int, user_id: int) -> ScanResponse:
+        """
+        Get scan by ID with authorization check
+
+        Args:
+            db: Database session
+            scan_id: Scan ID to retrieve
+            user_id: User ID for authorization
+
+        Returns:
+            ScanResponse: Scan data with results
+        """
+        scan = ScanRepository.get_by_id(
+```
+
+---
+
+## Class Documentation
+
+### ScanService Documentation
+
+**Class Responsibility and Purpose:**
+The `ScanService` class orchestrates the security scanning workflow, including running scans, retrieving scan results, listing user-scans, and managing scan deletion. It leverages a repository pattern for database interactions and employs a factory-like approach to instantiate scanners based on test types.
+
+**Public Interface (Key Methods):**
+- **run_scan**: Executes a security scan with specified tests.
+- **get_scan_by_id**: Retrieves a scan by ID with authorization checks.
+- **get_user_scans**: Lists all scans for a user, supporting pagination.
+- **delete_scan**: Deletes a scan with authorization verification.
+
+**Design Patterns Used:**
+- **Repository Pattern**: `ScanService` uses the repository pattern through methods like `get_by_id`, `get_by_user`, and `delete` to interact with the database. This decouples the service layer from direct database operations.
+- **Factory Method**: The `scanner_mapping` dictionary acts as a factory, allowing dynamic instantiation of different scanner classes based on test types.
+
+**How It Fits in the Architecture:**
+`ScanService` sits at the core of the application's security scanning functionality. It coordinates interactions between the user interface and the database layer via repositories, ensuring that business logic is encapsulated within this service class. This design promotes modularity and ease of maintenance by isolating database operations and providing a clear interface for executing scans and managing scan data.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 10:54*
