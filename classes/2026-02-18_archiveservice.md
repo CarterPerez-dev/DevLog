@@ -1,0 +1,145 @@
+# ArchiveService
+
+**Type:** Class Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/core/services/archive/archive_service.py
+**Language:** python
+**Lines:** 18-233
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class ArchiveService:
+    """
+    Static methods for archiving/restoring documents from any collection
+    """
+    @staticmethod
+    def archive_document(
+        collection_name: str,
+        document_id: str | ObjectId,
+        reason: ArchiveReason,
+        archived_by: str | ObjectId,
+        additional_data: dict[str,
+                              Any] | None = None
+    ) -> dict[str,
+              Any]:
+        """
+        Archive a document by moving it from its original collection to archives
+        """
+        if not collection_name or not document_id or not reason or not archived_by:
+            raise ValidationError(
+                "Missing required parameters for archiving"
+            )
+
+        doc_id = ObjectId(document_id) if isinstance(
+            document_id,
+            str
+        ) else document_id
+        admin_id = ObjectId(archived_by) if isinstance(
+            archived_by,
+            str
+        ) else archived_by
+
+        db = get_db()
+
+        original_doc = db[collection_name].find_one({"_id": doc_id})
+        if not original_doc:
+            raise NotFoundError(
+                f"Document not found in {collection_name}",
+                str(doc_id)
+            )
+
+        archive_data = {
+            "originalId": doc_id,
+            "originalCollection": collection_name,
+            "archivedBy": admin_id,
+            "reason": reason.value,
+            "originalData": original_doc
+        }
+
+        if additional_data:
+            archive_data["originalData"]["_archive_metadata"
+                                         ] = additional_data
+
+        archive = Archive(**archive_data)
+        archive.save()
+
+        db[collection_name].delete_one({"_id": doc_id})
+
+        return {
+            "archive_id": str(archive.id),
+            "original_id": str(doc_id),
+            "collection": collection_name,
+            "reason": reason.value,
+            "archived_at": archive.archivedAt.isoformat(),
+        }
+
+    @staticmethod
+    def restore_document(
+        archive_id: str | ObjectId,
+        restored_by: str | ObjectId
+    ) -> dict[str,
+              Any]:
+        """
+        Restore an archived document back to its original collection
+        """
+        arch_id = ObjectId(archive_id) if isinstance(
+            archive_id,
+            str
+        ) else archive_id
+
+        archive = Archive.objects(id = arch_id).first()
+        if not archive:
+            raise NotFoundError("Archive record", str(arch_id))
+
+        db = get_db()
+
+        original_data = archive.originalData.copy()
+
+        if "_archive_metadata" in original_data:
+            del original_data["_archive_metadata"]
+
+        existing_doc = db[archive.originalCollection].find_one(
+            {"_id": original_data["_id"]}
+        )
+        if existing_doc:
+            raise BusinessRuleError(
+                f"Document already exists in {archive.originalCollection}. "
+                "Cannot restore duplicate."
+            )
+
+        db[archive.ori
+```
+
+---
+
+## Class Documentation
+
+### ArchiveService Documentation
+
+**Class Responsibility and Purpose**
+The `ArchiveService` class is responsible for managing the archiving, restoring, and searching of documents across various collections within a database. It ensures that documents are properly archived with metadata and can be restored when necessary.
+
+**Public Interface (Key Methods)**
+- **archive_document**: Archives a document by moving it to an archive collection.
+- **restore_document**: Restores an archived document back to its original collection.
+- **get_archive_by_id**: Retrieves specific archive records by ID.
+- **search_archives**: Searches for archived documents based on various filters.
+
+**Design Patterns Used**
+The class utilizes the **Factory Method** pattern through static methods, allowing different operations (archiving, restoring) to be performed without tightly coupling them. The use of `ObjectId` ensures that document IDs are handled consistently across the application.
+
+**Relationship to Other Classes**
+- **Archive**: Represents an archived document with metadata.
+- **get_db()**: A utility function for accessing the database.
+- **ValidationError**, **NotFoundError**, and **BusinessRuleError**: Custom exceptions for handling validation, not found, and business rule errors respectively.
+
+**State Management Approach**
+The class manages state indirectly through database operations. It does not maintain any internal state but interacts with the database to store and retrieve documents and their metadata. This approach ensures that all changes are persisted and can be audited or restored as needed.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 13:03*
