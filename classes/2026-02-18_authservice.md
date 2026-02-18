@@ -125,27 +125,25 @@ class AuthService:
 ### AuthService Documentation
 
 **Class Responsibility and Purpose:**
-The `AuthService` class handles authentication operations, including user login, token creation, refresh, and logout. It ensures secure and efficient management of user sessions by implementing token-based authentication with replay protection.
+The `AuthService` class handles authentication operations, including user login, token creation, refresh, and logout. It ensures secure and efficient management of user sessions by implementing password verification, token generation, and token revocation mechanisms.
 
 **Public Interface (Key Methods):**
-- **authenticate**: Authenticates a user based on email and password, creating access and refresh tokens.
-- **login**: A convenience method that returns the `TokenWithUserResponse` object along with the raw refresh token after successful authentication.
-- **refresh_tokens**: Refreshes an access token using a valid refresh token while handling token rotation and replay protection.
-- **logout**: Revokes a specific refresh token, effectively logging out the user associated with it. It also supports revoking all tokens for a user.
+- **`authenticate(session: AsyncSession, email: str, password: str, ...)`**: Authenticates a user and generates access and refresh tokens.
+- **`login(session: AsyncSession, email: str, password: str, ...)`**: Convenience method to log in a user and return tokens with user data.
+- **`refresh_tokens(session: AsyncSession, refresh_token: str, ...)`**: Refreshes the access token using a valid refresh token.
+- **`logout(session: AsyncSession, refresh_token: str)`**: Logs out by revoking a specific refresh token.
+- **`logout_all(session: AsyncSession, user: User)`**: Logs out all tokens associated with a user.
 
 **Design Patterns Used:**
-- **Factory Method**: Implicitly used in creating `access_token` and `refresh_token`.
-- **Observer Pattern**: Not explicitly implemented but implied through dependency on repositories to handle token revocation.
-- **Strategy Pattern**: Implied by the dynamic nature of token creation and validation logic.
+The class utilizes the **Strategy Pattern** for password verification through `verify_password_with_timing_safety`, ensuring secure handling of passwords. It also employs the **Observer Pattern** via token revocation mechanisms to manage session states effectively.
 
 **Relationship to Other Classes:**
-- **UserRepository**: Manages user data, including fetching users by email and updating their passwords.
-- **RefreshTokenRepository**: Handles the lifecycle of refresh tokens, including creation, retrieval, revocation, and expiration checks.
+- **`UserRepository`**: Manages user data retrieval and updates.
+- **`RefreshTokenRepository`**: Handles refresh token creation, storage, and revocation.
+- **`create_access_token`, `create_refresh_token`**: Utility functions for generating secure tokens.
 
 **State Management Approach:**
-The class manages state through database operations, ensuring that each token's validity is checked against stored information. State transitions (e.g., from active to inactive) are managed by updating user records in the `UserRepository`.
-
-This class fits into a broader authentication framework where it interacts with repositories and services to provide secure session management for users.
+The class manages state through database operations, ensuring that each authentication or token operation is recorded and can be audited. Token states are updated to reflect current session statuses, such as revoking expired or revoked tokens.
 
 ---
 
