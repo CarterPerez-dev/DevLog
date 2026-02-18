@@ -1,0 +1,158 @@
+# SupportSocketService
+
+**Type:** Class Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/websockets/support/service.py
+**Language:** python
+**Lines:** 19-137
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class SupportSocketService:
+    """
+    Service for emitting support-related socket events
+    """
+    @staticmethod
+    def emit_new_thread_to_admin(
+        thread_id: str,
+        user_id: str,
+        username: str,
+        subject: str,
+        created_at: datetime
+    ) -> bool:
+        """
+        Emit new thread notification to admin room
+        """
+        event_data: NewThreadEvent = {
+            "threadId": thread_id,
+            "userId": user_id,
+            "username": username,
+            "subject": subject,
+            "createdAt": created_at.isoformat(),
+        }
+
+        return SocketManager.emit_to_room(
+            room = "admin",
+            event = "new_thread",
+            data = event_data
+        )
+
+    @staticmethod
+    def emit_new_message(
+        thread_id: str,
+        message: dict[str,
+                      str],
+        thread_reopened: bool = False
+    ) -> bool:
+        """
+        Emit event when new message sent to thread
+        """
+        event_data: NewMessageEvent = {
+            "threadId": thread_id,
+            "message": message,
+            "threadReopened": thread_reopened,
+        }
+
+        return SocketManager.emit_to_room(
+            room = thread_id,
+            event = "new_message",
+            data = event_data
+        )
+
+    @staticmethod
+    def emit_thread_closed(
+        thread_id: str,
+        closed_by: str,
+        reason: str
+    ) -> bool:
+        """
+        Emit event when thread closed
+        """
+        event_data: ThreadClosedEvent = {
+            "threadId": thread_id,
+            "closedBy": closed_by,
+            "reason": reason,
+        }
+
+        return SocketManager.emit_to_room(
+            room = thread_id,
+            event = "thread_closed",
+            data = event_data
+        )
+
+    @staticmethod
+    def emit_thread_reopened(
+        thread_id: str,
+        user_id: str,
+        subject: str
+    ) -> bool:
+        """
+        Emit event when thread reopened (to admin room)
+        """
+        event_data: ThreadReopenedEvent = {
+            "threadId": thread_id,
+            "userId": user_id,
+            "subject": subject,
+        }
+
+        return SocketManager.emit_to_room(
+            room = "admin",
+            event = "thread_reopened",
+            data = event_data
+        )
+
+    @staticmethod
+    def emit_support_notification(
+        user_id: str,
+        thread_id: str,
+        subject: str,
+        message_content: str | None = None
+    ) -> bool:
+        """
+        Emit notification to user's personal room
+        """
+        message_preview = message_content or subject
+        if len(message_preview) > 60:
+            message_preview = message_preview[: 60] + "..."
+
+        event_data: SupportNotificationEvent = {
+            "threadId": thread_id,
+            "subject": subject,
+            "hasNewMessage": True,
+            "messagePreview": message_preview,
+        }
+
+        return SocketManager.emit_to_user(
+            user_id = user_id,
+
+```
+
+---
+
+## Class Documentation
+
+### SupportSocketService
+
+**Class Responsibility and Purpose:**
+The `SupportSocketService` class is responsible for emitting socket events related to support operations, such as new thread notifications, message emissions, thread closures, reopens, and user-specific notifications.
+
+**Public Interface (Key Methods):**
+- `emit_new_thread_to_admin`: Emits a new thread notification to the admin room.
+- `emit_new_message`: Sends a new message event to the appropriate thread room.
+- `emit_thread_closed`: Notifies users when a support thread is closed.
+- `emit_thread_reopened`: Alerts admins and relevant users that a support thread has been reopened.
+- `emit_support_notification`: Sends a notification to a user's personal room about a new message or thread update.
+
+**Design Patterns Used:**
+The class does not explicitly use any design patterns but follows the **Strategy Pattern** implicitly through its static methods, each handling different types of socket events. The `SocketManager.emit_to_room` and `SocketManager.emit_to_user` methods are used to send events, which abstracts the underlying communication mechanism.
+
+**How It Fits in the Architecture:**
+This service class acts as a bridge between the support system logic and the WebSocket infrastructure. By encapsulating the logic for emitting socket events, it ensures that the core business logic remains decoupled from the real-time communication details. This design promotes loose coupling and makes the code more maintainable and testable. The `SupportSocketService` class is part of the backend API layer, facilitating seamless integration with the WebSocket service to provide real-time updates to users and administrators.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 14:00*
