@@ -2,9 +2,9 @@
 
 **Type:** Class Documentation
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/user/service.py
+**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/user/service.py
 **Language:** python
-**Lines:** 33-221
+**Lines:** 28-94
 **Complexity:** 0.0
 
 ---
@@ -30,18 +30,11 @@ class UserService:
                                              user_data.email):
             raise EmailAlreadyExists(user_data.email)
 
-        role = UserRole.USER
-        if settings.ADMIN_EMAIL and user_data.email.lower(
-        ) == settings.ADMIN_EMAIL.lower():
-            role = UserRole.ADMIN
-
         hashed = await hash_password(user_data.password)
         user = await UserRepository.create_user(
             self.session,
             email = user_data.email,
             hashed_password = hashed,
-            full_name = user_data.full_name,
-            role = role,
         )
         return UserResponse.model_validate(user)
 
@@ -56,34 +49,6 @@ class UserService:
         if not user:
             raise UserNotFound(str(user_id))
         return UserResponse.model_validate(user)
-
-    async def get_user_model_by_id(
-        self,
-        user_id: UUID,
-    ) -> User:
-        """
-        Get user model by ID (for internal use)
-        """
-        user = await UserRepository.get_by_id(self.session, user_id)
-        if not user:
-            raise UserNotFound(str(user_id))
-        return user
-
-    async def update_user(
-        self,
-        user: User,
-        user_data: UserUpdate,
-    ) -> UserResponse:
-        """
-        Update user profile
-        """
-        update_dict = user_data.model_dump(exclude_unset = True)
-        updated_user = await UserRepository.update(
-            self.session,
-            user,
-            **update_dict
-        )
-        return UserResponse.model_validate(updated_user)
 
     async def change_password(
         self,
@@ -114,15 +79,6 @@ class UserService:
             is_active = False
         )
         return UserResponse.model_validate(updated)
-
-    async def list_users(
-        self,
-        page: int,
-        size: int,
-    ) -> UserListResponse:
-        """
-        List users with pagination
-       
 ```
 
 ---
@@ -131,28 +87,23 @@ class UserService:
 
 ### UserService Documentation
 
-**Class Responsibility and Purpose**
-The `UserService` class encapsulates business logic for user operations, including registration, authentication, profile management, and administrative actions. It interacts with a `UserRepository` to persistently store and retrieve users from a database.
+**Class Responsibility and Purpose:**
+The `UserService` class handles all business logic related to user operations within the application, including creating new users, retrieving user details by ID, changing passwords, and deactivating user accounts.
 
-**Public Interface (Key Methods)**
-- **create_user**: Registers a new user.
-- **get_user_by_id**: Retrieves a user by ID.
-- **update_user**: Updates an existing user's profile.
-- **change_password**: Changes the password for a given user.
-- **deactivate_user**: Deactivates a user account.
-- **list_users**: Lists users with pagination.
-- **admin_create_user**: Allows administrators to create new users.
-- **admin_update_user**: Enables administrators to update user details.
+**Public Interface (Key Methods):**
+- **create_user(user_data: UserCreate) -> UserResponse:** Registers a new user with provided data.
+- **get_user_by_id(user_id: UUID) -> UserResponse:** Retrieves a user by their unique identifier.
+- **change_password(user: User, current_password: str, new_password: str) -> None:** Updates a user's password if the current password is valid.
+- **deactivate_user(user: User) -> UserResponse:** Deactivates an existing user account.
 
-**Design Patterns Used**
-The class employs several design patterns:
-- **Factory Method**: Implicitly used in `create_user` and `admin_create_user` for creating new users.
-- **Strategy Pattern**: The password hashing strategy is abstracted away, allowing different implementations if needed.
-- **Observer Pattern**: Although not explicitly implemented, the class observes changes to user data through repository methods.
+**Design Patterns Used:**
+The class employs the **Repository Pattern** for data access, ensuring that business logic remains separate from database operations. The `UserRepository` handles all database interactions, while `UserService` focuses on application-specific logic.
 
-**How It Fits in the Architecture**
-The `UserService` acts as a service layer that sits between the application logic and the database. It provides a clean interface for managing users while encapsulating complex operations like password hashing and email validation. This separation of concerns enhances maintainability and testability, making it easier to integrate with other parts of the system or swap out underlying data storage mechanisms if necessary.
+**How it Fits in the Architecture:**
+`UserService` acts as a service layer between the repository and the controller or client. It encapsulates user-related operations, making the code more modular and easier to maintain. By leveraging asynchronous methods (`async def`), the class supports efficient handling of I/O-bound tasks without blocking the event loop.
+
+This design promotes separation of concerns, enhances testability, and facilitates future changes in either the business logic or data access layer.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 07:21*
+*Generated by CodeWorm on 2026-02-18 11:01*
