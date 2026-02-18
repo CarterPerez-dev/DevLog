@@ -1,0 +1,136 @@
+# ChallengeService
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/challenge/facets/tracker/service.py
+**Language:** python
+**Lines:** 49-335
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class ChallengeService:
+    """
+    Business logic for challenge operations
+    """
+
+    @staticmethod
+    def _calculate_day_number(challenge: Challenge, log_date: date) -> int:
+        """
+        Calculate the day number (1-30) for a given date
+        """
+        delta = log_date - challenge.start_date
+        return delta.days + 1
+
+    @staticmethod
+    def _calculate_current_day(challenge: Challenge) -> int:
+        """
+        Calculate the current day number based on today's date
+        """
+        today = date.today()
+        if today < challenge.start_date:
+            return 0
+        if today > challenge.end_date:
+            return 30
+        delta = today - challenge.start_date
+        return delta.days + 1
+
+    @staticmethod
+    async def get_active_challenge(
+        session: AsyncSession,
+    ) -> ChallengeWithStats:
+        """
+        Get active challenge with stats and logs
+        """
+        challenge = await ChallengeRepository.get_active(session)
+        if not challenge:
+            raise ChallengeNotFound()
+
+        total_content, total_jobs = await ChallengeLogRepository.get_totals(
+            session,
+            challenge.id,
+        )
+
+        logs_response = [
+            LogResponse(
+                id = log.id,
+                challenge_id = log.challenge_id,
+                log_date = log.log_date,
+                day_number = ChallengeService._calculate_day_number(challenge, log.log_date),
+                tiktok = log.tiktok,
+                instagram_reels = log.instagram_reels,
+                youtube_shorts = log.youtube_shorts,
+                twitter = log.twitter,
+                reddit = log.reddit,
+                linkedin_personal = log.linkedin_personal,
+                linkedin_company = log.linkedin_company,
+                youtube_full = log.youtube_full,
+                medium = log.medium,
+                jobs_applied = log.jobs_applied,
+                created_at = log.created_at,
+                updated_at = log.updated_at,
+            )
+            for log in challenge.logs
+        ]
+
+        return ChallengeWithStats(
+            id = challenge.id,
+            name = challenge.name,
+            start_date = challenge.start_date,
+            end_date = challenge.end_date,
+            is_active = challenge.is_active,
+            content_goal = challenge.content_goal,
+            jobs_goal = challenge.jobs_goal,
+            total_content = total_content,
+            total_jobs = total_jobs,
+            current_day = ChallengeService._calculate_current_day(challenge),
+            logs = logs_response,
+            created_at = challenge.created_at,
+            updated_at = challenge.updated_at,
+        )
+
+    @staticmethod
+    async def start_challenge(
+        session: AsyncSession,
+        data: ChallengeStart,
+    ) -> ChallengeWithStats:
+        """
+        Start a new challenge (deactivates previous)
+        """
+        await ChallengeRepository.deactivate_all(session)
+
+        challenge = a
+```
+
+---
+
+## Class Documentation
+
+### ChallengeService Documentation
+
+**Class Responsibility and Purpose:**
+The `ChallengeService` class encapsulates business logic for managing challenges, including their creation, activation, logging, and historical retrieval. It ensures that operations related to challenge management are centralized and consistent.
+
+**Public Interface (Key Methods):**
+- **`get_active_challenge(session)`**: Retrieves the active challenge with associated logs and statistics.
+- **`start_challenge(session, data)`**: Starts a new challenge by deactivating previous ones and creating a new one.
+- **`get_history(session, page=1, size=10)`**: Fetches past challenges with pagination support.
+- **`create_or_update_log(session, data)`**: Creates or updates log entries for the active challenge.
+
+**Design Patterns Used:**
+- **Factory Method Pattern**: Implicitly used in `start_challenge`, where a new challenge is created based on provided data.
+- **Observer Pattern**: Although not explicitly implemented, this class observes changes to challenges and logs, ensuring that relevant statistics are updated.
+
+**Relationship to Other Classes:**
+- **ChallengeRepository**: Manages CRUD operations for challenges.
+- **ChallengeLogRepository**: Handles log entries related to challenges.
+- **ChallengeWithStats & ChallengeHistoryResponse**: DTOs used to return challenge data with associated stats and history.
+
+This class plays a crucial role in the application's architecture by providing a cohesive interface for managing challenges, ensuring that all business logic is centralized and well-defined.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 16:09*
