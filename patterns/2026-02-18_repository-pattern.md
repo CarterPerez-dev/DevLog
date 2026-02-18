@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/core/base_repository.py
+**File:** PROJECTS/intermediate/api-security-scanner/backend/services/scan_service.py
 **Language:** python
-**Lines:** 1-107
+**Lines:** 1-181
 **Complexity:** 0.0
 
 ---
@@ -13,140 +13,124 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
-base_repository.py
+©AngelaMos | 2025
+Coordinates scanners and saves results
 """
 
-from collections.abc import Sequence
-from typing import (
-    Any,
-    Generic,
-    TypeVar,
-)
-from uuid import UUID
+from __future__ import annotations
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
-from .Base import Base
+from core.enums import TestType
+from repositories.scan_repository import ScanRepository
+from repositories.test_result_repository import TestResultRepository
+
+from scanners.base_scanner import BaseScanner
+from scanners.auth_scanner import AuthScanner
+from scanners.idor_scanner import IDORScanner
+from scanners.sqli_scanner import SQLiScanner
+from scanners.rate_limit_scanner import RateLimitScanner
+from schemas.test_result_schemas import TestResultCreate
+from schemas.scan_schemas import ScanRequest, ScanResponse
 
 
-ModelT = TypeVar("ModelT", bound = Base)
-
-
-class BaseRepository(Generic[ModelT]):
+class ScanService:
     """
-    Generic repository with common CRUD operations
+    Orchestrates security scanning workflow
     """
-    model: type[ModelT]
 
-    @classmethod
-    async def get_by_id(
-        cls,
-        session: AsyncSession,
-        id: UUID,
-    ) -> ModelT | None:
+    @staticmethod
+    def run_scan(db: Session, user_id: int, scan_request: ScanRequest) -> ScanResponse:
         """
-        Get a single record by ID
-        """
-        return await session.get(cls.model, id)
+        Execute security scan with selected tests
 
-    @classmethod
-    async def get_multi(
-        cls,
-        session: AsyncSession,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> Sequence[ModelT]:
+        Args:
+            db: Database session
+            user_id: User ID initiating the scan
+            scan_request: Scan configuration and tests to run
+
+        Returns:
+            ScanResponse: Scan results with all test outcomes
         """
-        Get multiple records with pagination
-        """
-        result = await session.execute(
-            select(cls.model).offset(skip).limit(limit)
+        scan = ScanRepository.create_scan(
+            db=db,
+            user_id=user_id,
+            target_url=str(scan_request.target_url),
         )
-        return result.scalars().all()
 
-    @classmethod
-    async def count(cls, session: AsyncSession) -> int:
-        """
-        Count total records
-        """
-        result = await session.execute(
-            select(func.count()).select_from(cls.model)
-        )
-        return result.scalar_one()
+        scanner_mapping: dict[TestType, type[BaseScanner]] = {
+            TestType.RATE_LIMIT: RateLimitScanner,
+            TestType.AUTH: AuthScanner,
+            TestType.SQLI: SQLiScanner,
+            TestType.IDOR: IDORScanner,
+        }
 
-    @classmethod
-    async def create(
-        cls,
-        session: AsyncSession,
-        **kwargs: Any,
-    ) -> ModelT:
-        """
-        Create a new record
-        """
-        instance = cls.model(**kwargs)
-        session.add(instance)
-        await session.flush()
-        await session.refresh(instance)
-        return instance
+        results: list[TestResultCreate] = []
 
-    @classmethod
-    async def update(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-        **kwargs: Any,
-    ) -> ModelT:
-        """
-        Update an existing record
-        """
-        for key, value in kwargs.items():
-            setattr(instance, key, value)
-        await session.flush()
-        await session.refresh(instance)
-        return instance
+        for test_type in scan_request.tests_to_run:
+            scanner_class: type[BaseScanner] | None = scanner_mapping.get(test_type)
 
-    @classmethod
-    async def delete(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-    ) -> None:
-        """
-        Delete a record
-        """
-        await session.delete(instance)
-        await session.flush()
+            if not scanner_class:
+                continue
 
+            try:
+                scanner = scanner_class(
+                    target_url=str(scan_request.target_url),
+                    auth_token=scan_request.auth_token,
+                    max_requests=scan_request.max_requests,
+                )
+
+                result = scanner.scan()
+                results.append(result)
+
+            except Exception as e:
+                results.append(
+                    TestResultCreate(
+                        test_name=test_type,
+                        status="error",
+                        severity="info",
+                        details=f"Scanner error: {str(e)}",
+                        evidence_json={"error": str(e)},
+                        recommendations_json=[
+                            "Check target URL is accessible",
+                            "Verify authentication token if provided",
+                        ],
+                    )
+                )
+
+        for result in results:
+            TestResultRepository.create_test_result(
+                db=db,
+                scan_id=scan.id,
+                test_name=result.test_name,
+                status=result.status,
+        
 ```
 
 ---
 
 ## Pattern Analysis
 
-### Analysis of Repository Pattern Implementation
+### Pattern Analysis
 
-**Pattern Used:**
-The code implements a **Repository Pattern**, which abstracts data access operations, providing a consistent interface for accessing and manipulating data.
+**Pattern Used:** Repository Pattern
 
-**Implementation Details:**
-- The `BaseRepository` class is generic (`Generic[ModelT]`) and defines common CRUD (Create, Read, Update, Delete) methods.
-- Each method is a class method (`@classmethod`) that operates on an `AsyncSession`, ensuring asynchronous operations.
-- Methods like `get_by_id`, `get_multi`, `count`, `create`, `update`, and `delete` provide specific functionalities for interacting with the database.
+The `ScanService` class orchestrates security scanning workflows by interacting with repositories to create, retrieve, update, and delete scans and test results. This implementation follows the **Repository Pattern**, where specific methods handle database operations through repository classes.
 
-**Benefits:**
-1. **Consistency:** Provides a uniform interface for data access, making it easier to switch between different data sources (e.g., SQL vs NoSQL).
-2. **Decoupling:** Abstracts the data layer from the business logic, allowing changes in storage mechanisms without affecting other parts of the application.
-3. **Testability:** Easier to mock and test repository methods independently.
+- **Implementation**: The `ScanService` uses static methods to interact with `ScanRepository` and `TestResultRepository`. For example, `run_scan` creates a scan record using `ScanRepository.create_scan`, while `get_user_scans` retrieves scans for a user via `ScanRepository.get_by_user`.
 
-**Deviations:**
-- The implementation uses SQLAlchemy's `AsyncSession` for asynchronous operations, which is a deviation from some standard implementations that might use synchronous sessions or different ORM frameworks.
-- The generic type `ModelT` bound by `Base` ensures that only models inheriting from the `Base` class can be used.
+- **Benefits**:
+  - **Decoupling**: The service layer is decoupled from the database implementation details. This makes it easier to switch databases or modify storage logic without changing the service code.
+  - **Consistency**: Ensures consistent data handling and validation across different operations.
 
-**Appropriateness:**
-This pattern is highly appropriate in applications where data access needs to be abstracted and standardized, especially when working with relational databases using SQLAlchemy. It's particularly useful in microservices or large-scale applications where different parts of the system need to interact with various data sources consistently.
+- **Deviations**:
+  - The pattern is slightly modified by including business logic in some methods, such as error handling during scanning (`run_scan`).
+  - The `ScanService` also handles HTTP exceptions, which might be more appropriate for a higher-level API layer rather than the service layer.
+
+- **Appropriateness**:
+  - This pattern is highly suitable here because it effectively separates concerns and provides a clean interface between business logic and data access. It's particularly useful in larger applications where multiple services need to interact with the same database entities.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 12:37*
+*Generated by CodeWorm on 2026-02-18 13:49*
