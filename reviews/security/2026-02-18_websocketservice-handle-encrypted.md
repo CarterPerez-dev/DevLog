@@ -1,0 +1,141 @@
+# WebSocketService.handle_encrypted_message
+
+**Type:** Security Review
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/encrypted-p2p-chat/backend/app/services/websocket_service.py
+**Language:** python
+**Lines:** 87-179
+**Complexity:** 11.0
+
+---
+
+## Source Code
+
+```python
+async def handle_encrypted_message(
+        self,
+        user_id: UUID,
+        message: dict[str,
+                      Any]
+    ) -> None:
+        """
+        Process client-encrypted message and forward to recipient (pass-through)
+        """
+        try:
+            recipient_id = UUID(message.get("recipient_id"))
+            room_id = message.get("room_id")
+            ciphertext = message.get("ciphertext")
+            nonce = message.get("nonce")
+            header = message.get("header")
+            temp_id = message.get("temp_id", "")
+
+            if not ciphertext or not nonce or not header:
+                logger.error("Missing encryption fields in message from %s", user_id)
+                return
+
+            if not room_id:
+                logger.error("Missing room_id in message from %s", user_id)
+                return
+
+            async with async_session_maker() as session:
+                result = await message_service.store_encrypted_message(
+                    session,
+                    user_id,
+                    recipient_id,
+                    ciphertext,
+                    nonce,
+                    header,
+                    room_id,
+                )
+
+            ws_message = EncryptedMessageWS(
+                message_id = result.id if hasattr(result, 'id') else "unknown",
+                sender_id = str(user_id),
+                recipient_id = str(recipient_id),
+                room_id = room_id,
+                content = "",
+                ciphertext = ciphertext,
+                nonce = nonce,
+                header = header,
+                sender_username = result.sender_username if hasattr(result, 'sender_username') else ""
+            )
+
+            is_recipient_connected = connection_manager.is_user_connected(recipient_id)
+            logger.debug(
+                "Sending to recipient %s - connected: %s",
+                recipient_id,
+                is_recipient_connected
+            )
+
+            await connection_manager.send_message(
+                recipient_id,
+                ws_message.model_dump(mode = "json")
+            )
+            logger.debug("Message sent to recipient %s", recipient_id)
+
+            confirmation = MessageSentWS(
+                temp_id = temp_id,
+                message_id = result.id if hasattr(result, 'id') else "unknown",
+                room_id = room_id,
+                status = "sent",
+                created_at = result.created_at if hasattr(result, 'created_at') else datetime.now(UTC)
+            )
+
+            await connection_manager.send_message(
+                user_id,
+                confirmation.model_dump(mode = "json")
+            )
+
+            logger.info(
+                "Encrypted message forwarded: %s -> %s in room %s",
+                user_id,
+                recipient_id,
+                room_id
+            )
+
+        except ValueError as e:
+            logger.error(
+                "Invalid UUID in encrypted message from %s: %s",
+                
+```
+
+---
+
+## Security Review
+
+### Security Review
+
+**Vulnerabilities Found:**
+
+1. **Input Validation Gaps (Medium):**
+   - Lines 8-10: The `message` dictionary is not validated for structure or content, which could lead to unexpected behavior if the message format changes.
+   
+2. **Error Handling that Leaks Information (Low):**
+   - Lines 35 and 40: Generic exception handling logs errors without masking sensitive information.
+
+3. **Logging Issues (Info):**
+   - Lines 36-39, 41-44: Logging user IDs in error messages could expose sensitive information if the logs are not properly secured.
+
+**Attack Vectors:**
+
+- An attacker could exploit input validation gaps to send malformed messages.
+- Generic exceptions may reveal internal details of the application.
+
+**Recommended Fixes:**
+
+1. **Input Validation (Medium):**
+   - Define a schema for `message` using Pydantic or similar libraries to ensure all required fields are present and valid.
+   
+2. **Secure Error Handling (Low):**
+   - Use structured logging frameworks like structlog to mask sensitive information in logs.
+
+3. **Logging Improvements (Info):**
+   - Avoid logging user IDs in error messages unless absolutely necessary, and always mask or obfuscate sensitive data.
+
+**Overall Security Posture:**
+
+The code has some vulnerabilities that could be exploited if not properly addressed. Implementing input validation and secure error handling will significantly improve the security posture of this function. Regularly updating dependencies and maintaining a robust logging strategy are also crucial for overall security.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 17:50*
