@@ -96,27 +96,26 @@ class InsightsRepository:
 
 ## Class Documentation
 
-### InsightsRepository Documentation
+### InsightsRepository
 
 **Class Responsibility and Purpose:**
-The `InsightsRepository` class is responsible for calculating various analytics metrics related to TikTok videos, such as engagement rates, follower conversion rates, video length conversions, and overall performance metrics. It provides a static interface for querying and processing data from the database.
+The `InsightsRepository` class serves as a central repository for calculating various analytics insights from TikTok video data. It provides static methods to fetch videos, calculate engagement metrics, aggregate performance by hooks and CTAs, and generate overall overview metrics.
 
 **Public Interface (Key Methods):**
-- `get_all_videos(session: AsyncSession) -> Sequence[TikTokVideo]`: Retrieves all videos in descending order by date posted.
-- `calculate_engagement_rate(video: TikTokVideo) -> float`: Computes the engagement rate for a given video.
-- `calculate_follower_conversion_rate(video: TikTokVideo) -> float`: Calculates the follower conversion rate based on views and new followers.
-- `convert_length_to_seconds(length: float) -> int`: Converts TikTok's length format to seconds.
-- `get_length_range_label(seconds: int) -> str`: Returns a human-readable label for video length ranges.
-- `get_day_of_week(date_posted: date) -> str`: Determines the day of the week from a given date.
-- `get_overview_metrics(session: AsyncSession) -> dict`: Aggregates overall performance metrics across all videos.
+- `get_all_videos(session: AsyncSession) -> Sequence[TikTokVideo]`: Fetches all videos for analysis.
+- `calculate_engagement_rate(video: TikTokVideo) -> float`: Calculates the engagement rate for a given video.
+- `calculate_follower_conversion_rate(video: TikTokVideo) -> float`: Calculates the follower conversion rate for a given video.
+- `convert_length_to_seconds(length: float) -> int`: Converts TikTok format length to seconds.
+- `get_length_range_label(seconds: int) -> str`: Returns human-readable length range label.
+- `get_day_of_week(date_posted: date) -> str`: Gets the day of the week from a given date.
+- `get_overview_metrics(session: AsyncSession) -> dict`: Calculates overall performance metrics for videos.
+- `aggregate_hook_performance(session: AsyncSession) -> dict[str, dict]`: Aggregates performance metrics by hook.
 
 **Design Patterns Used:**
-The class employs several design patterns:
-- **Factory Method**: Implicitly used in methods like `get_all_videos` and `aggregate_performance`, where the repository acts as a factory for video data.
-- **Strategy Pattern**: The calculation of engagement rates and follower conversion rates uses different strategies based on the video's attributes.
+The class uses **Strategy Pattern** through the static methods that calculate engagement and follower conversion rates. It also employs **Factory Method** pattern implicitly in its aggregation methods to handle different types of video data.
 
-**How It Fits in the Architecture:**
-The `InsightsRepository` class is part of the analytics layer, providing essential metrics to higher-level services or dashboards. It interacts with the database through an asynchronous session (`AsyncSession`) to fetch data efficiently and processes it using static methods. This design ensures that the repository remains stateless and focused on its specific responsibilities, making it easy to integrate into a larger application architecture.
+**How it Fits in the Architecture:**
+`InsightsRepository` is part of a larger analytics system, responsible for providing insights from TikTok video data. It interacts with an `AsyncSession` to fetch and process data, making it suitable for asynchronous operations typical in web applications. The class interfaces with other components such as video models and potentially dashboard or reporting services that consume these insights.
 
 ---
 
