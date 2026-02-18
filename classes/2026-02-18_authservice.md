@@ -2,9 +2,9 @@
 
 **Type:** Class Documentation
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/auth/service.py
+**File:** PROJECTS/intermediate/api-security-scanner/backend/services/auth_service.py
 **Language:** python
-**Lines:** 32-212
+**Lines:** 27-115
 **Complexity:** 0.0
 
 ---
@@ -14,110 +14,93 @@
 ```python
 class AuthService:
     """
-    Business logic for authentication operations
+    User registration, login, and token generation
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
 
-    async def authenticate(
-        self,
-        email: str,
-        password: str,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> tuple[str,
-               str,
-               User]:
+    @staticmethod
+    def register_user(db: Session, user_data: UserCreate) -> UserResponse:
         """
-        Authenticate user and create tokens
+        Register a new user
+
+        Args:
+            db: Database session
+            user_data: User registration data
+
+        Returns:
+            UserResponse: Created user data
         """
-        user = await UserRepository.get_by_email(self.session, email)
-        hashed_password = user.hashed_password if user else None
-
-        is_valid, new_hash = await verify_password_with_timing_safety(
-            password, hashed_password
-        )
-
-        if not is_valid or user is None:
-            raise InvalidCredentials()
-
-        if not user.is_active:
-            raise InvalidCredentials()
-
-        if new_hash:
-            await UserRepository.update_password(
-                self.session,
-                user,
-                new_hash
+        existing_user = UserRepository.get_by_email(db, user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
             )
 
-        access_token = create_access_token(user.id, user.token_version)
+        hashed_password = hash_password(user_data.password)
 
-        family_id = uuid6.uuid7()
-        raw_refresh, token_hash, expires_at = create_refresh_token(user.id, family_id)
-
-        await RefreshTokenRepository.create_token(
-            self.session,
-            user_id = user.id,
-            token_hash = token_hash,
-            family_id = family_id,
-            expires_at = expires_at,
-            device_id = device_id,
-            device_name = device_name,
-            ip_address = ip_address,
+        user = UserRepository.create_user(
+            db=db,
+            email=user_data.email,
+            hashed_password=hashed_password,
         )
 
-        return access_token, raw_refresh, user
+        return UserResponse.model_validate(user)
 
-    async def login(
-        self,
-        email: str,
-        password: str,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> tuple[TokenWithUserResponse,
-               str]:
+    @staticmethod
+    def login_user(db: Session, login_data: UserLogin) -> TokenResponse:
         """
-        Login and return tokens with user data
+        Authenticate user and generate access token
+
+        Args:
+            db: Database session
+            login_data: User login credentials
+
+        Returns:
+            TokenResponse: JWT access token
         """
-        access_token, refresh_token, user = await self.authenticate(
-            email,
-            password,
-            device_id,
-            device_name,
-            ip_address,
+        user = UserRepository.get_by_email(db, login_data.email)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+
+        if not verify_password(login_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is inactive",
+            )
+
+        access_token = create_access_token(
+            data={"sub": user.email},
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         )
 
-        response = TokenWithUserResponse(
-            access_token = access_token,
-            user = UserResponse.model_validate(user),
-        )
-        return response, refresh_token
+        return TokenResponse(access_token=access_token, token_type="bearer")
 
-    async def refresh_tokens(
-        self,
-        refresh_token: str,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> tuple[TokenResponse, str]:
+    @staticmethod
+    def get_user_by_email(db: Session, email: str) -> UserResponse | None:
         """
-        Refresh access token using refresh token
+        Get user by email address
 
-        Implements token rotation with replay attack detection
+        Args:
+            db: Database session
+            email: User email
+
+        Returns:
+            UserResponse | None: User data or None if not found
         """
-        token_hash = hash_token(refresh_token)
-        stored_token = await RefreshTokenRepository.get_by_hash(
-            self.session,
-            token_hash
-        )
-
-        if stored_token is None:
-            raise TokenError(message = "Invalid refresh token")
-
-       
+        user = UserRepository.get_by_email(db, email)
+        if user:
+            return UserResponse.model_validate(user)
+        return None
 ```
 
 ---
@@ -127,24 +110,19 @@ class AuthService:
 ### AuthService Documentation
 
 **Class Responsibility and Purpose**
-The `AuthService` class is responsible for handling authentication operations, including user login, token generation, and management. It ensures secure and efficient authentication by verifying credentials, generating access and refresh tokens, and managing token revocation.
+The `AuthService` class is responsible for handling user registration, login, and token generation within the application. It ensures that users can securely create accounts, log in, and receive JWT access tokens.
 
 **Public Interface (Key Methods)**
-- **authenticate**: Authenticates a user based on email and password, creating new or updating existing tokens.
-- **login**: Logs in a user and returns the necessary tokens with user data.
-- **refresh_tokens**: Refreshes an access token using a valid refresh token while handling token rotation and replay attacks.
-- **logout**: Revokes a specific refresh token to log out a user from a particular session.
-- **logout_all**: Logs out a user from all devices by revoking their existing tokens.
+- **register_user**: Registers a new user by validating input data, hashing passwords, and saving to the database.
+- **login_user**: Authenticates a user based on email and password, checks account status, and generates an access token.
+- **get_user_by_email**: Retrieves a user's details from the database using their email address.
 
 **Design Patterns Used**
-The class utilizes several design patterns:
-- **Factory Pattern**: Implicitly used in the creation of access and refresh tokens through `create_access_token` and `create_refresh_token`.
-- **Observer Pattern**: Indirectly, as token revocation events can be observed and handled by other components.
-- **Strategy Pattern**: The password verification logic is encapsulated within `verify_password_with_timing_safety`, allowing for flexible implementation of different strategies.
+The class uses the **Factory Method** pattern for creating users through `UserRepository.create_user`. It also employs validation patterns to ensure input data is correct before processing.
 
-**How It Fits in the Architecture**
-`AuthService` acts as a central hub for authentication operations. It interacts with the `UserRepository` and `RefreshTokenRepository` to manage user data and tokens, ensuring that all authentication-related logic is encapsulated within this service class. This design promotes separation of concerns and makes the system more modular and testable.
+**How it Fits in the Architecture**
+`AuthService` acts as a service layer that interacts with the database via `UserRepository` and handles business logic related to user authentication. This separation ensures that the core application logic remains clean and modular, making the system easier to maintain and extend. The class interfaces with other services and repositories, providing a clear and focused responsibility for managing user sessions and credentials.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 07:57*
+*Generated by CodeWorm on 2026-02-18 11:21*
