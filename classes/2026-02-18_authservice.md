@@ -2,9 +2,9 @@
 
 **Type:** Class Documentation
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/api-security-scanner/backend/services/auth_service.py
+**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/auth/service.py
 **Language:** python
-**Lines:** 27-115
+**Lines:** 25-82
 **Complexity:** 0.0
 
 ---
@@ -14,93 +14,62 @@
 ```python
 class AuthService:
     """
-    User registration, login, and token generation
+    Business logic for authentication operations
     """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    @staticmethod
-    def register_user(db: Session, user_data: UserCreate) -> UserResponse:
+    async def authenticate(
+        self,
+        email: str,
+        password: str,
+    ) -> tuple[str,
+               User]:
         """
-        Register a new user
-
-        Args:
-            db: Database session
-            user_data: User registration data
-
-        Returns:
-            UserResponse: Created user data
+        Authenticate user and create access token
         """
-        existing_user = UserRepository.get_by_email(db, user_data.email)
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
+        user = await UserRepository.get_by_email(self.session, email)
+        hashed_password = user.hashed_password if user else None
 
-        hashed_password = hash_password(user_data.password)
-
-        user = UserRepository.create_user(
-            db=db,
-            email=user_data.email,
-            hashed_password=hashed_password,
+        is_valid, new_hash = await verify_password_with_timing_safety(
+            password, hashed_password
         )
 
-        return UserResponse.model_validate(user)
-
-    @staticmethod
-    def login_user(db: Session, login_data: UserLogin) -> TokenResponse:
-        """
-        Authenticate user and generate access token
-
-        Args:
-            db: Database session
-            login_data: User login credentials
-
-        Returns:
-            TokenResponse: JWT access token
-        """
-        user = UserRepository.get_by_email(db, login_data.email)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-            )
-
-        if not verify_password(login_data.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-            )
+        if not is_valid or user is None:
+            raise InvalidCredentials()
 
         if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is inactive",
+            raise InvalidCredentials()
+
+        if new_hash:
+            await UserRepository.update_password(
+                self.session,
+                user,
+                new_hash
             )
 
-        access_token = create_access_token(
-            data={"sub": user.email},
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        access_token = create_access_token(user.id)
+
+        return access_token, user
+
+    async def login(
+        self,
+        email: str,
+        password: str,
+    ) -> TokenWithUserResponse:
+        """
+        Login and return token with user data
+        """
+        access_token, user = await self.authenticate(
+            email,
+            password,
         )
 
-        return TokenResponse(access_token=access_token, token_type="bearer")
-
-    @staticmethod
-    def get_user_by_email(db: Session, email: str) -> UserResponse | None:
-        """
-        Get user by email address
-
-        Args:
-            db: Database session
-            email: User email
-
-        Returns:
-            UserResponse | None: User data or None if not found
-        """
-        user = UserRepository.get_by_email(db, email)
-        if user:
-            return UserResponse.model_validate(user)
-        return None
+        response = TokenWithUserResponse(
+            access_token = access_token,
+            user = UserResponse.model_validate(user),
+        )
+        return response
 ```
 
 ---
@@ -109,20 +78,20 @@ class AuthService:
 
 ### AuthService Documentation
 
-**Class Responsibility and Purpose**
-The `AuthService` class is responsible for handling user registration, login, and token generation within the application. It ensures that users can securely create accounts, log in, and receive JWT access tokens.
+**Class Responsibility and Purpose:**
+The `AuthService` class handles authentication operations, including user validation and token generation. It ensures that only active users with valid credentials can log in.
 
-**Public Interface (Key Methods)**
-- **register_user**: Registers a new user by validating input data, hashing passwords, and saving to the database.
-- **login_user**: Authenticates a user based on email and password, checks account status, and generates an access token.
-- **get_user_by_email**: Retrieves a user's details from the database using their email address.
+**Public Interface (Key Methods):**
+- **`authenticate(email: str, password: str) -> tuple[str, User]`:** Authenticates a user by verifying their email and password. If the credentials are correct and the user is active, it creates an access token.
+- **`login(email: str, password: str) -> TokenWithUserResponse`:** A convenience method that calls `authenticate` and returns a structured response containing the access token and user data.
 
-**Design Patterns Used**
-The class uses the **Factory Method** pattern for creating users through `UserRepository.create_user`. It also employs validation patterns to ensure input data is correct before processing.
+**Design Patterns Used:**
+- **Strategy Pattern:** The class delegates the responsibility of password verification to the `verify_password_with_timing_safety` function.
+- **Repository Pattern:** It interacts with a `UserRepository` to retrieve and update user records, ensuring separation of concerns.
 
-**How it Fits in the Architecture**
-`AuthService` acts as a service layer that interacts with the database via `UserRepository` and handles business logic related to user authentication. This separation ensures that the core application logic remains clean and modular, making the system easier to maintain and extend. The class interfaces with other services and repositories, providing a clear and focused responsibility for managing user sessions and credentials.
+**How it Fits in the Architecture:**
+`AuthService` acts as a service layer that encapsulates business logic for authentication. It interfaces with the database through the `UserRepository`, which manages persistence operations. The class ensures that all authentication-related tasks are handled in one place, promoting maintainability and testability. Its methods return structured responses, making it easy to integrate with other parts of the application or external services.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 11:21*
+*Generated by CodeWorm on 2026-02-18 11:58*
