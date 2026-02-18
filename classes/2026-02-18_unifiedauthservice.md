@@ -1,0 +1,144 @@
+# UnifiedAuthService
+
+**Type:** Class Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/core/auth/unified_auth.py
+**Language:** python
+**Lines:** 14-176
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class UnifiedAuthService:
+    """
+    Dual role authentication between User and AdminUser models
+    """
+    @staticmethod
+    def create_user_admin_link(
+        user_email: str,
+        admin_role: AdminRole = AdminRole.VIEWER,
+        created_by: str | None = None
+    ) -> dict[str,
+              Any]:
+        """
+        Create an admin account linked to existing user via shared email
+        """
+        user = User.objects(email = user_email.lower()).first()
+        if not user:
+            raise NotFoundError(f"User with email {user_email} not found")
+
+        existing_admin = AdminUser.objects(email = user_email.lower()
+                                           ).first()
+        if existing_admin:
+            return {
+                "user_id": str(user.id),
+                "admin_id": str(existing_admin.id),
+                "was_created": False
+            }
+
+        admin_user = AdminUser.create_admin(
+            email = user.email,
+            role = admin_role,
+            created_by = created_by or "unified_auth_system"
+        )
+
+        if user.username and not admin_user.name:
+            admin_user.name = user.username
+            admin_user.save()
+
+        user.is_admin = True
+        user.save()
+
+        return {
+            "user_id": str(user.id),
+            "admin_id": str(admin_user.id),
+            "user_email": user.email,
+            "admin_role": admin_role.value,
+            "was_created": True
+        }
+
+    @staticmethod
+    def create_admin_user_link(
+        admin_email: str,
+        username: str,
+        password: str,
+        **user_kwargs
+    ) -> dict[str,
+              Any]:
+        """
+        Create a user account linked to existing admin via shared email
+        """
+        admin = AdminUser.objects(email = admin_email.lower()).first()
+        if not admin:
+            raise NotFoundError(
+                f"Admin with email {admin_email} not found"
+            )
+
+        existing_user = User.objects(email = admin_email.lower()).first()
+        if existing_user:
+            return {
+                "user_id": str(existing_user.id),
+                "admin_id": str(admin.id),
+                "was_created": False
+            }
+
+        user = AuthService.create_user(
+            username = username,
+            email = admin.email,
+            password = password,
+            is_admin = True,
+            **user_kwargs
+        )
+
+        if not user:
+            raise NotFoundError("Failed to create user account")
+
+        return {
+            "user_id": str(user.id),
+            "admin_id": str(admin.id),
+            "user_email": user.email,
+            "admin_role": admin.role.value,
+            "was_created": True
+        }
+
+    @staticmethod
+    def get_admin_for_user(user: User) -> AdminUser | None:
+        """
+        Get admin account for user if they have admin access
+        """
+        if not user.is_admin:
+            return None
+        result = AdminUser.objects(email = user.email).first()
+     
+```
+
+---
+
+## Class Documentation
+
+### UnifiedAuthService Documentation
+
+**Class Responsibility and Purpose**
+The `UnifiedAuthService` class manages dual-role authentication between `User` and `AdminUser` models, ensuring seamless access control and account linking. It handles creating admin accounts linked to existing users via shared email addresses and vice versa.
+
+**Public Interface (Key Methods)**
+- **create_user_admin_link**: Creates an admin account for a user with the specified role.
+- **create_admin_user_link**: Creates a user account linked to an existing admin, sharing the same email address.
+- **get_admin_for_user**: Retrieves the admin account associated with a user if they have admin access.
+- **get_user_for_admin**: Fetches the user account linked to an admin.
+- **has_admin_access**: Checks if a user has admin privileges via their AdminUser account.
+- **upgrade_user_to_admin**: Upgrades an existing user to admin status.
+- **revoke_admin_access**: Revokes admin access for a user by deleting their AdminUser account.
+
+**Design Patterns Used**
+The class employs the **Factory Method** pattern through its static methods, providing flexible and controlled creation of `AdminUser` and `User` instances. It also uses **Observer** design to manage state changes in related objects like updating `user.is_admin` when linking accounts.
+
+**How it Fits in the Architecture**
+In the architecture, `UnifiedAuthService` acts as a central service for managing dual-role authentication. It interacts with models such as `User` and `AdminUser`, ensuring that users can have administrative privileges through shared email addresses. This class is crucial for maintaining consistent access control across different roles within the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 12:44*
