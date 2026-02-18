@@ -1,0 +1,170 @@
+# exceptions
+
+**Type:** File Overview
+**Repository:** Cybersecurity-Projects
+**File:** TEMPLATES/fullstack-template/backend/app/core/exceptions.py
+**Language:** python
+**Lines:** 1-212
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+exceptions.py
+"""
+
+from typing import Any
+
+
+class BaseAppException(Exception):
+    """
+    Base exception for all application specific errors
+    """
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 500,
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        self.message = message
+        self.status_code = status_code
+        self.extra = extra or {}
+        super().__init__(self.message)
+
+
+class ResourceNotFound(BaseAppException):
+    """
+    Raised when a requested resource does not exist
+    """
+    def __init__(
+        self,
+        resource: str,
+        identifier: str | int,
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message = f"{resource} with id '{identifier}' not found",
+            status_code = 404,
+            extra = extra,
+        )
+        self.resource = resource
+        self.identifier = identifier
+
+
+class ConflictError(BaseAppException):
+    """
+    Raised when an operation conflicts with existing state
+    """
+    def __init__(
+        self,
+        message: str,
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message = message,
+            status_code = 409,
+            extra = extra
+        )
+
+
+class ValidationError(BaseAppException):
+    """
+    Raised when input validation fails outside of Pydantic
+    """
+    def __init__(
+        self,
+        message: str,
+        field: str | None = None,
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message = message,
+            status_code = 422,
+            extra = extra
+        )
+        self.field = field
+
+
+class AuthenticationError(BaseAppException):
+    """
+    Raised when authentication fails
+    """
+    def __init__(
+        self,
+        message: str = "Authentication failed",
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message = message,
+            status_code = 401,
+            extra = extra
+        )
+
+
+class TokenError(AuthenticationError):
+    """
+    Raised for JWT token specific errors
+    """
+    def __init__(
+        self,
+        message: str = "Invalid or expired token",
+        extra: dict[str,
+                    Any] | None = None,
+    ) -> None:
+        super().__init__(message = message, extra = extra)
+
+
+class TokenRevokedError(TokenError):
+    """
+    Raised when a revoked token is used
+    """
+    def __init__(self, extra: dict[str, Any] | None = None) -> None:
+        super().__init__(message = "Token has been revoked", extra = extra)
+
+
+class PermissionDenied(BaseAppException):
+    """
+    Raised when user lacks required permissions
+    """
+    def __init__(
+        self,
+        message: str = "Permission denied",
+        required_permission: str | None = None,
+        extra: dict[s
+```
+
+---
+
+## File Overview
+
+### exceptions.py
+
+**Purpose:**
+This file defines a suite of custom exception classes for handling various error conditions within the application, ensuring consistent error handling and response codes.
+
+**Key Exports:**
+- `BaseAppException`: The base class for all application-specific errors.
+- `ResourceNotFound`, `ConflictError`, `ValidationError`, `AuthenticationError`, `TokenError`, `TokenRevokedError`, `PermissionDenied`, `RateLimitExceeded`, `UserNotFound`, `EmailAlreadyExists`, and `InvalidCredentials` are custom exception classes that extend `BaseAppException`.
+
+**Project Fit:**
+This file is a crucial part of the error handling mechanism in the application. It provides a structured way to handle exceptions, ensuring that errors are appropriately categorized and handled according to their nature (e.g., resource not found, authentication failure). These exceptions are used throughout the project to maintain consistency in error reporting.
+
+**Design Decisions:**
+- **Inheritance Hierarchy:** The use of inheritance allows for specific exception handling strategies while maintaining a unified base class for common attributes like `message` and `status_code`.
+- **Type Hints:** Type hints are used extensively, making the code more readable and maintainable.
+- **Consistent Error Codes:** Each custom exception class sets a standard HTTP status code to facilitate proper error reporting and client-side handling.
+
+This file ensures that exceptions are handled in a consistent manner across the application, improving both robustness and user experience.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 11:16*
