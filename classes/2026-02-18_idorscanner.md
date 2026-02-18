@@ -1,0 +1,122 @@
+# IDORScanner
+
+**Type:** Class Documentation
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/api-security-scanner/backend/scanners/idor_scanner.py
+**Language:** python
+**Lines:** 19-350
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class IDORScanner(BaseScanner):
+    """
+    Tests for Insecure Direct Object Reference (IDOR) vulnerabilities
+
+    Also known as Broken Object Level Authorization (BOLA).
+    Ranked #1 in OWASP API Security Top 10 2023.
+
+    Detects:
+    - Sequential ID enumeration
+    - UUID exposure and access
+    - Missing authorization checks on object access
+
+    Maps to OWASP API Security Top 10 2023: API1:2023
+    """
+    def scan(self) -> TestResultCreate:
+        """
+        Execute IDOR/BOLA tests
+
+        Returns:
+            TestResultCreate: Scan result with findings
+        """
+        id_enumeration_test = self._test_id_enumeration()
+
+        if id_enumeration_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details =
+                f"IDOR vulnerability detected: {id_enumeration_test['vulnerability_type']}",
+                evidence = id_enumeration_test,
+                severity = Severity.HIGH,
+                recommendations = [
+                    "Implement proper authorization checks for all object access",
+                    "Verify user owns/has permission to access requested resource",
+                    "Use UUIDs instead of sequential IDs (but still check authorization)",
+                    "Implement access control lists (ACLs) or role-based access control (RBAC)",
+                    "Log and monitor unauthorized access attempts",
+                ],
+            )
+
+        predictable_id_test = self._test_predictable_id_patterns()
+
+        if predictable_id_test["vulnerable"]:
+            return self._create_vulnerable_result(
+                details =
+                "Predictable ID patterns detected enabling enumeration",
+                evidence = predictable_id_test,
+                severity = Severity.MEDIUM,
+                recommendations = [
+                    "Use non-sequential, non-predictable identifiers (UUIDs)",
+                    "Implement rate limiting on ID-based endpoints",
+                    "Add authorization checks regardless of ID format",
+                ],
+            )
+
+        return TestResultCreate(
+            test_name = TestType.IDOR,
+            status = ScanStatus.SAFE,
+            severity = Severity.INFO,
+            details = "No IDOR/BOLA vulnerabilities detected",
+            evidence_json = {
+                "id_enumeration_test": id_enumeration_test,
+                "predictable_id_test": predictable_id_test,
+            },
+            recommendations_json = [
+                "Authorization checks appear to be in place",
+                "Continue monitoring for authorization bypasses",
+            ],
+        )
+
+    def _test_id_enumeration(self) -> dict[str, Any]:
+        """
+        Test for ID enumeration vulnerabilities
+
+        Attempts to access resources with modified IDs to detect
+        missing authorization checks.
+
+        Returns:
+            dict[str, Any]: ID enumeration test results
+        """
+        extracted_ids = self._extract_ids_f
+```
+
+---
+
+## Class Documentation
+
+### IDORScanner Class Documentation
+
+**Class Responsibility and Purpose:**
+The `IDORScanner` class is responsible for detecting Insecure Direct Object Reference (IDOR) vulnerabilities, also known as Broken Object Level Authorization (BOLA). This class implements tests to identify potential IDOR issues by examining API responses for missing authorization checks, sequential ID enumeration, and predictable ID patterns. It maps directly to OWASP API Security Top 10 2023 criteria.
+
+**Public Interface:**
+- `scan()`: Executes the IDOR/BOLA tests and returns a `TestResultCreate` object detailing the findings.
+- `_test_id_enumeration()`: Tests for ID enumeration vulnerabilities by manipulating numeric and string IDs.
+- `_extract_ids_from_response()`: Extracts potential IDs from API responses, including UUIDs and numeric IDs.
+- `_test_numeric_id_manipulation()`: Tests numeric ID manipulation to detect IDOR issues.
+
+**Design Patterns Used:**
+- **Strategy Pattern**: The class uses different strategies for testing ID enumeration (numeric and string) by delegating the logic to separate methods.
+- **Factory Method**: Implicitly used in creating `TestResultCreate` objects, although not explicitly defined as a pattern.
+
+**Relationship to Other Classes:**
+The `IDORScanner` interacts with other classes through its methods like `make_request`, which is assumed to be part of the `BaseScanner` class. It also relies on the `TestResultCreate` and `Severity` classes for result creation and severity classification, respectively.
+
+This class fits into the architecture by providing a specialized module for detecting IDOR vulnerabilities within an API security scanner framework.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 09:58*
