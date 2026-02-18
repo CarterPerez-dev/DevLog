@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/api-security-scanner/backend/services/scan_service.py
+**File:** PROJECTS/intermediate/api-security-scanner/backend/repositories/scan_repository.py
 **Language:** python
-**Lines:** 1-181
+**Lines:** 1-160
 **Complexity:** 0.0
 
 ---
@@ -13,99 +13,127 @@
 
 ```python
 """
-©AngelaMos | 2025
-Coordinates scanners and saves results
+ⒸAngelaMos | 2025
+Handles all Scan model database queries
 """
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from datetime import UTC, datetime
+from sqlalchemy.orm import (
+    Session,
+    joinedload,
+)
 
-from core.enums import TestType
-from repositories.scan_repository import ScanRepository
-from repositories.test_result_repository import TestResultRepository
-
-from scanners.base_scanner import BaseScanner
-from scanners.auth_scanner import AuthScanner
-from scanners.idor_scanner import IDORScanner
-from scanners.sqli_scanner import SQLiScanner
-from scanners.rate_limit_scanner import RateLimitScanner
-from schemas.test_result_schemas import TestResultCreate
-from schemas.scan_schemas import ScanRequest, ScanResponse
+from config import settings
+from models.Scan import Scan
 
 
-class ScanService:
+class ScanRepository:
     """
-    Orchestrates security scanning workflow
+    Repository for Scan database operations
     """
-
     @staticmethod
-    def run_scan(db: Session, user_id: int, scan_request: ScanRequest) -> ScanResponse:
+    def create_scan(
+        db: Session,
+        user_id: int,
+        target_url: str,
+        commit: bool = True
+    ) -> Scan:
         """
-        Execute security scan with selected tests
+        Create a new scan
 
         Args:
             db: Database session
-            user_id: User ID initiating the scan
-            scan_request: Scan configuration and tests to run
+            user_id: User ID who initiated the scan
+            target_url: Target URL to scan
+            commit: Whether to commit the transaction
 
         Returns:
-            ScanResponse: Scan results with all test outcomes
+            Scan: Created scan instance
         """
-        scan = ScanRepository.create_scan(
-            db=db,
-            user_id=user_id,
-            target_url=str(scan_request.target_url),
+        scan = Scan(
+            user_id = user_id,
+            target_url = target_url,
+            scan_date = datetime.now(UTC),
+        )
+        db.add(scan)
+        if commit:
+            db.commit()
+            db.refresh(scan)
+        return scan
+
+    @staticmethod
+    def get_by_id(db: Session, scan_id: int) -> Scan | None:
+        """
+        Get scan by ID with test results loaded
+
+        Args:
+            db: Database session
+            scan_id: Scan ID
+
+        Returns:
+            Scan | None: Scan instance or None if not found
+        """
+        return (
+            db.query(Scan).options(
+                joinedload(Scan.test_results)
+            ).filter(Scan.id == scan_id).first()
         )
 
-        scanner_mapping: dict[TestType, type[BaseScanner]] = {
-            TestType.RATE_LIMIT: RateLimitScanner,
-            TestType.AUTH: AuthScanner,
-            TestType.SQLI: SQLiScanner,
-            TestType.IDOR: IDORScanner,
-        }
+    @staticmethod
+    def get_by_user(
+        db: Session,
+        user_id: int,
+        skip: int = 0,
+        limit: int | None = None
+    ) -> list[Scan]:
+        """
+        Get all scans for a user with pagination.
 
-        results: list[TestResultCreate] = []
+        Args:
+            db: Database session
+            user_id: User ID
+            skip: Number of records to skip
+            limit: Maximum number of records to return (DEFAULT_PAGINATION_LIMIT)
 
-        for test_type in scan_request.tests_to_run:
-            scanner_class: type[BaseScanner] | None = scanner_mapping.get(test_type)
+        Returns:
+            list[Scan]: List of scans with test results
+        """
+        if limit is None:
+            limit = settings.DEFAULT_PAGINATION_LIMIT
 
-            if not scanner_class:
-                continue
+        return (
+            db.query(Scan).options(
+                joinedload(Scan.test_results)
+            ).filter(Scan.user_id == user_id).order_by(
+                Scan.scan_date.desc()
+            ).offset(skip).limit(limit).all()
+        )
 
-            try:
-                scanner = scanner_class(
-                    target_url=str(scan_request.target_url),
-                    auth_token=scan_request.auth_token,
-                    max_requests=scan_request.max_requests,
-                )
+    @staticmethod
+    def get_recent(db: Session,
+                   limit: int | None = None) -> list[Scan]:
+        """
+        Get most recent scans across all users.
 
-                result = scanner.scan()
-                results.append(result)
+        Args:
+            db: Database session
+            limit: Maximum number of scans to return (DEFAULT_PAGINATION_LIMIT)
 
-            except Exception as e:
-                results.append(
-                    TestResultCreate(
-                        test_name=test_type,
-                        status="error",
-                        severity="info",
-                        details=f"Scanner error: {str(e)}",
-                        evidence_json={"error": str(e)},
-                        recommendations_json=[
-                            "Check target URL is accessible",
-                            "Verify authentication token if provided",
-                        ],
-                    )
-                )
+        Returns:
+            list[Scan]: List of recent scans
+        """
+        if limit is None:
+            limit = settings.DEFAULT_PAGINATION_LIMIT
 
-        for result in results:
-            TestResultRepository.create_test_result(
-                db=db,
-                scan_id=scan.id,
-                test_name=result.test_name,
-                status=result.status,
-        
+        return (
+            db.query(Scan).options(
+                joinedload(Scan.test_results)
+            ).order_by(Scan.scan_date.desc()).limit(limit).all()
+        )
+
+    @staticmet
 ```
 
 ---
@@ -114,23 +142,26 @@ class ScanService:
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern
+**Pattern Used:** Repository Pattern  
+**Implementation:**
 
-The `ScanService` class orchestrates security scanning workflows by interacting with repositories to create, retrieve, update, and delete scans and test results. This implementation follows the **Repository Pattern**, where specific methods handle database operations through repository classes.
+The `ScanRepository` class encapsulates all database operations related to the `Scan` model, providing static methods for creating, retrieving, updating, and deleting scans. Each method handles a specific operation, such as `create_scan`, `get_by_id`, `get_by_user`, `delete`, and `count_by_user`. These methods use SQLAlchemy sessions (`Session`) to interact with the database.
 
-- **Implementation**: The `ScanService` uses static methods to interact with `ScanRepository` and `TestResultRepository`. For example, `run_scan` creates a scan record using `ScanRepository.create_scan`, while `get_user_scans` retrieves scans for a user via `ScanRepository.get_by_user`.
+**Benefits:**
 
-- **Benefits**:
-  - **Decoupling**: The service layer is decoupled from the database implementation details. This makes it easier to switch databases or modify storage logic without changing the service code.
-  - **Consistency**: Ensures consistent data handling and validation across different operations.
+1. **Separation of Concerns:** The repository pattern separates business logic from data access, making the code more modular and easier to maintain.
+2. **Testability:** By encapsulating database interactions within a single class, it becomes easier to mock or replace the data source during testing.
+3. **Consistency:** Ensures that all database operations follow a consistent interface.
 
-- **Deviations**:
-  - The pattern is slightly modified by including business logic in some methods, such as error handling during scanning (`run_scan`).
-  - The `ScanService` also handles HTTP exceptions, which might be more appropriate for a higher-level API layer rather than the service layer.
+**Deviations:**
 
-- **Appropriateness**:
-  - This pattern is highly suitable here because it effectively separates concerns and provides a clean interface between business logic and data access. It's particularly useful in larger applications where multiple services need to interact with the same database entities.
+- The `ScanRepository` uses static methods instead of instance methods, which is common in Python for utility classes but may not be ideal if you need to maintain state between method calls.
+- The use of type hints and the `Session` parameter ensures strong typing and clear method signatures.
+
+**Appropriateness:**
+
+This pattern is highly appropriate when working with SQLAlchemy ORM operations. It provides a clean, organized way to manage database interactions, making the codebase more manageable and easier to test. However, if you need to maintain state between method calls or have complex business logic that requires instance methods, you might consider using an instance-based repository pattern instead.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 13:49*
+*Generated by CodeWorm on 2026-02-18 17:50*
