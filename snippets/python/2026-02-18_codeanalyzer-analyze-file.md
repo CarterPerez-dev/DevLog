@@ -1,0 +1,122 @@
+# CodeAnalyzer.analyze_file
+
+**Type:** Documentation
+**Repository:** CodeWorm
+**File:** codeworm/analysis/analyzer.py
+**Language:** python
+**Lines:** 88-168
+**Complexity:** 13.0
+
+---
+
+## Source Code
+
+```python
+def analyze_file(self,
+                     scanned_file: ScannedFile) -> Iterator[AnalysisCandidate]:
+        """
+        Analyze a single file and yield documentation candidates
+        """
+        try:
+            source = scanned_file.path.read_text(encoding = "utf-8")
+        except Exception:
+            return
+
+        extractor = CodeExtractor(source, scanned_file.language)
+        complexity_results = self.complexity_analyzer.analyze_source(
+            source,
+            str(scanned_file.path),
+        )
+        complexity_map = {m.name: m for m in complexity_results}
+
+        git_repo = self._get_git_repo(scanned_file.path.parent)
+        if git_repo:
+            self.scorer.git_repo = git_repo
+
+        for parsed_func in extractor.extract_functions():
+            if self._should_skip_function(parsed_func):
+                continue
+
+            complexity = complexity_map.get(parsed_func.name)
+            if not complexity:
+                for name, metrics in complexity_map.items():
+                    if name.endswith(f".{parsed_func.name}"):
+                        complexity = metrics
+                        break
+
+            git_stats = self.scorer.get_git_stats(
+                scanned_file.path,
+                parsed_func.start_line,
+                parsed_func.end_line,
+            )
+
+            if complexity:
+                interest = self.scorer.score(
+                    complexity,
+                    git_stats,
+                    parsed_func.decorators,
+                    parsed_func.is_async,
+                    parsed_func.source,
+                )
+            else:
+                interest = InterestScore(
+                    total = 20,
+                    complexity_score = 0,
+                    length_score = 0,
+                    nesting_score = 0,
+                    parameter_score = 0,
+                    churn_score = 0,
+                    novelty_score = 0,
+                )
+
+            snippet = CodeSnippet(
+                repo = scanned_file.repo_name,
+                file_path = scanned_file.path,
+                function_name = parsed_func.name,
+                class_name = parsed_func.class_name,
+                language = scanned_file.language,
+                source = parsed_func.source,
+                start_line = parsed_func.start_line,
+                end_line = parsed_func.end_line,
+                complexity = complexity.cyclomatic_complexity
+                if complexity else 0,
+                nesting_depth = complexity.max_nesting_depth if complexity else 0,
+                parameter_count = complexity.parameter_count if complexity else 0,
+                interest_score = interest.total,
+            )
+
+            yield AnalysisCandidate(
+                snippet = snippet,
+                parsed_function = parsed_func,
+                complexity = complexity,
+                git_stats = git_stats,
+                interest_score = interest,
+                scanned_file = scanned_file,
+```
+
+---
+
+## Documentation
+
+### Documentation for `analyze_file` Method
+
+**Purpose and Behavior:**
+The `analyze_file` method in the `CodeAnalyzer` class processes a single scanned file, extracting functions, analyzing their complexity, and scoring them based on various metrics including Git history. It yields `AnalysisCandidate` objects containing detailed information about each function.
+
+**Key Implementation Details:**
+1. **File Reading:** The method reads the source code of the file using UTF-8 encoding.
+2. **Complexity Analysis:** Functions are extracted from the source, and their complexity is analyzed using a predefined analyzer.
+3. **Git Integration:** Git repository details are fetched for the directory containing the scanned file to integrate version control metrics into the analysis.
+4. **Scoring:** Each function's interest score is calculated based on its complexity, Git history, decorators, and other factors.
+
+**When/Why to Use:**
+This method should be used when you need to analyze individual files in a codebase for documentation generation or quality assurance purposes. It provides detailed insights into the structure and maintainability of functions within the file.
+
+**Patterns/Gotchas:**
+- **Error Handling:** The method gracefully handles exceptions by returning early if an error occurs during file reading.
+- **Complexity Lookup:** If the initial complexity lookup fails, it attempts to find a match in related function names, which can be useful but might introduce subtle bugs if not handled carefully.
+- **Scoring Mechanism:** The scoring logic is complex and involves multiple factors; ensure that all metrics are correctly implemented for accurate results.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 08:23*
