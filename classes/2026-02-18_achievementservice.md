@@ -1,0 +1,130 @@
+# AchievementService
+
+**Type:** Class Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/domains/progression/services/achievement_ops.py
+**Language:** python
+**Lines:** 26-151
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class AchievementService:
+    """
+    Service class for Achievement model operations
+    """
+
+    CACHE_KEY_ALL_ACHIEVEMENTS = "achievements:all"
+    CACHE_TTL_SECONDS = Redis.ACHIEVEMENTS_CACHE_TTL_SECONDS
+
+    @staticmethod
+    def get_all() -> list[Achievement]:
+        """
+        Get all achievements with Redis caching (1-hour TTL)
+        """
+        logger = logging.getLogger(__name__)
+
+        try:
+            cached_data = redis_cache_get(
+                AchievementService.CACHE_KEY_ALL_ACHIEVEMENTS
+            )
+            if cached_data:
+                logger.debug(
+                    "Retrieved %d achievements from cache",
+                    len(cached_data)
+                )
+                achievements = []
+                for ach_data in cached_data:
+                    cleaned_data = {
+                        k: v
+                        for k, v in ach_data.items()
+                        if k != '_id'
+                    }
+                    achievement = Achievement(**cleaned_data)
+                    if '_id' in ach_data and ach_data['_id']:
+                        achievement.id = ach_data['_id']
+                    achievements.append(achievement)
+                return achievements
+        except (redis.RedisError, ValueError, KeyError) as e:
+            logger.warning(
+                "Failed to retrieve achievements from cache: %s",
+                e
+            )
+
+        logger.debug("Cache miss - fetching achievements from database")
+        achievements = list(Achievement.objects())
+
+        try:
+            cache_data = []
+            for ach in achievements:
+                ach_dict = ach.to_mongo().to_dict()
+                ach_dict['_id'] = str(ach.id) if ach.id else None
+                cache_data.append(ach_dict)
+
+            redis_cache_set(
+                AchievementService.CACHE_KEY_ALL_ACHIEVEMENTS,
+                cache_data,
+                AchievementService.CACHE_TTL_SECONDS
+            )
+            logger.debug(
+                "Cached %d achievements for %d seconds",
+                len(achievements),
+                AchievementService.CACHE_TTL_SECONDS
+            )
+        except (redis.RedisError, ValueError, TypeError) as e:
+            logger.warning("Failed to cache achievements: %s", e)
+
+        return achievements
+
+    @staticmethod
+    def get_by_achievement_id(achievement_id: str) -> Achievement | None:
+        """
+        Get achievement by achievementId field
+        """
+        return Achievement.objects(achievementId = achievement_id).first()
+
+    @staticmethod
+    def get_by_category(category: str) -> list[Achievement]:
+        """
+        Get achievements by category
+        """
+        return list(Achievement.objects(category = category))
+
+    @staticmethod
+    def get_by_id(achievement_id: str) -> Achievement | None:
+        """
+        Get achievement by achievementId field (alias for get_by_achievement_id)
+        """
+        return Achievement.objects(achievementId = achiev
+```
+
+---
+
+## Class Documentation
+
+### AchievementService Documentation
+
+**Class Responsibility and Purpose:**
+The `AchievementService` class is a service layer for managing operations related to the `Achievement` model. It provides methods for retrieving achievements from both cache and database, ensuring efficient data retrieval with Redis caching support.
+
+**Public Interface (Key Methods):**
+- **get_all()**: Fetches all achievements with Redis caching enabled.
+- **get_by_achievement_id(achievement_id)**: Retrieves an achievement by its unique ID.
+- **get_by_category(category)**: Fetches achievements filtered by category.
+- **count_all()**: Returns the total number of achievements.
+- **get_visible_only()**: Filters and returns only visible achievements (non-hidden).
+- **exists_with_id(achievement_id)**: Checks if an achievement with a given ID exists.
+- **invalidate_cache()**: Invalidates the Redis cache for achievements.
+
+**Design Patterns Used:**
+The class employs the **Factory Method** pattern through its caching mechanism, where cached data is retrieved and updated as needed. It also uses **Observer** design by listening to changes in the `Achievement` model and invalidating the cache accordingly.
+
+**How it Fits in the Architecture:**
+`AchievementService` acts as a central hub for all operations related to achievements within the application. By abstracting database interactions, it ensures that other parts of the system can interact with achievements without needing to know the underlying storage details. The use of caching optimizes performance by reducing the number of database queries, making it an integral part of the data access layer in the architecture.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 13:31*
