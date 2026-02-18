@@ -1,0 +1,151 @@
+# JobApplicationRepository
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/life_manager/facets/career/job_app_tracker/repository.py
+**Language:** python
+**Lines:** 20-190
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class JobApplicationRepository(BaseRepository[JobApplication]):
+    """
+    Repository for JobApplication operations
+    """
+    model = JobApplication
+
+    @classmethod
+    async def get_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Sequence[JobApplication]:
+        """
+        Get all job applications for a user with pagination
+        """
+        result = await session.execute(
+            select(JobApplication)
+            .where(JobApplication.user_id == user_id)
+            .order_by(JobApplication.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def count_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+    ) -> int:
+        """
+        Count total job applications for a user
+        """
+        result = await session.execute(
+            select(func.count())
+            .select_from(JobApplication)
+            .where(JobApplication.user_id == user_id)
+        )
+        return result.scalar_one()
+
+    @classmethod
+    async def get_by_status(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        status: ApplicationStatus,
+    ) -> Sequence[JobApplication]:
+        """
+        Get job applications by status
+        """
+        result = await session.execute(
+            select(JobApplication)
+            .where(
+                JobApplication.user_id == user_id,
+                JobApplication.application_status == status,
+            )
+            .order_by(JobApplication.created_at.desc())
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_by_outcome(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        outcome: Outcome,
+    ) -> Sequence[JobApplication]:
+        """
+        Get job applications by outcome
+        """
+        result = await session.execute(
+            select(JobApplication)
+            .where(
+                JobApplication.user_id == user_id,
+                JobApplication.outcome == outcome,
+            )
+            .order_by(JobApplication.created_at.desc())
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_pending_followups(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+    ) -> Sequence[JobApplication]:
+        """
+        Get applications with followup dates that need attention
+        """
+        result = await session.execute(
+            select(JobApplication)
+            .where(
+                JobApplication.user_id == user_id,
+                JobApplication.followup_date.isnot(None),
+                JobApplication.outcome == Outcome.PENDING,
+            )
+            .order_by(JobApplication.followup_date.asc())
+        )
+        return result.scalars().all()
+
+
+    @classmethod
+    async def get_stats(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+    
+```
+
+---
+
+## Class Documentation
+
+### JobApplicationRepository
+
+**Class Responsibility and Purpose:**
+The `JobApplicationRepository` class is responsible for managing database operations related to job applications. It provides a structured way to interact with `JobApplication` entities, including fetching, counting, filtering by status or outcome, getting pending followups, and generating statistics.
+
+**Public Interface (Key Methods):**
+- `get_by_user`: Fetches job applications for a specific user with pagination.
+- `count_by_user`: Counts the total number of job applications for a user.
+- `get_by_status`: Retrieves job applications filtered by status.
+- `get_by_outcome`: Retrieves job applications filtered by outcome.
+- `get_pending_followups`: Fetches applications that need followup attention based on their dates.
+- `get_stats`: Generates aggregated statistics for a user's job applications.
+
+**Design Patterns Used:**
+The class leverages the **Repository Pattern**, which encapsulates data access logic and abstracts it from the business logic. It uses SQLAlchemy ORM to interact with the database, ensuring that all operations are performed in an asynchronous manner using `AsyncSession`.
+
+**How It Fits in the Architecture:**
+This repository acts as a central hub for job application-related queries within the Career facet of the system. By providing a consistent and efficient interface for data access, it enables other components to focus on business logic rather than database interactions. The class is designed to be extendable and maintainable, making it easier to add new features or modify existing ones without impacting the overall architecture.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 16:50*
