@@ -1,0 +1,144 @@
+# JobApplication
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/life_manager/facets/career/job_app_tracker/models.py
+**Language:** python
+**Lines:** 37-154
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class JobApplication(Base, UUIDMixin, TimestampMixin):
+    """
+    A job application entry for tracking the full job hunt lifecycle
+    """
+    __tablename__ = "job_applications"
+    __table_args__ = (
+        sa.Index("idx_job_app_user", "user_id"),
+        sa.Index("idx_job_app_status", "application_status"),
+        sa.Index("idx_job_app_outcome", "outcome"),
+        sa.Index("idx_job_app_date_applied", "date_applied"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    identity_name: Mapped[str] = mapped_column(
+        String(IDENTITY_NAME_MAX_LENGTH),
+        nullable=False,
+    )
+    position_title: Mapped[str] = mapped_column(
+        String(POSITION_TITLE_MAX_LENGTH),
+        nullable=False,
+    )
+    job_url: Mapped[str | None] = mapped_column(
+        String(JOB_URL_MAX_LENGTH),
+        nullable=True,
+    )
+
+    salary_min: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    salary_max: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    offer_amount: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    location: Mapped[str | None] = mapped_column(
+        String(LOCATION_MAX_LENGTH),
+        nullable=True,
+    )
+    remote_type: Mapped[RemoteType] = mapped_column(
+        SafeEnum(RemoteType, unknown_value=RemoteType.UNKNOWN),
+        default=RemoteType.UNKNOWN,
+    )
+
+    source: Mapped[str | None] = mapped_column(
+        String(SOURCE_MAX_LENGTH),
+        nullable=True,
+    )
+
+    contact_name: Mapped[str | None] = mapped_column(
+        String(CONTACT_NAME_MAX_LENGTH),
+        nullable=True,
+    )
+    contact_email: Mapped[str | None] = mapped_column(
+        String(CONTACT_EMAIL_MAX_LENGTH),
+        nullable=True,
+    )
+
+    application_status: Mapped[ApplicationStatus] = mapped_column(
+        SafeEnum(ApplicationStatus, unknown_value=ApplicationStatus.UNKNOWN),
+        default=ApplicationStatus.SAVED,
+    )
+    interview_rounds: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    outcome: Mapped[Outcome] = mapped_column(
+        SafeEnum(Outcome, unknown_value=Outcome.UNKNOWN),
+        default=Outcome.PENDING,
+    )
+
+    job_type: Mapped[JobType] = mapped_column(
+        SafeEnum(JobType, unknown_value=JobType.UNKNOWN),
+        default=JobType.UNKNOWN,
+    )
+    experience_level: Mapped[ExperienceLevel] = mapped_column(
+        SafeEnum(ExperienceLevel, unknown_value=ExperienceLevel.UNKNOWN),
+        default=ExperienceLevel.UNKNOWN,
+    )
+    priority: Mapped[Priority] = mapped_column(
+        SafeEnum(Priority, unknown_value=Priority.UNKNOWN),
+        default=Priority.MEDIUM,
+    )
+
+    date_saved: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    date_applied: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+      
+```
+
+---
+
+## Class Documentation
+
+### JobApplication Class Documentation
+
+**Class Responsibility and Purpose:**
+The `JobApplication` class models a job application entry, tracking various aspects of the job hunt lifecycle for users. It includes fields such as user ID, position details, salary ranges, remote work type, contact information, and status updates.
+
+**Public Interface (Key Methods):**
+- No public methods are defined in this class; it primarily serves as a data model with attributes representing different facets of a job application.
+
+**Design Patterns Used:**
+- **Data Model:** The class uses SQLAlchemy ORM to define a database table schema.
+- **Enum Usage:** Enums (`SafeEnum`) are used for `application_status`, `remote_type`, and other fields, ensuring that only valid values can be assigned. This aligns with the Strategy pattern by providing predefined sets of values.
+
+**Relationship to Other Classes:**
+- Inherits from `Base` (likely a SQLAlchemy declarative base class) and mixins (`UUIDMixin`, `TimestampMixin`) for common functionalities.
+- Has relationships with other models through foreign keys, such as `user_id`.
+
+**State Management Approach:**
+- The class manages the state of a job application entry using SQLAlchemy columns. Each attribute corresponds to a specific field in the database table, ensuring that all relevant information about a job application is captured and stored.
+
+This class fits into the architecture by providing a structured way to store and manage job application data, which can be queried and manipulated as needed within the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 17:43*
