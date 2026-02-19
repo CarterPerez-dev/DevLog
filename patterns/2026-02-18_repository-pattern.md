@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/api-security-scanner/backend/repositories/scan_repository.py
+**File:** PROJECTS/intermediate/api-security-scanner/backend/repositories/user_repository.py
 **Language:** python
-**Lines:** 1-160
+**Lines:** 1-146
 **Complexity:** 0.0
 
 ---
@@ -14,126 +14,127 @@
 ```python
 """
 ⒸAngelaMos | 2025
-Handles all Scan model database queries
+User repository for database operations
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from sqlalchemy.orm import (
-    Session,
-    joinedload,
-)
+from sqlalchemy.orm import Session
 
 from config import settings
-from models.Scan import Scan
+from models.User import User
 
 
-class ScanRepository:
+class UserRepository:
     """
-    Repository for Scan database operations
+    Repository for User database operations
     """
     @staticmethod
-    def create_scan(
-        db: Session,
-        user_id: int,
-        target_url: str,
-        commit: bool = True
-    ) -> Scan:
+    def get_by_id(db: Session, user_id: int) -> User | None:
         """
-        Create a new scan
-
-        Args:
-            db: Database session
-            user_id: User ID who initiated the scan
-            target_url: Target URL to scan
-            commit: Whether to commit the transaction
-
-        Returns:
-            Scan: Created scan instance
-        """
-        scan = Scan(
-            user_id = user_id,
-            target_url = target_url,
-            scan_date = datetime.now(UTC),
-        )
-        db.add(scan)
-        if commit:
-            db.commit()
-            db.refresh(scan)
-        return scan
-
-    @staticmethod
-    def get_by_id(db: Session, scan_id: int) -> Scan | None:
-        """
-        Get scan by ID with test results loaded
-
-        Args:
-            db: Database session
-            scan_id: Scan ID
-
-        Returns:
-            Scan | None: Scan instance or None if not found
-        """
-        return (
-            db.query(Scan).options(
-                joinedload(Scan.test_results)
-            ).filter(Scan.id == scan_id).first()
-        )
-
-    @staticmethod
-    def get_by_user(
-        db: Session,
-        user_id: int,
-        skip: int = 0,
-        limit: int | None = None
-    ) -> list[Scan]:
-        """
-        Get all scans for a user with pagination.
+        Get user by ID
 
         Args:
             db: Database session
             user_id: User ID
+
+        Returns:
+            User | None: User instance or None if not found
+        """
+        return db.query(User).filter(User.id == user_id).first()
+
+    @staticmethod
+    def get_by_email(db: Session, email: str) -> User | None:
+        """
+        Get user by email address
+
+        Args:
+            db: Database session
+            email: User email address
+
+        Returns:
+            User | None: User instance or None if not found
+        """
+        return db.query(User).filter(User.email == email).first()
+
+    @staticmethod
+    def create_user(
+        db: Session,
+        email: str,
+        hashed_password: str,
+        commit: bool = True
+    ) -> User:
+        """
+        Create a new user
+
+        Args:
+            db: Database session
+            email: User email address
+            hashed_password: Bcrypt hashed password
+            commit: Whether to commit the transaction
+
+        Returns:
+            User: Created user instance
+        """
+        user = User(email = email, hashed_password = hashed_password)
+        db.add(user)
+        if commit:
+            db.commit()
+            db.refresh(user)
+        return user
+
+    @staticmethod
+    def get_all_active(
+        db: Session,
+        skip: int = 0,
+        limit: int | None = None
+    ) -> list[User]:
+        """
+        Get all active users with pagination
+
+        Args:
+            db: Database session
             skip: Number of records to skip
             limit: Maximum number of records to return (DEFAULT_PAGINATION_LIMIT)
 
         Returns:
-            list[Scan]: List of scans with test results
+            list[User]: List of active users
         """
         if limit is None:
             limit = settings.DEFAULT_PAGINATION_LIMIT
 
-        return (
-            db.query(Scan).options(
-                joinedload(Scan.test_results)
-            ).filter(Scan.user_id == user_id).order_by(
-                Scan.scan_date.desc()
-            ).offset(skip).limit(limit).all()
-        )
+        return db.query(User).filter(User.is_active
+                                     ).offset(skip).limit(limit).all()
 
     @staticmethod
-    def get_recent(db: Session,
-                   limit: int | None = None) -> list[Scan]:
+    def update_active_status(
+        db: Session,
+        user_id: int,
+        is_active: bool,
+        commit: bool = True
+    ) -> User | None:
         """
-        Get most recent scans across all users.
+        Update user active status
 
         Args:
             db: Database session
-            limit: Maximum number of scans to return (DEFAULT_PAGINATION_LIMIT)
+            user_id: User ID
+            is_active: New active status
+            commit: Whether to commit the transaction
 
         Returns:
-            list[Scan]: List of recent scans
+            User | None: Updated user or None if not found
         """
-        if limit is None:
-            limit = settings.DEFAULT_PAGINATION_LIMIT
+        user = UserRepository.get_by_id(db, user_id)
+        if user:
+            user.is_active = is_active
+            if commit:
+                db.commit()
+                db.refresh(user)
+        return user
 
-        return (
-            db.query(Scan).options(
-                joinedload(Scan.test_results)
-            ).order_by(Scan.scan_date.desc()).limit(limit).all()
-        )
-
-    @staticmet
+    @staticmethod
+    def del
 ```
 
 ---
@@ -142,26 +143,23 @@ class ScanRepository:
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern  
-**Implementation:**
+**Pattern Used: Repository Pattern**
 
-The `ScanRepository` class encapsulates all database operations related to the `Scan` model, providing static methods for creating, retrieving, updating, and deleting scans. Each method handles a specific operation, such as `create_scan`, `get_by_id`, `get_by_user`, `delete`, and `count_by_user`. These methods use SQLAlchemy sessions (`Session`) to interact with the database.
+The `UserRepository` class in this code implements the **Repository Pattern**, which abstracts data access operations behind a well-defined interface. Each method corresponds to specific database actions like retrieval, creation, updating, and deletion of user records.
 
-**Benefits:**
+- **Implementation**: The methods (`get_by_id`, `get_by_email`, `create_user`, `update_active_status`, `delete`) encapsulate the logic for interacting with the database using SQLAlchemy sessions.
+- **Benefits**:
+  - **Encapsulation**: Abstracts database operations from the business logic, making it easier to switch databases or modify data access without changing application code.
+  - **Testability**: Methods can be easily tested in isolation since they handle all necessary interactions with the database.
+  - **Consistency**: Ensures a consistent interface for accessing and manipulating user data.
 
-1. **Separation of Concerns:** The repository pattern separates business logic from data access, making the code more modular and easier to maintain.
-2. **Testability:** By encapsulating database interactions within a single class, it becomes easier to mock or replace the data source during testing.
-3. **Consistency:** Ensures that all database operations follow a consistent interface.
+**Deviations from Standard Pattern**:
+- The `UserRepository` class is implemented as a static class, which means it does not rely on an instance. This is somewhat unconventional but can be useful if all methods are stateless.
+- Some methods (e.g., `create_user`, `update_active_status`) accept a `commit` parameter to control transaction management, allowing for more flexible usage.
 
-**Deviations:**
-
-- The `ScanRepository` uses static methods instead of instance methods, which is common in Python for utility classes but may not be ideal if you need to maintain state between method calls.
-- The use of type hints and the `Session` parameter ensures strong typing and clear method signatures.
-
-**Appropriateness:**
-
-This pattern is highly appropriate when working with SQLAlchemy ORM operations. It provides a clean, organized way to manage database interactions, making the codebase more manageable and easier to test. However, if you need to maintain state between method calls or have complex business logic that requires instance methods, you might consider using an instance-based repository pattern instead.
+**Appropriateness**:
+This pattern is highly appropriate in this context because it provides a clear separation of concerns between data access and business logic. It ensures that the code remains clean, maintainable, and testable, which are crucial for long-term project sustainability.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 17:50*
+*Generated by CodeWorm on 2026-02-18 19:34*
