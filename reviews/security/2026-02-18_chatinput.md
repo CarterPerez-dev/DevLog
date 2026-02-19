@@ -1,0 +1,174 @@
+# ChatInput
+
+**Type:** Security Review
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/encrypted-p2p-chat/frontend/src/components/Chat/ChatInput.tsx
+**Language:** tsx
+**Lines:** 20-125
+**Complexity:** 11.0
+
+---
+
+## Source Code
+
+```tsx
+function ChatInput(props: ChatInputProps): JSX.Element {
+  const [message, setMessage] = createSignal('')
+  const [isTyping, setIsTyping] = createSignal(false)
+  let typingTimeout: ReturnType<typeof setTimeout> | undefined
+  let inputRef: HTMLInputElement | undefined
+
+  const charCount = (): number => message().length
+  const isOverLimit = (): boolean => charCount() > MESSAGE_MAX_LENGTH
+  const canSend = (): boolean =>
+    message().trim().length > 0 && !isOverLimit() && props.disabled !== true
+
+  const handleInput = (e: Event): void => {
+    const target = e.target as HTMLInputElement
+    setMessage(target.value)
+
+    if (!isTyping()) {
+      setIsTyping(true)
+      wsManager.sendTypingIndicator(props.roomId, true)
+    }
+
+    if (typingTimeout !== undefined) {
+      clearTimeout(typingTimeout)
+    }
+
+    typingTimeout = setTimeout(() => {
+      setIsTyping(false)
+      wsManager.sendTypingIndicator(props.roomId, false)
+    }, 2000)
+  }
+
+  const handleSend = (): void => {
+    if (!canSend()) return
+
+    const content = message().trim()
+    props.onSend?.(content)
+    setMessage('')
+
+    if (isTyping()) {
+      setIsTyping(false)
+      wsManager.sendTypingIndicator(props.roomId, false)
+    }
+
+    inputRef?.focus()
+  }
+
+  const handleKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  onCleanup(() => {
+    if (typingTimeout !== undefined) {
+      clearTimeout(typingTimeout)
+    }
+    if (isTyping()) {
+      wsManager.sendTypingIndicator(props.roomId, false)
+    }
+  })
+
+  return (
+    <div
+      class={`flex-shrink-0 p-4 border-t-2 border-orange ${props.class ?? ''}`}
+    >
+      <div class="flex gap-2">
+        <div class="flex-1 flex items-center bg-black border-2 border-orange">
+          <span class="font-pixel text-[10px] text-orange px-2">
+            &gt;&gt;&gt;
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={message()}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            placeholder="TYPE YOUR MESSAGE..."
+            disabled={props.disabled}
+            maxLength={MESSAGE_MAX_LENGTH + 100}
+            class="flex-1 bg-transparent font-pixel text-[10px] text-white py-2 pr-3 focus:outline-none placeholder:text-gray disabled:opacity-50"
+          />
+        </div>
+        <Button
+          variant="primary"
+          size="md"
+          onClick={handleSend}
+          disabled={!canSend()}
+          leftIcon={<SendIcon />}
+        >
+          SEND
+        </Button>
+      </div>
+
+      <div class="flex items-center justify-between mt-2">
+        <Show when={isOverLimit()}>
+          <span class="font-pixel text-[8px] text-error">MESSAGE TOO LONG</span>
+        </Show>
+        <span
+          class={`font-pixel text-[8px] ml-auto ${isOverLimit() ? 'text-error' : 'text-gray'}`}
+        >
+          {charCount()}/{MESSAGE_MAX_LENGTH}
+        </span>
+      </div>
+    </div>
+ 
+```
+
+---
+
+## Security Review
+
+### Security Review for `ChatInput` Component
+
+#### Vulnerabilities and Severity:
+
+1. **Info - Input Validation Gaps:**
+   - **Line 20:** The `handleSend` function does not validate the input content before sending it to the server.
+   - **Severity:** Info
+
+2. **Info - Error Handling:**
+   - **Line 58:** The `onCleanup` function may not handle all edge cases, such as if `typingTimeout` is cleared after cleanup but still in use.
+   - **Severity:** Info
+
+#### Attack Vectors:
+
+- An attacker could send malicious content through the input field, potentially leading to XSS or other client-side attacks.
+
+#### Recommended Fixes:
+
+1. **Input Validation:**
+   - Validate and sanitize user inputs before sending them to the server. Use a library like `DOMPurify` for sanitizing HTML.
+     ```tsx
+     const handleSend = (): void => {
+       if (!canSend()) return
+
+       const content = message().trim();
+       // Sanitize input
+       const sanitizedContent = DOMPurify.sanitize(content);
+       props.onSend?.(sanitizedContent);
+       setMessage('');
+       ...
+     }
+     ```
+
+2. **Error Handling:**
+   - Ensure all cleanup functions handle edge cases properly.
+     ```tsx
+     onCleanup(() => {
+       if (typingTimeout !== undefined) clearTimeout(typingTimeout);
+       if (isTyping()) wsManager.sendTypingIndicator(props.roomId, false);
+     });
+     ```
+
+#### Overall Security Posture:
+
+The component has a good structure but lacks input validation and proper error handling. Implementing the suggested fixes will significantly enhance its security posture by mitigating potential client-side attacks and ensuring robust cleanup procedures.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 19:58*
