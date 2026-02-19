@@ -1,0 +1,163 @@
+# ConversionRates
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** frontend/admin-app/src/modules/revenue/components/conversion/ConversionRates.tsx
+**Language:** tsx
+**Lines:** 47-324
+**Complexity:** 26.0
+
+---
+
+## Source Code
+
+```tsx
+function ConversionRates({
+  data,
+  dimension,
+  isLoading,
+  error,
+}: ConversionRatesProps): React.JSX.Element {
+  const getPlatformIcon = (platform: string): React.JSX.Element => {
+    const lowerPlatform = platform.toLowerCase();
+    if (lowerPlatform === 'web') {
+      return <FiMonitor />;
+    }
+    if (lowerPlatform === 'ios' || lowerPlatform === 'android') {
+      return <FiSmartphone />;
+    }
+    return <FiMonitor />;
+  };
+
+  const renderPlatformBreakdown = (): React.JSX.Element | null => {
+    if (data === null || data === undefined || dimension !== 'platform') return null;
+
+    const breakdown = data.breakdown;
+    if (
+      breakdown === null ||
+      breakdown === undefined ||
+      typeof breakdown !== 'object'
+    ) {
+      return null;
+    }
+
+    const platforms = Object.entries(breakdown)
+      .map(([platform, metrics]) => {
+        if (
+          metrics !== null &&
+          metrics !== undefined &&
+          typeof metrics === 'object'
+        ) {
+          const platformData = metrics as Record<string, unknown>;
+          return {
+            platform,
+            total_users: Number(platformData.total_users ?? 0),
+            converted_users: Number(platformData.converted_users ?? 0),
+            conversion_rate: Number(platformData.conversion_rate ?? 0),
+          } as PlatformData;
+        }
+        return null;
+      })
+      .filter((item): item is PlatformData => item !== null);
+
+    if (platforms.length === 0) {
+      return (
+        <div className={styles.emptyState}>
+          <FiUsers />
+          <span>No platform data available</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className={styles.platformGrid}>
+        {platforms.map((platform) => (
+          <div
+            key={platform.platform}
+            className={styles.platformCard}
+          >
+            <div className={styles.platformHeader}>
+              <div className={styles.platformIcon}>
+                {getPlatformIcon(platform.platform)}
+              </div>
+              <span className={styles.platformName}>
+                {formatDisplayText(platform.platform)}
+              </span>
+            </div>
+
+            <div className={styles.platformMetrics}>
+              <div className={styles.metric}>
+                <span className={styles.metricValue}>
+                  {formatPercentage(platform.conversion_rate)}
+                </span>
+                <span className={styles.metricLabel}>Conversion Rate</span>
+              </div>
+
+              <div className={styles.metricDivider} />
+
+              <div className={styles.metricStats}>
+                <div className={styles.stat}>
+                  <span className={styles.statValue}>
+                    {formatNumber(platform.converted_users)}
+                  </span>
+                  <span className={styles.statLabel}>Converted</span>
+                </div>
+                <div className={styles.stat}>
+                  <span className={styles.statValue}>
+              
+```
+
+---
+
+## Security Review
+
+### Security Review for `ConversionRates` Component
+
+#### Vulnerabilities Found:
+
+1. **Input Validation Gaps** (Line 26, 59):
+   - The code maps and filters data without thorough validation of the input objects.
+   - Potential risk: Malformed or malicious inputs could lead to unexpected behavior.
+
+2. **Error Handling Leaks Information** (Lines 43-47, 81-85):
+   - If `data` is null or undefined, it returns a default message. This could leak information about the data structure.
+   - Severity: Medium
+
+#### Attack Vectors:
+
+- An attacker could manipulate the input objects to cause unexpected behavior in the component.
+
+#### Recommended Fixes:
+
+1. **Enhance Input Validation**:
+   - Ensure all properties are validated before processing (Line 26, 59).
+   ```tsx
+   if (
+     metrics !== null &&
+     metrics !== undefined &&
+     typeof metrics === 'object' &&
+     'total_users' in metrics &&
+     'converted_users' in metrics &&
+     'conversion_rate' in metrics
+   ) {
+   ```
+
+2. **Improve Error Handling**:
+   - Return a generic error message instead of revealing the internal structure.
+   ```tsx
+   if (data === null || data === undefined) return <div>Error fetching data</div>;
+   ```
+
+#### Overall Security Posture:
+
+The component has basic security measures but lacks robust input validation and error handling. Enhancing these areas will significantly improve the security posture.
+
+**Severity Ratings:**
+- Input Validation Gaps: Medium
+- Error Handling Leaks Information: Medium
+
+By addressing these issues, you can mitigate potential risks and ensure a more secure implementation.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 10:09*
