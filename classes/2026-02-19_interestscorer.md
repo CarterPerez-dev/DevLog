@@ -1,0 +1,130 @@
+# InterestScorer
+
+**Type:** Class Documentation
+**Repository:** CodeWorm
+**File:** codeworm/analysis/scoring.py
+**Language:** python
+**Lines:** 108-295
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class InterestScorer:
+    """
+    Scores code snippets based on how interesting they are to document
+    Uses weighted factors normalized to 0-100 scale
+    """
+    WEIGHTS: ClassVar[dict[str,
+                           float]] = {
+                               "complexity": 0.35,
+                               "length": 0.15,
+                               "nesting": 0.15,
+                               "parameters": 0.10,
+                               "churn": 0.15,
+                               "novelty": 0.10,
+                           }
+
+    COMPLEXITY_CAP = 20
+    LENGTH_CAP = 100
+    NESTING_CAP = 5
+    PARAM_CAP = 7
+    CHURN_CAP = 5
+    NOVELTY_DAYS = 30
+
+    PATTERN_BONUSES: ClassVar[dict[str,
+                                   int]] = {
+                                       "decorator": 5,
+                                       "async": 5,
+                                       "context_manager": 10,
+                                       "generator": 8,
+                                       "class_method": 3,
+                                       "property": 3,
+                                       "abstract": 8,
+                                       "dataclass": 7,
+                                   }
+
+    def __init__(self, git_repo: Repo | None = None) -> None:
+        """
+        Initialize scorer with optional git repo for stats
+        """
+        self.git_repo = git_repo
+
+    def score(
+        self,
+        metrics: ComplexityMetrics,
+        git_stats: GitStats | None = None,
+        decorators: list[str] | None = None,
+        is_async: bool = False,
+        source: str = "",
+    ) -> InterestScore:
+        """
+        Calculate interest score for a function
+        """
+        if git_stats is None:
+            git_stats = GitStats()
+
+        complexity_score = min(
+            metrics.cyclomatic_complexity / self.COMPLEXITY_CAP,
+            1.0
+        ) * 100
+        length_score = min(metrics.nloc / self.LENGTH_CAP, 1.0) * 100
+        nesting_score = min(
+            metrics.max_nesting_depth / self.NESTING_CAP,
+            1.0
+        ) * 100
+        param_score = min(metrics.parameter_count / self.PARAM_CAP, 1.0) * 100
+
+        churn_score = min(git_stats.commit_count_30d / self.CHURN_CAP, 1.0) * 100
+
+        days_old = git_stats.days_since_modified
+        novelty_score = max(
+            0,
+            (self.NOVELTY_DAYS - days_old) / self.NOVELTY_DAYS
+        ) * 100
+
+        pattern_bonus = self._calculate_pattern_bonus(
+            decorators,
+            is_async,
+            source
+        )
+
+        weighted_total = (
+            complexity_score * self.WEIGHTS["complexity"] +
+            length_score * self.WEIGHTS["length"] +
+            nesting_score * self.WEIGHTS["nesting"] +
+            param_score * self.WEIGHTS["parameters"] +
+            churn_score * self.WEIGHTS["churn"] +
+            novelty_score * self.WEIGHTS["novelty"] + pattern_bonus
+        )
+
+        return InterestScore(
+            
+```
+
+---
+
+## Class Documentation
+
+### InterestScorer Class Documentation
+
+**Class Responsibility and Purpose:**
+The `InterestScorer` class is responsible for evaluating the interest of code snippets based on various metrics such as complexity, length, nesting depth, parameter count, churn rate, and novelty. It calculates a weighted score to determine how interesting a piece of code is to document.
+
+**Public Interface (Key Methods):**
+- **`__init__(self, git_repo: Repo | None = None)`**: Initializes the scorer with an optional Git repository for collecting statistics.
+- **`score(self, metrics: ComplexityMetrics, git_stats: GitStats | None = None, decorators: list[str] | None = None, is_async: bool = False, source: str = "") -> InterestScore`**: Calculates the interest score for a function based on provided metrics and additional context like decorators and async status.
+- **`_calculate_pattern_bonus(self, decorators: list[str] | None, is_async: bool, source: str) -> float`**: Computes bonus points for interesting code patterns such as decorators, `async`, generators, etc.
+
+**Design Patterns Used:**
+- **Strategy Pattern**: The scoring logic can be extended or modified by changing the weights and pattern bonuses.
+- **Factory Method**: Although not explicitly used here, the class could potentially use a factory method to initialize with different configurations if needed.
+
+**How It Fits in the Architecture:**
+The `InterestScorer` class is part of the analysis module within the CodeWorm repository. It interacts with other classes like `ComplexityMetrics`, `GitStats`, and possibly `Repo`. The class acts as a central point for calculating interest scores, which can be used to prioritize code snippets for documentation or further analysis.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 13:26*
