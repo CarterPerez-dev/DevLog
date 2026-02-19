@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/siem-dashboard/backend/app/controllers/rule_ctrl.py
+**File:** PROJECTS/advanced/bug-bounty-platform/backend/app/program/service.py
 **Language:** python
-**Lines:** 1-119
+**Lines:** 1-376
 **Complexity:** 0.0
 
 ---
@@ -13,114 +13,119 @@
 
 ```python
 """
-©AngelaMos | 2026
-rule_ctrl.py
+ⒸAngelaMos | 2025
+service.py
 """
 
-from typing import Any
-from datetime import datetime, timedelta, UTC
+from uuid import UUID
 
-from flask import g
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.correlation import (
-    CorrelationState,
-    evaluate_rule,
+from core.exceptions import (
+    AssetNotFound,
+    NotProgramOwner,
+    ProgramNotFound,
+    SlugAlreadyExists,
 )
-from app.models.CorrelationRule import CorrelationRule
-from app.models.LogEvent import LogEvent
+from user.User import User
+from .schemas import (
+    AssetCreate,
+    AssetResponse,
+    AssetUpdate,
+    ProgramCreate,
+    ProgramDetailResponse,
+    ProgramListResponse,
+    ProgramResponse,
+    ProgramUpdate,
+    RewardTierCreate,
+    RewardTierResponse,
+)
+from .repository import (
+    AssetRepository,
+    ProgramRepository,
+    RewardTierRepository,
+)
 
 
-def list_rules() -> list[Any]:
+class ProgramService:
     """
-    Return all correlation rules
+    Business logic for program operations
     """
-    return list(CorrelationRule.objects.order_by("-created_at"))  # type: ignore[no-untyped-call]
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
+    async def create_program(
+        self,
+        user: User,
+        program_data: ProgramCreate,
+    ) -> ProgramResponse:
+        """
+        Create a new bug bounty program
+        """
+        if await ProgramRepository.slug_exists(self.session,
+                                               program_data.slug):
+            raise SlugAlreadyExists(program_data.slug)
 
-def get_rule(rule_id: str) -> CorrelationRule:
-    """
-    Return a single correlation rule by ID
-    """
-    return CorrelationRule.get_by_id(rule_id)
+        program = await ProgramRepository.create(
+            self.session,
+            company_id = user.id,
+            name = program_data.name,
+            slug = program_data.slug,
+            description = program_data.description,
+            rules = program_data.rules,
+            response_sla_hours = program_data.response_sla_hours,
+            visibility = program_data.visibility,
+        )
+        return ProgramResponse.model_validate(program)
 
+    async def get_program_by_slug(
+        self,
+        slug: str,
+    ) -> ProgramDetailResponse:
+        """
+        Get program by slug with full details
+        """
+        program = await ProgramRepository.get_by_slug_with_details(
+            self.session,
+            slug
+        )
+        if not program:
+            raise ProgramNotFound(slug)
 
-def create_rule() -> CorrelationRule:
-    """
-    Create a new correlation rule from validated request data
-    """
-    data = g.validated
-    rule = CorrelationRule(
-        name=data.name,
-        description=data.description,
-        rule_type=data.rule_type,
-        conditions=data.conditions,
-        severity=data.severity,
-        enabled=data.enabled,
-        mitre_tactic=data.mitre_tactic,
-        mitre_technique=data.mitre_technique,
-    )
-    rule.save()  # type: ignore[no-untyped-call]
-    return rule
+        return ProgramDetailResponse(
+            id = program.id,
+            created_at = program.created_at,
+            updated_at = program.updated_at,
+            company_id = program.company_id,
+            name = program.name,
+            slug = program.slug,
+            description = program.description,
+            rules = program.rules,
+            response_sla_hours = program.response_sla_hours,
+            status = program.status,
+            visibility = program.visibility,
+            assets = [
+                AssetResponse.model_validate(a) for a in program.assets
+            ],
+            reward_tiers = [
+                RewardTierResponse.model_validate(r)
+                for r in program.reward_tiers
+            ],
+        )
 
-
-def update_rule(rule_id: str) -> CorrelationRule:
-    """
-    Partially update an existing correlation rule
-    """
-    data = g.validated
-    rule = CorrelationRule.get_by_id(rule_id)
-    updates = data.model_dump(exclude_none=True)
-    for field_name, value in updates.items():
-        setattr(rule, field_name, value)
-    rule.save()  # type: ignore[no-untyped-call]
-    return rule
-
-
-def delete_rule(rule_id: str) -> dict[str, Any]:
-    """
-    Delete a correlation rule by ID
-    """
-    rule = CorrelationRule.get_by_id(rule_id)
-    rule.delete()  # type: ignore[no-untyped-call]
-    return {"deleted": True}
-
-
-def test_rule(rule_id: str) -> dict[str, Any]:
-    """
-    Simulate a rule against historical log events and return matches
-    """
-    data = g.validated
-    rule = CorrelationRule.get_by_id(rule_id)
-
-    cutoff = datetime.now(UTC).replace(
-        second=0, microsecond=0,
-    )
-    since = cutoff - timedelta(hours=data.hours)
-
-    events = LogEvent.objects(timestamp__gte=since).order_by("timestamp")  # type: ignore[no-untyped-call]
-
-    state = CorrelationState()
-    alerts_fired: list[dict[str, Any]] = []
-
-    for event in events:
-        event_data = {
-            "id": str(event.id),
-            "timestamp": str(event.timestamp),
-            "source_type": event.source_type,
-            "severity": event.severity,
-            "event_type": event.event_type,
-            "source_ip": event.source_ip,
-            "dest_ip": event.dest_ip,
-            "hostname": event.hostname,
-            "username": event.username,
-        }
-
-        result = evaluate_rule(rule, event_data, state)
-        if result:
-            alerts_fired.append({
-                "group_value": result.group_value,
-                "matched_event_count": len(result.matched_event_ids),
-                "matched_event_ids": result.ma
+    async def get_program_by_id(
+        self,
+        program_id: UUID,
+    ) -> ProgramResponse:
+        """
+        Get program by ID
+        """
+        program = await ProgramRepository.get_by_id(
+            self.session,
+            program_id
+        )
+        if not program:
+            
 ```
 
 ---
@@ -129,23 +134,26 @@ def test_rule(rule_id: str) -> dict[str, Any]:
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern
+**Pattern Used: Repository Pattern**
 
-**Implementation:**
-The `rule_ctrl.py` file implements a repository pattern by encapsulating data access logic within methods like `list_rules`, `get_rule`, `create_rule`, `update_rule`, and `delete_rule`. These methods interact with the database through models (`CorrelationRule`), providing a clean separation between business logic and persistence.
+The `ProgramService` class in the provided code implements the **Repository Pattern**, which encapsulates data access logic and abstracts it from the business logic. This is evident through the use of `ProgramRepository`, `AssetRepository`, and `RewardTierRepository` to handle database operations.
 
-**Benefits:**
-- **Encapsulation:** The repository pattern abstracts data access, making it easier to switch databases or storage mechanisms.
-- **Testability:** Methods are isolated, allowing for easy unit testing without real database interactions.
-- **Maintainability:** Changes in how data is stored can be made centrally within the repository implementation.
+- **Implementation**: The service methods delegate data retrieval and manipulation tasks to repository methods, such as `create_program`, `get_program_by_slug`, and `list_public_programs`. For example, `create_program` checks for slug uniqueness using `ProgramRepository.slug_exists` and creates a new program with `ProgramRepository.create`.
 
-**Deviations:**
-- The methods do not return `CorrelationRule` instances directly but rather use type hints (`list[Any]`, `dict[str, Any]`). This could lead to potential issues if the types are not correctly managed.
-- The `evaluate_rule` function is called within the `test_rule` method, which might be better abstracted into a separate service layer for more complex logic.
+- **Benefits**: 
+  - **Separation of Concerns**: The service layer focuses on business logic while the repository handles data access.
+  - **Testability**: Repository methods can be easily mocked or replaced, making unit testing more straightforward.
 
-**Appropriateness:**
-This pattern is appropriate in this context as it provides clear separation of concerns and enhances maintainability. However, if the business logic becomes more complex, introducing a service layer could further improve the design by separating data access from rule evaluation.
+- **Deviations**:
+  - The pattern is slightly modified as the service class directly interacts with the session object. Typically, a dedicated repository class would handle sessions and transactions.
+  - Some business logic (e.g., checking if the user owns the program) is implemented in the service layer rather than the repository.
+
+- **Appropriateness**:
+  - This pattern is appropriate for applications where data access logic needs to be abstracted from business rules. It enhances maintainability and testability by clearly separating concerns.
+  - However, the direct session handling could be refactored into a more generic repository class that manages sessions internally.
+
+This analysis highlights how the Repository Pattern is effectively used in this code snippet while noting some potential improvements for better adherence to pattern standards.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 01:17*
+*Generated by CodeWorm on 2026-02-19 15:39*
