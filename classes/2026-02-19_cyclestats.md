@@ -1,0 +1,128 @@
+# CycleStats
+
+**Type:** Class Documentation
+**Repository:** CodeWorm
+**File:** codeworm/daemon.py
+**Language:** python
+**Lines:** 43-120
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class CycleStats:
+    """
+    Tracks cycle statistics for monitoring and backoff logic
+    """
+    total_cycles: int = 0
+    successful_cycles: int = 0
+    failed_cycles: int = 0
+    skipped_cycles: int = 0
+    consecutive_failures: int = 0
+    consecutive_ollama_failures: int = 0
+    last_success: datetime | None = None
+    last_failure: datetime | None = None
+    last_failure_reason: str = ""
+    repos_exhausted: set = field(default_factory = set)
+
+    @property
+    def success_rate(self) -> float:
+        if self.total_cycles == 0:
+            return 0.0
+        return self.successful_cycles / self.total_cycles * 100
+
+    def record_success(self) -> None:
+        self.total_cycles += 1
+        self.successful_cycles += 1
+        self.consecutive_failures = 0
+        self.consecutive_ollama_failures = 0
+        self.last_success = datetime.now()
+        self.repos_exhausted.clear()
+
+    def record_failure(self, reason: str) -> None:
+        self.total_cycles += 1
+        self.failed_cycles += 1
+        self.consecutive_failures += 1
+        self.last_failure = datetime.now()
+        self.last_failure_reason = reason
+
+    def record_ollama_failure(self) -> None:
+        self.consecutive_ollama_failures += 1
+
+    def record_ollama_recovery(self) -> None:
+        self.consecutive_ollama_failures = 0
+
+    def record_skip(self, reason: str) -> None:
+        self.total_cycles += 1
+        self.skipped_cycles += 1
+        self.last_failure_reason = reason
+
+    def record_repo_exhausted(self, repo_name: str) -> None:
+        self.repos_exhausted.add(repo_name)
+
+    def get_backoff_seconds(self) -> int:
+        if self.consecutive_failures <= 1:
+            return 0
+        return min(300, 30 * (2**(self.consecutive_failures - 1)))
+
+    def get_ollama_wait_seconds(self) -> int:
+        if self.consecutive_ollama_failures <= 1:
+            return 10
+        return min(300, 10 * (2**(self.consecutive_ollama_failures - 1)))
+
+    def to_dict(self) -> dict:
+        return {
+            "total_cycles":
+            self.total_cycles,
+            "successful_cycles":
+            self.successful_cycles,
+            "failed_cycles":
+            self.failed_cycles,
+            "skipped_cycles":
+            self.skipped_cycles,
+            "success_rate":
+            round(self.success_rate,
+                  1),
+            "consecutive_failures":
+            self.consecutive_failures,
+            "last_success":
+            self.last_success.isoformat() if self.last_success else None,
+        }
+```
+
+---
+
+## Class Documentation
+
+### CycleStats Documentation
+
+#### Class Responsibility and Purpose
+The `CycleStats` class is responsible for tracking various statistics related to cycles, including success rates, failures, skips, and backoff logic. It provides a structured way to monitor and manage cycle-related metrics, which are crucial for decision-making in the CodeWorm daemon.
+
+#### Public Interface (Key Methods)
+- **Properties:**
+  - `success_rate`: Calculates the success rate as a percentage.
+  
+- **Methods:**
+  - `record_success()`: Updates statistics when a cycle is successful.
+  - `record_failure(reason)`: Logs a failure with an optional reason.
+  - `record_ollama_failure()`: Increments the consecutive Ollama failures counter.
+  - `record_ollama_recovery()`: Resets the consecutive Ollama failures counter.
+  - `record_skip(reason)`: Records a skipped cycle with a reason.
+  - `record_repo_exhausted(repo_name)`: Tracks exhausted repositories.
+  - `get_backoff_seconds()`: Determines backoff time based on consecutive failures.
+  - `get_ollama_wait_seconds()`: Calculates Ollama-specific wait time.
+  - `to_dict()`: Converts the object's state to a dictionary for easy serialization.
+
+#### Design Patterns Used
+- **Strategy Pattern**: The class uses methods like `record_failure`, `record_success`, and `record_skip` as different strategies for handling cycle outcomes, allowing flexibility in how cycles are processed.
+- **Factory Method (Implicit)**: While not explicitly defined, the class implicitly supports creating instances of itself through its constructor.
+
+#### How it Fits in the Architecture
+The `CycleStats` class is a core component in the CodeWorm daemon's architecture. It integrates with other parts of the system to provide real-time monitoring and decision-making capabilities. By tracking cycles' outcomes and managing backoff logic, it ensures that the daemon operates efficiently and robustly, adapting its behavior based on historical performance data. The class interacts directly with the daemon’s cycle management module, providing essential metrics for optimizing resource usage and handling retries in a controlled manner.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 14:53*
