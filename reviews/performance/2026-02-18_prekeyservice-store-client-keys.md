@@ -1,0 +1,126 @@
+# PrekeyService.store_client_keys
+
+**Type:** Performance Analysis
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/encrypted-p2p-chat/backend/app/services/prekey_service.py
+**Language:** python
+**Lines:** 45-150
+**Complexity:** 8.0
+
+---
+
+## Source Code
+
+```python
+async def store_client_keys(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        identity_key: str,
+        identity_key_ed25519: str,
+        signed_prekey: str,
+        signed_prekey_signature: str,
+        one_time_prekeys: list[str]
+    ) -> IdentityKey:
+        """
+        Stores client-generated public keys for E2E encryption.
+        Only stores PUBLIC keys - private keys remain on client.
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await session.execute(statement)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            logger.error("User not found: %s", user_id)
+            raise UserNotFoundError("User not found")
+
+        existing_ik_statement = select(IdentityKey).where(
+            IdentityKey.user_id == user_id
+        )
+        existing_ik_result = await session.execute(existing_ik_statement)
+        existing_ik = existing_ik_result.scalar_one_or_none()
+
+        if existing_ik:
+            existing_ik.public_key = identity_key
+            existing_ik.public_key_ed25519 = identity_key_ed25519
+            logger.info("Updated existing identity key for user %s", user_id)
+        else:
+            existing_ik = IdentityKey(
+                user_id = user_id,
+                public_key = identity_key,
+                private_key = "",
+                public_key_ed25519 = identity_key_ed25519,
+                private_key_ed25519 = ""
+            )
+            session.add(existing_ik)
+            logger.info("Created identity key for user %s", user_id)
+
+        old_spks_statement = select(SignedPrekey).where(
+            SignedPrekey.user_id == user_id,
+            SignedPrekey.is_active
+        )
+        old_spks_result = await session.execute(old_spks_statement)
+        old_spks = old_spks_result.scalars().all()
+
+        for old_spk in old_spks:
+            old_spk.is_active = False
+
+        max_key_id_statement = select(SignedPrekey.key_id).where(
+            SignedPrekey.user_id == user_id
+        ).order_by(SignedPrekey.key_id.desc()).limit(1)
+        max_key_id_result = await session.execute(max_key_id_statement)
+        max_key_id = max_key_id_result.scalar_one_or_none()
+        new_spk_key_id = (max_key_id + 1) if max_key_id is not None else 1
+
+        expires_at = datetime.now(UTC) + timedelta(
+            hours = SIGNED_PREKEY_ROTATION_HOURS
+        )
+
+        new_spk = SignedPrekey(
+            user_id = user_id,
+            key_id = new_spk_key_id,
+            public_key = signed_prekey,
+            private_key = "",
+            signature = signed_prekey_signature,
+            is_active = True,
+            expires_at = expires_at
+        )
+        session.add(new_spk)
+
+        max_opk_key_id_statement = select(OneTimePrekey.key_id).where(
+            OneTimePrekey.user_id == user_id
+        ).order_by(OneTimePrekey.key_id.desc()).limit(1)
+        max_opk_key_id_result = await session.execute(max_opk_key_id_statement)
+        max_opk_key_id 
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The function has a time complexity of \(O(n + m)\), where \(n\) is the number of one-time prekeys and \(m\) is the number of signed prekeys. The primary bottlenecks are the database queries, which can be costly due to potential N+1 query patterns.
+
+#### Space Complexity
+The space complexity is \(O(1)\) for variables but increases with the size of `one_time_prekeys` and `signed_prekey`. The function uses a reasonable amount of memory but could benefit from batch operations if dealing with large numbers of keys.
+
+#### Bottlenecks or Inefficiencies
+- **N+1 Query Pattern**: The query to fetch old signed prekeys is inefficient as it executes multiple queries for each old signed prekey. Consider using `load_only` and eager loading.
+- **Redundant Operations**: The `max_key_id` and `next_opk_key_id` calculations are redundant if the database can provide these values directly.
+
+#### Optimization Opportunities
+1. **Batch Queries**: Use batch operations to fetch all necessary data in fewer queries.
+2. **Database Relationships**: Utilize SQLAlchemy relationships for eager loading of related entities.
+3. **Efficient Key ID Calculation**: Fetch and increment key IDs from the database in a single query.
+
+#### Resource Usage Concerns
+- **Session Management**: Ensure sessions are properly managed, especially when dealing with large datasets to avoid memory leaks.
+- **Error Handling**: The `IntegrityError` handling is robust but consider adding more specific error logging for better debugging.
+
+By addressing these points, you can significantly improve the performance and efficiency of the function.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 21:09*
