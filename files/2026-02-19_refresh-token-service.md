@@ -1,0 +1,156 @@
+# refresh_token_service
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/api/core/services/refresh_token_service.py
+**Language:** python
+**Lines:** 1-227
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+Refresh Token Management Service
+/api/core/services/refresh_token_service.py
+"""
+
+import json
+import redis
+from flask import current_app
+from datetime import datetime, UTC
+from flask_jwt_extended import decode_token
+
+
+class RefreshTokenService:
+    """
+    Service for managing refresh tokens in Redis
+    """
+    @staticmethod
+    def _get_redis() -> redis.StrictRedis | None:
+        """
+        Get Redis client from Flask app extensions
+        """
+        try:
+            return current_app.extensions.get("redis_client")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _get_token_key(user_id: str, jti: str) -> str:
+        """
+        Generate Redis key for refresh token
+        """
+        return f"refresh_token:{user_id}:{jti}"
+
+    @staticmethod
+    def _get_user_tokens_pattern(user_id: str) -> str:
+        """
+        Generate Redis pattern for all user's refresh tokens
+        """
+        return f"refresh_token:{user_id}:*"
+
+    @staticmethod
+    def store_refresh_token(
+        user_id: str,
+        token: str,
+        expires_in: int
+    ) -> bool:
+        """
+        Store refresh token in Redis with TTL
+        """
+        redis_client = RefreshTokenService._get_redis()
+        if not redis_client:
+            current_app.logger.warning(
+                "Redis not available for refresh token storage"
+            )
+            return False
+
+        try:
+            decoded = decode_token(token)
+            jti = decoded.get("jti")
+
+            if not jti:
+                current_app.logger.error("Refresh token missing JTI")
+                return False
+
+            token_data = {
+                "user_id":
+                user_id,
+                "jti":
+                jti,
+                "token":
+                token,
+                "created_at":
+                datetime.now(UTC).isoformat(),
+                "expires_at":
+                datetime.fromtimestamp(decoded.get("exp",
+                                                   0),
+                                       UTC).isoformat()
+            }
+
+            key = RefreshTokenService._get_token_key(user_id, jti)
+
+            redis_client.setex(
+                key,
+                expires_in + 60,
+                json.dumps(token_data)
+            )
+
+            current_app.logger.info(
+                f"Stored refresh token for user {user_id[:8]}..."
+            )
+            return True
+
+        except Exception as e:
+            current_app.logger.error(f"Failed to store refresh token: {e}")
+            return False
+
+    @staticmethod
+    def get_user_refresh_tokens(user_id: str) -> list[dict]:
+        """
+        Get all refresh tokens for a user
+        """
+        redis_client = RefreshTokenService._get_redis()
+        if not redis_client:
+            return []
+
+        try:
+            pattern = RefreshTokenService._get_user_tokens_pattern(user_id)
+            keys = redis_client.keys(pattern)
+
+            tokens = []
+            for key i
+```
+
+---
+
+## File Overview
+
+# Refresh Token Management Service
+
+**Purpose and Responsibility:**
+This file provides a service for managing refresh tokens within a Flask application using Redis. It handles storing, retrieving, and revoking refresh tokens associated with user IDs.
+
+**Key Exports/Public Interface:**
+- `store_refresh_token(user_id: str, token: str, expires_in: int) -> bool`: Stores a new refresh token in Redis.
+- `get_user_refresh_tokens(user_id: str) -> list[dict]`: Retrieves all refresh tokens for a given user.
+- `revoke_refresh_token(user_id: str, jti: str) -> bool`: Revokes a specific refresh token.
+- `revoke_all_user_tokens(user_id: str) -> int`: Revokes all refresh tokens associated with a user.
+
+**How it Fits in the Project:**
+This service is part of the core backend services layer and interacts directly with Redis to manage session-related data. It ensures that refresh tokens are securely stored, can be efficiently retrieved, and are properly revoked when necessary. This helps maintain secure and scalable token management for the application.
+
+**Notable Design Decisions:**
+- **Redis Integration:** The service uses Redis for storing and retrieving refresh tokens due to its high performance and reliability.
+- **JWT Decoding:** Tokens are decoded using `flask_jwt_extended` to extract metadata like JTI (JWT ID) which is crucial for token revocation.
+- **Error Handling:** Comprehensive error handling ensures that any issues during token management operations are logged, maintaining the application's robustness.
+```
+
+This documentation provides an overview of the file’s purpose, key functionalities, integration within the project, and significant design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 07:46*
