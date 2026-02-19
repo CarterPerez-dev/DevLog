@@ -1,0 +1,112 @@
+# SearchRepository
+
+**Type:** Class Documentation
+**Repository:** my-portfolio
+**File:** v1/backend/app/search/repository.py
+**Language:** python
+**Lines:** 13-119
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class SearchRepository:
+    """
+    Repository for full-text search across portfolio content
+    """
+    @classmethod
+    async def search_all(
+        cls,
+        session: AsyncSession,
+        query: str,
+        language: Language,
+        limit: int = 20,
+    ) -> list[SearchResultItem]:
+        """
+        Full-text search across projects, experiences, and certifications.
+        Returns results with highlighted excerpts.
+        """
+        search_query = text(
+            """
+            WITH search_results AS (
+                SELECT
+                    title,
+                    ts_headline(
+                        'english',
+                        COALESCE(description, '') || ' ' || COALESCE(technical_details, ''),
+                        plainto_tsquery('english', :query),
+                        'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, MaxFragments=2'
+                    ) AS excerpt,
+                    '/projects/' || slug AS url,
+                    'project' AS type,
+                    ts_rank(
+                        to_tsvector('english', title || ' ' || COALESCE(description, '') || ' ' || COALESCE(technical_details, '')),
+                        plainto_tsquery('english', :query)
+                    ) AS rank
+                FROM projects
+                WHERE language = :language
+                AND to_tsvector('english', title || ' ' || COALESCE(description, '') || ' ' || COALESCE(technical_details, ''))
+                    @@ plainto_tsquery('english', :query)
+
+                UNION ALL
+
+                SELECT
+                    company || ' - ' || role AS title,
+                    ts_headline(
+                        'english',
+                        description,
+                        plainto_tsquery('english', :query),
+                        'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, MaxFragments=2'
+                    ) AS excerpt,
+                    '/background/experience' AS url,
+                    'experience' AS type,
+                    ts_rank(
+                        to_tsvector('english', company || ' ' || role || ' ' || description),
+                        plainto_tsquery('english', :query)
+                    ) AS rank
+                FROM experiences
+                WHERE language = :language
+                AND is_visible = true
+                AND to_tsvector('english', company || ' ' || role || ' ' || description)
+                    @@ plainto_tsquery('english', :query)
+
+                UNION ALL
+
+                SELECT
+                    name AS title,
+                    ts_headline(
+                        'english',
+                        name || ' - ' || issuer,
+                        plainto_tsquery('english', :query),
+                        'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, MaxFragments=2'
+                    ) AS excerpt,
+                    '/background/certifications' AS url,
+                    'certification' AS ty
+```
+
+---
+
+## Class Documentation
+
+### SearchRepository
+
+**Class Responsibility and Purpose:**
+The `SearchRepository` class is responsible for performing full-text searches across various content types within a portfolio application, including projects, experiences, and certifications. It leverages PostgreSQL's full-text search capabilities to provide relevant results with highlighted excerpts.
+
+**Public Interface (Key Methods):**
+- **`search_all(session: AsyncSession, query: str, language: Language, limit: int = 20) -> list[SearchResultItem]`:** This method executes a complex SQL query using SQLAlchemy's `AsyncSession`. It searches for the provided query across projects, experiences, and certifications, returning up to a specified number of results with highlighted excerpts.
+
+**Design Patterns Used:**
+- **SQLAlchemy ORM:** The class uses SQLAlchemy's ORM to interact with the database asynchronously.
+- **Template Method Pattern:** The method structure is designed as a template that can be extended or modified without changing the core logic.
+
+**How It Fits in the Architecture:**
+The `SearchRepository` fits into the application architecture by providing a centralized search mechanism. It interacts directly with the database to fetch and process search results, ensuring that the search functionality remains decoupled from the business logic of individual content types. This class is part of the data access layer, facilitating efficient and accurate searches across different parts of the portfolio.
+
+This design ensures that the repository can be easily extended or modified without affecting other components of the application, maintaining a clean separation of concerns.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 21:29*
