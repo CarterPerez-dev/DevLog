@@ -1,0 +1,147 @@
+# migrate_achievements_v2
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/migrations/migrate_achievements_v2.py
+**Language:** python
+**Lines:** 1-617
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+Achievement Migration Script - Migrate achievements to achievements_v2
+Comprehensive script for migrating user achievements to include timestamps.
+
+Usage Examples:
+    # Copy prod mainusers to dev (clears dev first)
+    python -m devtools.migrations.migrate_achievements_v2 --copy-prod-to-dev
+
+    # Dry run migration on dev
+    python -m devtools.migrations.migrate_achievements_v2 --env=dev --dry-run
+
+    # Run actual migration on dev
+    python -m devtools.migrations.migrate_achievements_v2 --env=dev --migrate
+
+    # Verify migration on dev
+    python -m devtools.migrations.migrate_achievements_v2 --env=dev --verify
+
+    # Run migration on prod (BE CAREFUL!)
+    python -m devtools.migrations.migrate_achievements_v2 --env=prod --migrate
+
+Environment Variables Required:
+    MONGO_URI_PROD - Production MongoDB Atlas connection string
+    MONGO_URI_DEV  - Development MongoDB Atlas connection string
+
+Or pass directly:
+    --prod-uri="mongodb+srv://..."
+    --dev-uri="mongodb+srv://..."
+"""
+
+import os
+import sys
+import argparse
+from datetime import datetime, UTC
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, OperationFailure
+
+
+PROD_DB_NAME = "xploitcraft"
+DEV_DB_NAME = "yoshidevs"
+COLLECTION_NAME = "mainusers"
+
+
+def get_connection_strings(args):
+    """
+    Get MongoDB connection strings from args or environment.
+    """
+    prod_uri = args.prod_uri or os.environ.get("MONGO_URI_PROD")
+    dev_uri = args.dev_uri or os.environ.get("MONGO_URI_DEV")
+
+    if not prod_uri:
+        print("ERROR: Production URI not provided.")
+        print("Set MONGO_URI_PROD environment variable or use --prod-uri")
+        sys.exit(1)
+
+    if not dev_uri:
+        print("ERROR: Development URI not provided.")
+        print("Set MONGO_URI_DEV environment variable or use --dev-uri")
+        sys.exit(1)
+
+    return prod_uri, dev_uri
+
+
+def test_connection(uri, db_name):
+    """
+    Test MongoDB connection.
+    """
+    try:
+        client = MongoClient(uri, serverSelectionTimeoutMS = 5000)
+        client.admin.command('ping')
+        db = client[db_name]
+        count = db[COLLECTION_NAME].count_documents({})
+        print(
+            f"  Connected to {db_name}: {count} documents in {COLLECTION_NAME}"
+        )
+        return True
+    except ConnectionFailure as e:
+        print(f"  Connection failed to {db_name}: {e}")
+        return False
+    finally:
+        client.close()
+
+
+def copy_prod_to_dev(prod_uri, dev_uri):
+    """
+    Copy mainusers collection from production to development.
+    Clears dev collection first!
+    """
+    print("\n" + "=" * 70)
+    print("COPYING PRODUCTION MAINUSERS TO DEVELOPMENT")
+    print("=" * 70)
+
+    prod_client = MongoClient(prod_uri)
+    dev_client = MongoClient(dev_uri)
+
+    try:
+        prod_db = prod_client[PROD_DB_NAME]
+        dev_db = dev_client[DEV_DB_NAME]
+
+        prod_collection = prod_db[COLLECTION_NAME]
+        dev_collection = dev_db[COLLECTION_NAME]
+
+        prod_count = prod_collection.count_doc
+```
+
+---
+
+## File Overview
+
+# migrate_achievements_v2.py
+
+**Purpose and Responsibility:**
+This script is responsible for migrating user achievements from a production MongoDB database to a development MongoDB database, including adding timestamps. It supports various operations such as copying data, performing dry runs, and verifying the migration.
+
+**Key Exports or Public Interface:**
+- `get_connection_strings`: Retrieves MongoDB connection strings either from environment variables or command-line arguments.
+- `test_connection`: Tests the connection to a specified MongoDB database.
+- `copy_prod_to_dev`: Copies the `mainusers` collection from production to development, clearing the dev collection first.
+
+**How it Fits in the Project:**
+This script is part of the `devtools.migrations` module within the CertGames-Core project. It provides a comprehensive mechanism for managing data migrations between environments, ensuring that developers can safely test changes before applying them to production.
+
+**Notable Design Decisions:**
+- **Error Handling:** The script includes robust error handling with detailed logging and user prompts.
+- **Batch Processing:** Data is copied in batches to avoid overwhelming the database during migration.
+- **Environment Variables:** It leverages environment variables for database connection strings, making it flexible across different deployment environments.
+- **Dry Run Option:** A dry run option allows developers to test migrations without affecting production data.
+```
+
+This documentation covers the high-level purpose of the script, its key functions, how it integrates into the project, and some notable design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 07:30*
