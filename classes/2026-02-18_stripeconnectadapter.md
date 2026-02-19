@@ -1,0 +1,136 @@
+# StripeConnectAdapter
+
+**Type:** Class Documentation
+**Repository:** stripe-referral
+**File:** src/stripe_referral/adapters/stripe_connect.py
+**Language:** python
+**Lines:** 21-161
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class StripeConnectAdapter(PayoutAdapter):
+    """
+    Payout adapter for Stripe Connect transfers
+    """
+    def __init__(self, api_key: str) -> None:
+        """
+        Initialize with Stripe API key
+
+        Args:
+            api_key: Stripe secret key
+        """
+        self.api_key = api_key
+        stripe.api_key = api_key
+        stripe.api_version = STRIPE_API_VERSION
+
+    def send_payout(
+        self,
+        user_id: str,
+        amount: float,
+        currency: str,
+        recipient_data: dict[str,
+                             Any],
+    ) -> PayoutResult:
+        """
+        Send payout via Stripe Connect transfer
+        """
+        try:
+            connected_account_id = recipient_data.get(
+                "stripe_connect_account_id"
+            )
+            if not connected_account_id:
+                return PayoutResult(
+                    success = False,
+                    error =
+                    "Missing stripe_connect_account_id in recipient_data",
+                )
+
+            if not connected_account_id.startswith(
+                    STRIPE_CONNECT_ACCOUNT_ID_PREFIX):
+                return PayoutResult(
+                    success = False,
+                    error =
+                    f"Invalid Stripe account ID format: {connected_account_id}",
+                )
+
+            amount_cents = int(amount * 100)
+
+            transfer = stripe.Transfer.create(
+                amount = amount_cents,
+                currency = currency.lower(),
+                destination = connected_account_id,
+                metadata = {"user_id": user_id},
+            )
+
+            if not transfer.id.startswith(STRIPE_TRANSFER_ID_PREFIX):
+                return PayoutResult(
+                    success = False,
+                    error =
+                    f"Unexpected transfer ID format: {transfer.id}",
+                )
+
+            return PayoutResult(
+                success = True,
+                transaction_id = transfer.id,
+            )
+
+        except stripe.InvalidRequestError as e:
+            return PayoutResult(
+                success = False,
+                error = f"Invalid request: {str(e)}",
+            )
+        except stripe.AuthenticationError as e:
+            return PayoutResult(
+                success = False,
+                error = f"Authentication failed: {str(e)}",
+            )
+        except stripe.StripeError as e:
+            return PayoutResult(
+                success = False,
+                error = f"Stripe error: {str(e)}",
+            )
+        except Exception as e:
+            return PayoutResult(
+                success = False,
+                error = f"Unexpected error: {str(e)}",
+            )
+
+    def validate_recipient(
+        self,
+        recipient_data: dict[str,
+                             Any]
+    ) -> RecipientValidation:
+        """
+        Validate Stripe Connect account exists and can receive payouts
+        """
+        try:
+            account_id = recipient_data.get
+```
+
+---
+
+## Class Documentation
+
+### StripeConnectAdapter Documentation
+
+**Class Responsibility and Purpose:**
+The `StripeConnectAdapter` class serves as a payout adapter for Stripe Connect transfers, handling both the validation of recipient accounts and the execution of payouts via Stripe's API.
+
+**Public Interface (Key Methods):**
+- **`__init__(self, api_key: str) -> None`:** Initializes the adapter with a Stripe secret key.
+- **`send_payout(self, user_id: str, amount: float, currency: str, recipient_data: dict[str, Any]) -> PayoutResult`:** Sends a payout to a specified Stripe Connect account.
+- **`validate_recipient(self, recipient_data: dict[str, Any]) -> RecipientValidation`:** Validates whether the provided recipient data corresponds to an active and eligible Stripe Connect account.
+
+**Design Patterns Used:**
+The class utilizes exception handling to manage errors gracefully. It also employs the **Strategy Pattern** implicitly through the handling of different types of exceptions, ensuring that specific error messages are returned based on the nature of the issue encountered during execution.
+
+**How it Fits in the Architecture:**
+`StripeConnectAdapter` is part of a broader payout management system within the `stripe-referral` application. It acts as an intermediary layer between the core application logic and Stripe's API, providing a consistent interface for initiating payouts and validating recipients across different parts of the application. This design ensures that the core business logic remains decoupled from the specifics of interacting with external payment services like Stripe.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 23:02*
