@@ -1,10 +1,10 @@
 # AuthService
 
 **Type:** Class Documentation
-**Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/auth/services/auth.py
+**Repository:** my-portfolio
+**File:** v1/backend/app/auth/service.py
 **Language:** python
-**Lines:** 32-211
+**Lines:** 32-206
 **Complexity:** 0.0
 
 ---
@@ -16,9 +16,11 @@ class AuthService:
     """
     Business logic for authentication operations
     """
-    @staticmethod
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
     async def authenticate(
-        session: AsyncSession,
+        self,
         email: str,
         password: str,
         device_id: str | None = None,
@@ -30,7 +32,7 @@ class AuthService:
         """
         Authenticate user and create tokens
         """
-        user = await UserRepository.get_by_email(session, email)
+        user = await UserRepository.get_by_email(self.session, email)
         hashed_password = user.hashed_password if user else None
 
         is_valid, new_hash = await verify_password_with_timing_safety(
@@ -44,7 +46,7 @@ class AuthService:
             raise InvalidCredentials()
 
         if new_hash:
-            await UserRepository.update_password(session, user, new_hash)
+            await UserRepository.update_password(self.session, user, new_hash)
 
         access_token = create_access_token(user.id, user.token_version)
 
@@ -52,7 +54,7 @@ class AuthService:
         raw_refresh, token_hash, expires_at = create_refresh_token(user.id, family_id)
 
         await RefreshTokenRepository.create_token(
-            session,
+            self.session,
             user_id = user.id,
             token_hash = token_hash,
             family_id = family_id,
@@ -64,9 +66,8 @@ class AuthService:
 
         return access_token, raw_refresh, user
 
-    @staticmethod
     async def login(
-        session: AsyncSession,
+        self,
         email: str,
         password: str,
         device_id: str | None = None,
@@ -77,8 +78,7 @@ class AuthService:
         """
         Login and return tokens with user data
         """
-        access_token, refresh_token, user = await AuthService.authenticate(
-            session,
+        access_token, refresh_token, user = await self.authenticate(
             email,
             password,
             device_id,
@@ -92,30 +92,30 @@ class AuthService:
         )
         return response, refresh_token
 
-    @staticmethod
     async def refresh_tokens(
-        session: AsyncSession,
+        self,
         refresh_token: str,
         device_id: str | None = None,
         device_name: str | None = None,
         ip_address: str | None = None,
-    ) -> tuple[TokenResponse, str]:
+    ) -> tuple[TokenResponse,
+               str]:
         """
         Refresh access token using refresh token
 
         Implements token rotation with replay attack detection
-
-        Returns:
-            Tuple of (TokenResponse, new_raw_refresh_token)
         """
         token_hash = hash_token(refresh_token)
         stored_token = await RefreshTokenRepository.get_by_hash(
-            session,
+            self.session,
             token_hash
         )
 
         if stored_token is None:
-            raise TokenError(m
+            raise TokenError(message = "Invalid refresh token")
+
+        if stored_token.is_revoked:
+            await 
 ```
 
 ---
@@ -124,27 +124,29 @@ class AuthService:
 
 ### AuthService Documentation
 
-**Class Responsibility and Purpose:**
-The `AuthService` class handles authentication operations, including user login, token creation, refresh, and logout. It ensures secure and efficient management of user sessions by implementing password verification, token generation, and token revocation mechanisms.
+**Class Responsibility and Purpose**
+The `AuthService` class handles authentication operations, including user login, token creation, and management. It ensures secure and efficient authentication processes by verifying credentials, creating tokens, and managing refresh tokens.
 
-**Public Interface (Key Methods):**
-- **`authenticate(session: AsyncSession, email: str, password: str, ...)`**: Authenticates a user and generates access and refresh tokens.
-- **`login(session: AsyncSession, email: str, password: str, ...)`**: Convenience method to log in a user and return tokens with user data.
-- **`refresh_tokens(session: AsyncSession, refresh_token: str, ...)`**: Refreshes the access token using a valid refresh token.
-- **`logout(session: AsyncSession, refresh_token: str)`**: Logs out by revoking a specific refresh token.
-- **`logout_all(session: AsyncSession, user: User)`**: Logs out all tokens associated with a user.
+**Public Interface (Key Methods)**
+- **`authenticate(email: str, password: str, ...)`**: Authenticates a user and generates access and refresh tokens.
+- **`login(email: str, password: str, ...)`**: A convenience method that returns the `TokenWithUserResponse` along with a raw refresh token after successful authentication.
+- **`refresh_tokens(refresh_token: str, ...)`**: Refreshes an access token using a valid refresh token and handles token rotation and replay protection.
+- **`logout(refresh_token: str)`**: Logs out by revoking the specified refresh token. It silently succeeds if the token is already revoked or non-existent.
+- **`logout_all(user: User)`**: Logs out from all devices of a user, invalidating their session tokens.
 
-**Design Patterns Used:**
-The class utilizes the **Strategy Pattern** for password verification through `verify_password_with_timing_safety`, ensuring secure handling of passwords. It also employs the **Observer Pattern** via token revocation mechanisms to manage session states effectively.
+**Design Patterns Used**
+- **Factory Pattern**: Implicitly used in `create_access_token` and `create_refresh_token` for generating secure tokens.
+- **Observer Pattern**: The `RefreshTokenRepository` acts as an observer by managing token revocation events.
+- **Strategy Pattern**: The password verification logic is encapsulated, allowing different strategies to be implemented.
 
-**Relationship to Other Classes:**
-- **`UserRepository`**: Manages user data retrieval and updates.
-- **`RefreshTokenRepository`**: Handles refresh token creation, storage, and revocation.
-- **`create_access_token`, `create_refresh_token`**: Utility functions for generating secure tokens.
+**Relationship to Other Classes**
+- **UserRepository**: Manages user data and operations such as getting a user by email or updating their hashed password.
+- **RefreshTokenRepository**: Handles refresh token creation, retrieval, revocation, and expiration checks.
+- **verify_password_with_timing_safety**: A utility function ensuring secure password verification.
 
-**State Management Approach:**
-The class manages state through database operations, ensuring that each authentication or token operation is recorded and can be audited. Token states are updated to reflect current session statuses, such as revoking expired or revoked tokens.
+**State Management Approach**
+The class manages state through database interactions using `AsyncSession`. It ensures that user sessions are securely managed by updating tokens and revoking old ones as necessary.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 17:03*
+*Generated by CodeWorm on 2026-02-18 19:25*
