@@ -1,10 +1,10 @@
 # CorrelationIdMiddleware
 
 **Type:** Class Documentation
-**Repository:** vuemantics
-**File:** backend/core/correlation.py
+**Repository:** ios-test
+**File:** fastapi/app/middleware/correlation.py
 **Language:** python
-**Lines:** 21-66
+**Lines:** 20-43
 **Complexity:** 0.0
 
 ---
@@ -14,15 +14,7 @@
 ```python
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """
-    Correlation ID middleware for distributed tracing and request tracking
-
-    Features:
-    - Accepts existing correlation ID
-      from upstream services via X-Correlation-ID header
-    - Generates new UUID if no correlation ID provided
-    - Tracks request timing and performance
-    - Logs request lifecycle with correlation ID
-    - Exposes correlation ID in response headers
+    Correlation ID to requests for distributed tracing
     """
     async def dispatch(
         self,
@@ -31,31 +23,17 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         correlation_id = request.headers.get(
             "X-Correlation-ID",
-            str(uuid.uuid4()),
+            str(uuid.uuid4())
         )
 
-        request.state.correlation_id = correlation_id
-
-        start_time = time.time()
-        logger.info(
-            "[%s] %s %s",
-            correlation_id,
-            request.method,
-            request.url.path
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            correlation_id = correlation_id,
+            method = request.method,
+            path = request.url.path,
         )
 
         response = await call_next(request)
-
-        duration = time.time() - start_time
-        logger.info(
-            "[%s] %s %s - status=%s duration=%.3fs",
-            correlation_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration
-        )
-
         response.headers["X-Correlation-ID"] = correlation_id
         return response
 ```
@@ -64,21 +42,21 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
 ## Class Documentation
 
-### CorrelationIdMiddleware Documentation
+### CorrelationIdMiddleware
 
-**Class Responsibility and Purpose:**
-The `CorrelationIdMiddleware` class is designed to manage distributed tracing and request tracking by handling correlation IDs. It ensures that each request has a unique identifier, either inherited from upstream services or generated locally if not provided. This middleware also tracks the duration of requests and logs their lifecycle, facilitating easier debugging and performance analysis.
+**Class Responsibility and Purpose:**  
+The `CorrelationIdMiddleware` class is designed to inject a unique `X-Correlation-ID` header into every HTTP request, facilitating distributed tracing and request tracking across microservices. This middleware ensures that each request has a consistent identifier, which can be used for logging and monitoring purposes.
 
-**Public Interface:**
-- **`dispatch(request: Request, call_next: RequestResponseEndpoint) -> Response`:** The primary method that processes each incoming request by setting up the correlation ID in the `request.state`, logging the start time, invoking the next middleware or endpoint, and then logging the end time with details about the response.
+**Public Interface (Key Methods):**  
+- **`dispatch(request: Request, call_next: RequestResponseEndpoint) -> Response:`**: This is the primary method of the class. It intercepts every incoming HTTP request, sets up the correlation ID context using `structlog.contextvars`, processes the request with the next middleware or endpoint, and then attaches the generated correlation ID to the response headers.
 
-**Design Patterns Used:**
-- **Observer Pattern:** Implicitly used through the `BaseHTTPMiddleware` base class, which allows this middleware to observe and modify request handling.
-- **Strategy Pattern:** Not explicitly implemented but implied in how different strategies for generating or obtaining correlation IDs can be abstracted.
+**Design Patterns Used:**  
+- **Observer Pattern**: The `dispatch` method acts as an observer by intercepting requests and modifying their behavior without altering the original request/response flow.
+- **Factory Method (Implicit)**: While not explicitly implemented, the class implicitly uses a factory method pattern in its instantiation through the `BaseHTTPMiddleware` base class.
 
-**How it Fits in the Architecture:**
-This middleware is part of a broader architecture that emphasizes observability and traceability. It integrates seamlessly with other middlewares and endpoints, ensuring consistent behavior across the application. By exposing the `X-Correlation-ID` header in responses, it enables downstream services to maintain context throughout the request lifecycle, enhancing debugging capabilities and performance monitoring.
+**How it Fits in the Architecture:**  
+This middleware is part of the FastAPI application's architecture, specifically within the `middleware` directory. It integrates seamlessly with other middlewares and endpoints by leveraging the `dispatch` method to modify request headers and context variables. By ensuring that every request has a unique correlation ID, this class supports robust tracing and debugging across the entire system.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 07:13*
+*Generated by CodeWorm on 2026-02-19 09:52*
