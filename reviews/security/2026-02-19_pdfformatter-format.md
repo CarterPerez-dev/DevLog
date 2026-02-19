@@ -1,0 +1,150 @@
+# PdfFormatter.format
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** frontend/admin-app/src/lib/export/formatters/pdfFormatter.ts
+**Language:** typescript
+**Lines:** 20-126
+**Complexity:** 19.0
+
+---
+
+## Source Code
+
+```typescript
+format(data: T[], config: ExportConfig<T>, options: ExportOptions): void {
+    try {
+      if (data === null || data === undefined) {
+        throw new Error('Data is required for export');
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error('Data must be an array');
+      }
+
+      const orientation = config.pdfOrientation ?? 'landscape';
+      const pageSize = config.pdfPageSize ?? 'a4';
+      const pdf = new jsPDF(orientation, 'mm', pageSize);
+
+      const primaryColor: [number, number, number] = [99, 102, 241]; // $primary-500
+      const textColor: [number, number, number] = [31, 41, 55]; // $gray-800
+      const headerBg: [number, number, number] = [243, 244, 246]; // $gray-100
+
+      const title = options.title ?? 'Data Export';
+      pdf.setFontSize(18);
+      pdf.setTextColor(...primaryColor);
+      pdf.text(title, 14, 20);
+
+      let yPosition = 25;
+      if (
+        options.description !== null &&
+        options.description !== undefined &&
+        options.description.length > 0
+      ) {
+        pdf.setFontSize(10);
+        pdf.setTextColor(...textColor);
+        pdf.text(options.description, 14, yPosition);
+        yPosition += 5;
+      }
+
+      if (options.includeMetadata === true) {
+        pdf.setFontSize(9);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(
+          `Exported: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`,
+          14,
+          yPosition,
+        );
+        pdf.text(`Records: ${String(data.length)}`, 14, yPosition + 4);
+        yPosition += 10;
+      }
+
+      const tableData = this.prepareTableData(data, config);
+
+      const headers = config.columns.map((col) => col.label);
+
+      const columnWidths = this.calculateColumnWidths(config, orientation);
+
+      autoTable(pdf, {
+        head: [headers],
+        body: tableData,
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: {
+          fillColor: headerBg,
+          textColor,
+          fontSize: 10,
+          fontStyle: 'bold',
+        },
+        bodyStyles: {
+          fontSize: 9,
+          cellPadding: 3,
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251], // $gray-50
+        },
+        columnStyles: this.getColumnStyles(config, columnWidths),
+        margin: { top: yPosition, left: 14, right: 14 },
+        didDrawPage: (_hookData): void => {
+          const pageCount = pdf.getNumberOfPages();
+          pdf.setFontSize(8);
+          pdf.setTextColor(150, 150, 150);
+
+          for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            const pageText = `Page ${String(i)} of ${String(pageCount)}`;
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            pdf.text(
+              pageText,
+              pageWidth - 30,
+              pdf.internal.pageSize.getHeight() - 10,
+            );
+          }
+        },
+      });
+
+      const timestamp = format(new Date(), 'yyyy-MM-dd-HHmmss');
+      const filename =
+        options.filename ?? config.defaultFilename
+```
+
+---
+
+## Security Review
+
+### Security Review for `PdfFormatter.format`
+
+**Vulnerabilities Found:**
+
+1. **Info - Hardcoded Secrets or Credentials**
+   - Line 18-20: The hardcoded color values could be replaced with constants or a configuration object to avoid hardcoding.
+   
+2. **Low - Input Validation Gaps**
+   - Lines 6-9: While checking for `null` and `undefined`, the code does not validate if `data` is an array of objects, which could lead to unexpected behavior.
+
+3. **Info - Error Handling that Leaks Information**
+   - Line 41: The error message "Failed to export data as PDF" is generic and could be improved by providing more context or logging detailed errors for debugging purposes.
+
+**Attack Vectors:**
+
+- An attacker could exploit the lack of validation on `data` to cause unexpected behavior in the application.
+- Hardcoded colors might not align with the intended UI design, leading to a less consistent user experience.
+
+**Recommended Fixes:**
+
+1. **Hardcode Secrets or Credentials**
+   - Replace hardcoded color values with constants defined in a separate configuration file.
+   
+2. **Input Validation Gaps**
+   - Ensure `data` is an array of objects by adding validation checks (e.g., `if (!Array.isArray(data) || !data.every(item => typeof item === 'object')) { throw new Error('Data must be an array of objects'); }`).
+
+3. **Error Handling that Leaks Information**
+   - Improve error messages to provide more context without revealing sensitive information.
+
+**Overall Security Posture:**
+
+The code has some minor issues but maintains a good overall security posture. Addressing the noted vulnerabilities will further enhance the robustness and maintainability of the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 14:47*
