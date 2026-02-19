@@ -1,0 +1,148 @@
+# VideoEntryRepository
+
+**Type:** Class Documentation
+**Repository:** social-media-notes
+**File:** backend/app/video/repository.py
+**Language:** python
+**Lines:** 17-123
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class VideoEntryRepository(BaseRepository[VideoEntry]):
+    """
+    Repository for VideoEntry model database operations
+    """
+    model = VideoEntry
+
+    @classmethod
+    async def get_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
+        """
+        Get all video entries for a user
+        """
+        result = await session.execute(
+            select(VideoEntry)
+            .where(VideoEntry.user_id == user_id)
+            .order_by(VideoEntry.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_by_user_and_platform(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
+        """
+        Get video entries for a user filtered by platform
+        """
+        result = await session.execute(
+            select(VideoEntry)
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+            .order_by(VideoEntry.video_number.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def count_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform | None = None,
+    ) -> int:
+        """
+        Count video entries for a user, optionally filtered by platform
+        """
+        from sqlalchemy import func
+        query = select(func.count()).select_from(VideoEntry).where(
+            VideoEntry.user_id == user_id
+        )
+        if platform:
+            query = query.where(VideoEntry.platform == platform)
+        result = await session.execute(query)
+        return result.scalar_one()
+
+    @classmethod
+    async def get_next_video_number(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform,
+    ) -> int:
+        """
+        Get the next available video number for a platform
+        """
+        from sqlalchemy import func
+        result = await session.execute(
+            select(func.max(VideoEntry.video_number))
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+        )
+        max_num = result.scalar_one_or_none()
+        return (max_num or 0) + 1
+
+    @classmethod
+    async def get_by_id_and_user(
+        cls,
+        session: AsyncSession,
+        entry_id: UUID,
+        user_id: UUID,
+    ) -> VideoEntry | None:
+        """
+        Get a video entry by ID, ensuring it belongs to the user
+        """
+        result = await session.execute(
+            select(VideoEntry).where(
+                VideoEntry.id == entry_id,
+                VideoEntry.user_id == user_id,
+            )
+        )
+        retu
+```
+
+---
+
+## Class Documentation
+
+### VideoEntryRepository Documentation
+
+**Class Responsibility and Purpose:**
+The `VideoEntryRepository` class is responsible for handling database operations related to the `VideoEntry` model. It provides a clean, abstracted interface for querying video entries based on user IDs and platforms.
+
+**Public Interface (Key Methods):**
+- **`get_by_user`:** Retrieves all video entries for a specific user.
+- **`get_by_user_and_platform`:** Filters video entries by both user ID and platform.
+- **`count_by_user`:** Counts the number of video entries for a given user, optionally filtered by platform.
+- **`get_next_video_number`:** Determines the next available video number for a user on a specific platform.
+- **`get_by_id_and_user`:** Fetches a single video entry by its ID and ensures it belongs to the specified user.
+
+**Design Patterns Used:**
+The class leverages SQL Alchemy's ORM capabilities without explicitly using design patterns like Factory, Observer, or Strategy. However, it follows a pattern of encapsulating database operations within a repository class, which is common in the Domain-Driven Design (DDD) approach.
+
+**How It Fits in the Architecture:**
+`VideoEntryRepository` acts as a layer between the application logic and the database. By abstracting database interactions, it ensures that the core business logic remains clean and focused on domain operations rather than data retrieval. This separation of concerns enhances maintainability and testability. The class interacts with other components through well-defined methods, making it easier to integrate with different parts of the application architecture.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 10:53*
