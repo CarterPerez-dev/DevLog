@@ -1,0 +1,135 @@
+# UserDetailModal
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** frontend/admin-app/src/modules/users/components/UserDetailModal.tsx
+**Language:** tsx
+**Lines:** 83-586
+**Complexity:** 21.0
+
+---
+
+## Source Code
+
+```tsx
+function UserDetailModal({
+  userId,
+  open,
+  onClose,
+}: UserDetailModalProps): React.JSX.Element | null {
+  const {
+    data: user,
+    isLoading: userLoading,
+    error: userError,
+  } = useUser(userId ?? '');
+
+  const { data: shopData } = useShopItems();
+
+  const generateImpersonationToken = useGenerateImpersonationToken();
+  const forceLogout = useForceLogout();
+  // const _sendEmailToUser = useSendEmailToUser(); // TODO: Implement email functionality
+  const deleteUser = useDeleteUser();
+
+  if (!open || !userId) return null;
+
+  const handleQuickAction = (action: string): void => {
+    if (
+      userId.length === 0 ||
+      user?.basic_info?.user_id === null ||
+      user?.basic_info?.user_id === undefined
+    )
+      return;
+
+    switch (action) {
+      case 'impersonate':
+        generateImpersonationToken.mutate(
+          {
+            userId: user.basic_info.user_id,
+            tokenData: { duration_minutes: 60 },
+          },
+          {
+            onSuccess: (data: unknown) => {
+              if (
+                data !== null &&
+                typeof data === 'object' &&
+                'impersonation_token' in data &&
+                typeof (data as { impersonation_token: unknown })
+                  .impersonation_token === 'string' &&
+                (data as { impersonation_token: string }).impersonation_token
+                  .length > 0
+              ) {
+                if (
+                  navigator.clipboard?.writeText !== null &&
+                  navigator.clipboard?.writeText !== undefined
+                ) {
+                  navigator.clipboard
+                    .writeText(
+                      (data as { impersonation_token: string }).impersonation_token,
+                    )
+                    .then(() => {
+                      const durationMinutes =
+                        typeof (data as { duration_minutes?: unknown })
+                          .duration_minutes === 'number'
+                          ? String(
+                              (data as { duration_minutes?: unknown })
+                                .duration_minutes,
+                            )
+                          : 'unknown';
+                      toast.success(
+                        `Impersonation token generated and copied to clipboard! Expires in ${durationMinutes} minutes.`,
+                      );
+                    })
+                    .catch(() => {
+                      toast.success(
+                        <div>
+                          <p>Impersonation token generated! (Copy manually)</p>
+                          <p
+                            style={{
+                              fontSize: '12px',
+                              wordBreak: 'break-all',
+                              marginTop: '8px',
+                            }}
+                          >
+                            {(
+                              data as { impersonation_token: string }
+                            ).impersonation_token.substr
+```
+
+---
+
+## Security Review
+
+### Security Review for `UserDetailModal.tsx`
+
+#### Vulnerabilities Found:
+
+1. **Injection Vulnerability (Info)**
+   - **Line:** 50-68, 79-82
+   - **Issue:** The `navigator.clipboard.writeText` function is used to write the impersonation token directly from user input without validation or sanitization.
+   - **Attack Vector:** An attacker could inject malicious data into the `impersonation_token`.
+   - **Fix:** Sanitize and validate the `impersonation_token` before writing it to the clipboard.
+
+2. **Input Validation Gap (Medium)**
+   - **Line:** 46-50
+   - **Issue:** The code checks if `userId.length === 0`, but does not handle cases where `user?.basic_info?.user_id` is falsy.
+   - **Attack Vector:** If the user ID or basic info is missing, it could lead to unexpected behavior.
+   - **Fix:** Add more robust validation for `user?.basic_info?.user_id`.
+
+3. **Error Handling (Info)**
+   - **Line:** 84-90
+   - **Issue:** The error handling in the `navigator.clipboard.writeText` does not provide a fallback mechanism if clipboard access is denied.
+   - **Attack Vector:** If the user denies clipboard access, the application may fail to display the impersonation token.
+   - **Fix:** Provide a clear message or alternative method for users to copy the token manually.
+
+#### Overall Security Posture:
+The code has some minor security issues that could be exploited if not properly handled. Addressing these gaps will improve the overall security posture of the application.
+
+### Recommendations:
+
+1. Sanitize and validate `impersonation_token` before writing it to the clipboard.
+2. Add more comprehensive validation for user input.
+3. Implement better error handling for clipboard access denials.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 15:18*
