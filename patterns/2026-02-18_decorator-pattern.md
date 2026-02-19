@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/siem-dashboard/backend/app/core/decorators/endpoint.py
+**File:** PROJECTS/intermediate/siem-dashboard/backend/app/core/decorators/response.py
 **Language:** python
-**Lines:** 1-89
+**Lines:** 1-43
 **Complexity:** 0.0
 
 ---
@@ -14,92 +14,46 @@
 ```python
 """
 ©AngelaMos | 2026
-endpoint.py
+response.py
 """
 
 import functools
 from typing import Any
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
-import structlog
-from flask import g, jsonify
+from flask import Response, jsonify
 
-from app.core.errors import AppError, AuthenticationError, ForbiddenError
-from app.core.auth import decode_access_token, extract_bearer_token
-from app.models.User import User
+from app.core.serialization import auto_serialize
 
 
-logger = structlog.get_logger()
-
-
-def endpoint(
-    auth_required: bool = True,
-    roles: Sequence[str] | None = None,
-) -> Callable[..., Any]:
+def R(status: int = 200) -> Callable[..., Any]:  # noqa: N802
     """
-    Outermost decorator that provides auth extraction, role gating,
-    and an error boundary
+    Auto-serialize the return value into a JSON response
     """
-    effective_auth = auth_required or roles is not None
-
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                _resolve_auth(effective_auth)
-                if roles is not None:
-                    _enforce_roles(roles)
-                return fn(*args, **kwargs)
-            except AppError:
-                raise
-            except Exception:
-                logger.exception(
-                    "unhandled_error",
-                    endpoint = fn.__name__,
-                )
-                return jsonify({
-                    "error": "InternalServerError",
-                    "message": "Internal server error",
-                }), 500
+            result = fn(*args, **kwargs)
+            return _build_response(result, status)
 
         return wrapper
 
     return decorator
 
 
-def _resolve_auth(required: bool) -> None:
+def _build_response(
+    result: Any,
+    default_status: int,
+) -> Any:
     """
-    Extract JWT and load user onto flask g or raise if required
+    Dispatch on return type to produce the correct Flask response
     """
-    g.current_user = None
-    token = extract_bearer_token()
-    if not token:
-        if required:
-            raise AuthenticationError()
-        return
-
-    try:
-        payload = decode_access_token(token)
-    except Exception as exc:
-        if required:
-            raise AuthenticationError("Invalid or expired token") from exc
-        return
-
-    user = User.get_or_none(payload["sub"])
-    if user is None:
-        if required:
-            raise AuthenticationError("User not found")
-        return
-    g.current_user = user
-
-
-def _enforce_roles(allowed: Sequence[str]) -> None:
-    """
-    Verify the authenticated user holds one of the required roles
-    """
-    user = g.current_user
-    if user is None or user.role not in allowed:
-        raise ForbiddenError()
+    if isinstance(result, Response):
+        return result
+    if isinstance(result, tuple):
+        data, code = result
+        return jsonify(auto_serialize(data)), code
+    return jsonify(auto_serialize(result)), default_status
 
 ```
 
@@ -111,20 +65,20 @@ def _enforce_roles(allowed: Sequence[str]) -> None:
 
 **Pattern Used:** Decorator Pattern
 
-The `endpoint` function in the provided code implements a decorator pattern to handle authentication, role-based access control (RBAC), and error handling for Flask endpoints. The outermost `endpoint` function returns an inner `decorator`, which wraps the actual endpoint function.
+In the provided code, the `R` function is a decorator that wraps another function to automatically serialize its return value into a JSON response using Flask's `Response`. This implementation follows the decorator pattern by taking a callable (the decorated function) and returning a new callable (`wrapper`) that modifies or extends the behavior of the original function.
 
 **Benefits:**
-- **Modularity:** The `endpoint` decorator encapsulates common functionality like authentication and RBAC checks.
-- **Reusability:** This pattern allows reusing the same authentication logic across multiple endpoints without duplicating code.
-- **Error Handling:** Centralized error handling ensures consistent response formats for errors, improving maintainability.
+- **Encapsulation:** The decorator encapsulates the logic for auto-serializing responses, making the main functions cleaner.
+- **Flexibility:** It allows easy modification of response handling without changing the decorated functions' code.
+- **Reusability:** The `R` decorator can be applied to multiple functions that need similar behavior.
 
 **Deviations:**
-- The `endpoint` decorator is designed to be flexible with optional parameters (`auth_required` and `roles`), allowing it to handle different scenarios dynamically.
-- The `_resolve_auth` function uses a try-except block to catch exceptions, which might not be the most Pythonic approach. Typically, explicit error handling would be preferred over exception catching.
+- The `R` function itself is a higher-order function, returning another decorator (`decorator`). This is slightly non-standard but still follows the core principle of wrapping and modifying callable objects.
+- The use of `_build_response` as an internal helper function to handle different return types (e.g., Flask `Response`, tuple with data and status) adds complexity but enhances flexibility.
 
 **Appropriateness:**
-This pattern is highly appropriate for web applications where multiple endpoints require similar authentication and authorization checks. It ensures that common logic is centralized and can be easily maintained or extended without modifying each endpoint individually.
+This pattern is appropriate in scenarios where you need to modify the behavior of functions without changing their core logic, such as adding response serialization or logging. It’s particularly useful in frameworks like Flask where common tasks can be abstracted into reusable decorators.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 22:50*
+*Generated by CodeWorm on 2026-02-18 23:41*
