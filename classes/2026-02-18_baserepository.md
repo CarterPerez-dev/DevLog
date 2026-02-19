@@ -1,10 +1,10 @@
 # BaseRepository
 
 **Type:** Class Documentation
-**Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/core/base_repository.py
+**Repository:** stripe-referral
+**File:** src/stripe_referral/repositories/base.py
 **Language:** python
-**Lines:** 23-106
+**Lines:** 20-83
 **Complexity:** 0.0
 
 ---
@@ -12,90 +12,70 @@
 ## Source Code
 
 ```python
-class BaseRepository(Generic[ModelT]):
+class BaseRepository(Generic[T]):
     """
-    Generic repository with common CRUD operations
+    Base repository with common CRUD operations
     """
-    model: type[ModelT]
+    def __init__(self, db: Session, model: type[T]) -> None:
+        """
+        Initialize repository with database session and model type
+        """
+        self.db = db
+        self.model = model
 
-    @classmethod
-    async def get_by_id(
-        cls,
-        session: AsyncSession,
-        id: UUID,
-    ) -> ModelT | None:
-        """
-        Get a single record by ID
-        """
-        return await session.get(cls.model, id)
-
-    @classmethod
-    async def get_multi(
-        cls,
-        session: AsyncSession,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> Sequence[ModelT]:
-        """
-        Get multiple records with pagination
-        """
-        result = await session.execute(
-            select(cls.model).offset(skip).limit(limit)
-        )
-        return result.scalars().all()
-
-    @classmethod
-    async def count(cls, session: AsyncSession) -> int:
-        """
-        Count total records
-        """
-        result = await session.execute(
-            select(func.count()).select_from(cls.model)
-        )
-        return result.scalar_one()
-
-    @classmethod
-    async def create(
-        cls,
-        session: AsyncSession,
-        **kwargs: Any,
-    ) -> ModelT:
+    def create(self, **kwargs: Any) -> T:
         """
         Create a new record
         """
-        instance = cls.model(**kwargs)
-        session.add(instance)
-        await session.flush()
-        await session.refresh(instance)
+        instance = self.model(**kwargs)
+        self.db.add(instance)
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
-    @classmethod
-    async def update(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-        **kwargs: Any,
-    ) -> ModelT:
+    def get_by_id(self, record_id: int) -> T | None:
         """
-        Update an existing record
+        Get record by ID
         """
+        return self.db.get(self.model, record_id)
+
+    def get_all(self,
+                limit: int | None = None,
+                offset: int = 0) -> list[T]:
+        """
+        Get all records with pagination
+        """
+        stmt = select(self.model).offset(offset)
+        if limit:
+            stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def update(self, record_id: int, **kwargs: Any) -> T | None:
+        """
+        Update record by ID
+        """
+        instance = self.get_by_id(record_id)
+        if not instance:
+            return None
+
         for key, value in kwargs.items():
             setattr(instance, key, value)
-        await session.flush()
-        await session.refresh(instance)
+
+        self.db.commit()
+        self.db.refresh(instance)
         return instance
 
-    @classmethod
-    async def delete(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-    ) -> None:
+    def delete(self, record_id: int) -> bool:
         """
-        Delete a record
+        Delete record by ID
         """
-        await session.delete(instance)
-        await session.flush()
+        instance = self.get_by_id(record_id)
+        if not instance:
+            return False
+
+        self.db.delete(instance)
+        self.db.commit()
+        return True
 ```
 
 ---
@@ -105,22 +85,21 @@ class BaseRepository(Generic[ModelT]):
 ### BaseRepository Documentation
 
 **Class Responsibility and Purpose:**
-The `BaseRepository` class serves as a generic base for repositories, providing common CRUD operations (`get_by_id`, `get_multi`, `count`, `create`, `update`, `delete`). This class ensures consistency across different model-specific repositories by abstracting database interactions.
+The `BaseRepository` class serves as a generic base for CRUD operations, providing common functionality to interact with database records using SQLAlchemy sessions. It encapsulates basic data access logic, ensuring consistency across repositories.
 
 **Public Interface (Key Methods):**
-- **`get_by_id(session: AsyncSession, id: UUID) -> ModelT | None`:** Retrieves a single record by its ID.
-- **`get_multi(session: AsyncSession, skip: int = 0, limit: int = 100) -> Sequence[ModelT]`:** Fetches multiple records with pagination support.
-- **`count(session: AsyncSession) -> int`:** Counts the total number of records in the database.
-- **`create(session: AsyncSession, **kwargs: Any) -> ModelT`:** Creates a new record using keyword arguments.
-- **`update(session: AsyncSession, instance: ModelT, **kwargs: Any) -> ModelT`:** Updates an existing record with provided keyword arguments.
-- **`delete(session: AsyncSession, instance: ModelT) -> None`:** Deletes a specified record.
+- **`create(**kwargs: Any) -> T:`**: Creates a new record.
+- **`get_by_id(record_id: int) -> T | None:`**: Retrieves a record by its ID.
+- **`get_all(limit: int | None = None, offset: int = 0) -> list[T]:`**: Fetches all records with optional pagination.
+- **`update(record_id: int, **kwargs: Any) -> T | None:`**: Updates an existing record by ID.
+- **`delete(record_id: int) -> bool:`**: Deletes a record by its ID.
 
 **Design Patterns Used:**
-The class leverages the **Factory Method pattern** for creating and managing repository instances. It also implicitly uses the **Strategy pattern** through its generic type parameter `ModelT`, allowing different model-specific repositories to implement these methods with their own logic.
+The class employs the **Strategy Pattern** through generic type parameters (`T`) to support various model types. It also follows the **Repository Pattern**, abstracting database interactions and providing a clean interface for business logic.
 
 **How it Fits in the Architecture:**
-`BaseRepository` is a crucial component of the backend architecture, providing a standardized interface for database operations. By using this base class, developers can focus on implementing specific business logic without worrying about boilerplate code. This promotes code reuse and maintainability across different models. The repository pattern ensures that data access logic is separated from business logic, adhering to the Single Responsibility Principle.
+`BaseRepository` is part of the data access layer, designed to be extended by specific repository classes tailored to different models (e.g., `UserRepository`, `ReferralRepository`). This abstraction allows for consistent CRUD operations across the application while maintaining a clear separation between business logic and database interactions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 10:26*
+*Generated by CodeWorm on 2026-02-18 22:54*
