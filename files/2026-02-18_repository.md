@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/auth/repository.py
+**File:** TEMPLATES/fullstack-template/backend/app/user/repository.py
 **Language:** python
-**Lines:** 1-179
+**Lines:** 1-112
 **Complexity:** 0.0
 
 ---
@@ -16,117 +16,114 @@
 ⒸAngelaMos | 2025
 repository.py
 """
-
 from uuid import UUID
-from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .RefreshToken import RefreshToken
+from config import UserRole
+from .User import User
 from core.base_repository import BaseRepository
 
 
-class RefreshTokenRepository(BaseRepository[RefreshToken]):
+class UserRepository(BaseRepository[User]):
     """
-    Repository for RefreshToken model database operations
+    Repository for User model database operations
     """
-    model = RefreshToken
+    model = User
 
     @classmethod
-    async def get_by_hash(
+    async def get_by_email(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+        email: str,
+    ) -> User | None:
         """
-        Get refresh token by its hash
+        Get user by email address
         """
         result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash
-            )
+            select(User).where(User.email == email)
         )
         return result.scalars().first()
 
     @classmethod
-    async def get_valid_by_hash(
+    async def get_by_id(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+        id: UUID,
+    ) -> User | None:
         """
-        Get valid (not revoked, not expired) refresh token by hash
+        Get user by ID
+        """
+        return await session.get(User, id)
+
+    @classmethod
+    async def email_exists(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> bool:
+        """
+        Check if email is already registered
         """
         result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash,
-                RefreshToken.is_revoked == False,
-                RefreshToken.expires_at > datetime.now(UTC),
-            )
+            select(User.id).where(User.email == email)
         )
-        return result.scalars().first()
+        return result.scalars().first() is not None
 
     @classmethod
-    async def create_token(
+    async def create_user(
         cls,
         session: AsyncSession,
-        user_id: UUID,
-        token_hash: str,
-        family_id: UUID,
-        expires_at: datetime,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> RefreshToken:
+        email: str,
+        hashed_password: str,
+        full_name: str | None = None,
+        role: UserRole = UserRole.USER,
+    ) -> User:
         """
-        Create a new refresh token
+        Create a new user
         """
-        token = RefreshToken(
-            user_id = user_id,
-            token_hash = token_hash,
-            family_id = family_id,
-            expires_at = expires_at,
-            device_id = device_id,
-            device_name = device_name,
-            ip_address = ip_address,
+        user = User(
+            email = email,
+            hashed_password = hashed_password,
+            full_name = full_name,
+            role = role,
         )
-        session.add(token)
+        session.add(user)
         await session.flush()
-        await session.refresh(token)
-        return token
+        await session.refresh(user)
+        return user
 
     @classmethod
-    async def revoke_token(
+    async def update_password(
         cls,
         session: AsyncSession,
-        token: RefreshToken,
-    ) -> RefreshToken:
+        user: User,
+        hashed_password: str,
+    ) -> User:
         """
-        Revoke a single token
+        Update user password and increment token version
         """
-        token.revoke()
+        user.hashed_password = hashed_password
+        user.increment_token_version()
         await session.flush()
-        await session.refresh(token)
-        return token
+        await session.refresh(user)
+        return user
 
     @classmethod
-    async def revoke_family(
+    async def increment_token_version(
         cls,
         session: AsyncSession,
-        family_id: UUID,
-    ) -> int:
+        user: User,
+    ) -> User:
         """
-        Revoke all tokens in a family (for replay attack response)
+        Invalidate all user tokens
+        """
+        user.increment_token_version()
+        await session.flush()
+        await session.refresh(user)
+        return user
 
-        Returns count of revoked tokens
-        """
-        result = await session.execute(
-            update(RefreshToken).where(
-                RefreshToken.family_id == family_id,
-                RefreshToken.is_revoked == False,
-            ).values(is_revoked = True,
-                     
 ```
 
 ---
@@ -136,30 +133,27 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
 ### repository.py
 
 **Purpose and Responsibility:**
-This Python file defines a `RefreshTokenRepository` class, which is part of the authentication module in a full-stack application. The repository handles database operations for managing refresh tokens, including creation, revocation, validation, and cleanup.
+This file defines a `UserRepository` class that encapsulates database operations for managing user entities within the application. It provides methods to retrieve, create, update, and validate user data.
 
-**Key Exports or Public Interface:**
-- `get_by_hash`: Retrieves a refresh token by its hash.
-- `get_valid_by_hash`: Fetches valid (not revoked, not expired) refresh tokens by hash.
-- `create_token`: Creates a new refresh token for a user.
-- `revoke_token`: Revokes a single token.
-- `revoke_family`: Revoke all tokens in a family to mitigate replay attacks.
-- `revoke_all_user_tokens`: Logs out all devices associated with a user.
-- `get_user_active_sessions`: Lists active sessions for a specific user.
-- `cleanup_expired`: Deletes expired tokens during maintenance.
+**Key Exports and Public Interface:**
+- **get_by_email(session: AsyncSession, email: str) -> User | None:** Retrieves a user by their email address.
+- **get_by_id(session: AsyncSession, id: UUID) -> User | None:** Fetches a user by their unique identifier (UUID).
+- **email_exists(session: AsyncSession, email: str) -> bool:** Checks if an email is already registered in the database.
+- **create_user(session: AsyncSession, email: str, hashed_password: str, full_name: str | None = None, role: UserRole = UserRole.USER) -> User:** Creates a new user with specified details.
+- **update_password(session: AsyncSession, user: User, hashed_password: str) -> User:** Updates the password and increments the token version for an existing user.
+- **increment_token_version(session: AsyncSession, user: User) -> User:** Invalidates all tokens associated with a user by incrementing their token version.
 
-**How It Fits into the Project:**
-This repository fits into the larger project by providing essential database operations for managing refresh tokens. These operations are crucial for maintaining session security and ensuring that only valid, non-expired tokens can be used to access protected resources.
+**How it Fits in the Project:**
+The `UserRepository` is part of the core data access layer, ensuring that all database interactions related to users are centralized and consistent. It interacts directly with the `BaseRepository` class for common CRUD operations and leverages SQLAlchemy for asynchronous database queries.
 
 **Notable Design Decisions:**
-- The use of SQLAlchemy for ORM-based database interactions.
-- Asynchronous methods using `AsyncSession` for handling database transactions.
-- Validation checks in methods like `get_valid_by_hash` ensure that only active tokens are returned.
-- Batch operations in `revoke_family` and `revoke_all_user_tokens` to efficiently handle multiple token revocations.
+- **Use of SQLAlchemy:** The repository utilizes SQLAlchemy's `AsyncSession` for handling asynchronous database transactions.
+- **Type Hints and Annotations:** Comprehensive type hints are used to ensure clear and maintainable code, making it easier to understand the expected input and output types.
+- **Role Enum:** The use of an `UserRole` enum ensures that role assignments are consistent and validated within the application.
 ```
 
-This documentation provides an overview of the file's purpose, key functionalities, integration within the project, and significant design choices.
+This documentation provides a high-level overview of the file's purpose, key methods, integration with other parts of the project, and design choices.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 10:52*
+*Generated by CodeWorm on 2026-02-18 19:53*
