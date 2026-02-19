@@ -1,0 +1,137 @@
+# WiseAdapter
+
+**Type:** Class Documentation
+**Repository:** stripe-referral
+**File:** src/stripe_referral/adapters/wise.py
+**Language:** python
+**Lines:** 23-229
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class WiseAdapter(PayoutAdapter):
+    """
+    Payout adapter for Wise API automated transfers
+    """
+    def __init__(self, api_token: str, sandbox: bool = False) -> None:
+        """
+        Initialize with Wise API token
+
+        Args:
+            api_token: Wise API token
+            sandbox: Use sandbox environment if True
+        """
+        self.api_token = api_token
+        self.base_url = (
+            "https://api.sandbox.transferwise.tech"
+            if sandbox else "https://api.transferwise.com"
+        )
+        self.headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        }
+
+    def _make_request(self,
+                      method: str,
+                      endpoint: str,
+                      **kwargs: Any) -> dict[str,
+                                             Any]:
+        """
+        Make HTTP request to Wise API with error handling
+        """
+        url = f"{self.base_url}{endpoint}"
+
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers = self.headers,
+                timeout = 30,
+                **kwargs
+            )
+            response.raise_for_status()
+            json_response: dict[str, Any] = response.json()
+            return json_response
+        except requests.exceptions.HTTPError as e:
+            raise PayoutAdapterError(
+                f"Wise API error: {e.response.text}",
+                adapter = "wise",
+                endpoint = endpoint,
+                status_code = e.response.status_code,
+            ) from e
+        except Exception as e:
+            raise PayoutAdapterError(
+                f"Wise request error: {str(e)}",
+                adapter = "wise",
+                endpoint = endpoint,
+            ) from e
+
+    def _get_profile_id(self) -> int:
+        """
+        Get first Wise profile ID
+        """
+        profiles = self._make_request("GET", "/v1/profiles")
+        profiles_list = cast(list[dict[str, Any]], profiles)
+        return cast(int, profiles_list[0]["id"])
+
+    def send_payout(
+        self,
+        user_id: str,
+        amount: float,
+        currency: str,
+        recipient_data: dict[str,
+                             Any],
+    ) -> PayoutResult:
+        """
+        Send payout via Wise API
+        """
+        try:
+            profile_id = self._get_profile_id()
+
+            source_currency = recipient_data.get(
+                "source_currency",
+                CurrencyCode.USD.value
+            )
+            target_currency = currency
+
+            quote = self._make_request(
+                "POST",
+                f"/v3/profiles/{profile_id}/quotes",
+                json = {
+                    "sourceCurrency": source_currency,
+                    "targetCurrency": target_currency,
+                    "targetAmount": amount,
+                    "payOut": "BANK_TRANSFER",
+                },
+            )
+
+            recipient = self._make_
+```
+
+---
+
+## Class Documentation
+
+### WiseAdapter Documentation
+
+**Class Responsibility and Purpose:**
+The `WiseAdapter` class is responsible for interfacing with the Wise API to facilitate automated transfer payouts. It handles initialization, making HTTP requests, and processing responses to ensure successful transfers.
+
+**Public Interface (Key Methods):**
+- **`__init__(self, api_token: str, sandbox: bool = False) -> None`:** Initializes the adapter with an API token and optionally uses a sandbox environment.
+- **`_make_request(self, method: str, endpoint: str, **kwargs: Any) -> dict[str, Any]`:** Makes HTTP requests to the Wise API while handling errors.
+- **`send_payout(self, user_id: str, amount: float, currency: str, recipient_data: dict[str, Any]) -> PayoutResult`:** Sends a payout via the Wise API and returns a `PayoutResult`.
+- **`_get_profile_id(self) -> int`:** Retrieves the first profile ID from the Wise API.
+
+**Design Patterns Used:**
+The class uses the **Strategy Pattern** for making HTTP requests, allowing different request methods to be handled flexibly. It also employs error handling and exception management through custom `PayoutAdapterError` exceptions.
+
+**How it Fits in the Architecture:**
+`WiseAdapter` is part of a larger system that manages payouts across multiple adapters (e.g., Stripe). It interacts with other classes such as `PayoutManager`, which coordinates between different adapters to ensure seamless payout processing. The class adheres to the Single Responsibility Principle by focusing solely on interfacing with the Wise API, making it easy to integrate and maintain within the overall architecture.
+
+---
+
+*Generated by CodeWorm on 2026-02-18 22:44*
