@@ -1,0 +1,132 @@
+# CycleService
+
+**Type:** Class Documentation
+**Repository:** ios-test
+**File:** fastapi/app/cycle/service.py
+**Language:** python
+**Lines:** 28-350
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class CycleService:
+    """
+    Cycle phase calculations, predictions, and pattern analysis
+    """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    def _get_phase(self, cycle_day: int, cycle_length: int) -> CyclePhase:
+        """
+        Determine cycle phase based on cycle day
+        """
+        if cycle_day <= 0 or cycle_day > cycle_length:
+            return CyclePhase.UNKNOWN
+
+        if cycle_day <= 5:
+            return CyclePhase.MENSTRUAL
+
+        ovulation_day = cycle_length - 14
+        follicular_end = ovulation_day - 2
+        ovulation_end = ovulation_day + 2
+
+        if cycle_day <= follicular_end:
+            return CyclePhase.FOLLICULAR
+        elif cycle_day <= ovulation_end:
+            return CyclePhase.OVULATION
+        else:
+            return CyclePhase.LUTEAL
+
+    def _get_phase_day(self, cycle_day: int, cycle_length: int) -> int:
+        """
+        Get day within current phase
+        """
+        phase = self._get_phase(cycle_day, cycle_length)
+
+        if phase == CyclePhase.MENSTRUAL:
+            return cycle_day
+
+        ovulation_day = cycle_length - 14
+        follicular_end = ovulation_day - 2
+        ovulation_end = ovulation_day + 2
+
+        if phase == CyclePhase.FOLLICULAR:
+            return cycle_day - 5
+        elif phase == CyclePhase.OVULATION:
+            return cycle_day - follicular_end
+        elif phase == CyclePhase.LUTEAL:
+            return cycle_day - ovulation_end
+
+        return 1
+
+    def _get_random_tip(self, phase: CyclePhase) -> str:
+        """
+        Get a random tip for the phase
+        """
+        tips = PHASE_TIPS.get(phase, PHASE_TIPS[CyclePhase.UNKNOWN])
+        return random.choice(tips)
+
+    async def get_current_status(self, user_id: UUID) -> CycleStatus:
+        """
+        Get current cycle status for dashboard
+        """
+        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
+        if not partner:
+            raise PartnerNotFound(str(user_id))
+
+        cycle_length = partner.average_cycle_length
+        last_period = partner.last_period_start
+        today = date.today()
+
+        if not last_period:
+            return CycleStatus(
+                current_day = 0,
+                cycle_length = cycle_length,
+                phase = CyclePhase.UNKNOWN,
+                phase_day = 0,
+                days_until_period = None,
+                predicted_period_start = None,
+                last_period_start = None,
+                is_period_active = False,
+            )
+
+        days_since = (today - last_period).days + 1
+        current_day = ((days_since - 1) % cycle_length) + 1
+
+        predicted_start = last_period + timedelta(days = cycle_length)
+        while predicted_start <= today:
+            predicted_start += timedelta(days = cycle_length)
+
+        days_until = (predicted_start - today).days
+
+        phase = self._get_phase(current_day, cycle_length)
+        phase_day = self._get_phase_day(current_da
+```
+
+---
+
+## Class Documentation
+
+### CycleService Documentation
+
+**Class Responsibility and Purpose:**
+The `CycleService` class is responsible for managing cycle phase calculations, predictions, and pattern analysis within a health monitoring application. It interacts with a database to retrieve user-specific data and provides comprehensive information about the current menstrual cycle.
+
+**Public Interface (Key Methods):**
+- **`get_current_status(user_id: UUID) -> CycleStatus`:** Returns the current status of the user's cycle, including phase, day in phase, days until next period, and more.
+- **`get_phase_info(user_id: UUID) -> list[PhaseInfo]`:** Provides detailed information about each phase of the menstrual cycle for the given user.
+
+**Design Patterns Used:**
+The class employs a combination of simple state management and utility methods. It does not explicitly use design patterns like Factory, Observer, or Strategy, but its structure is Pythonic with clear separation of concerns.
+
+**How it Fits in the Architecture:**
+`CycleService` acts as a service layer within the application architecture, handling business logic related to cycle data. It interacts with `PartnerRepository` for database operations and returns structured data through methods like `get_current_status` and `get_phase_info`. This design ensures that the core business logic is encapsulated, making it easier to manage and test.
+
+The class also uses type hints (e.g., `UUID`, `timedelta`) and context managers implicitly by leveraging Python’s strong typing system. The use of asynchronous methods (`async def`) allows for efficient handling of database operations in a non-blocking manner, which is crucial for performance in web applications.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 08:38*
