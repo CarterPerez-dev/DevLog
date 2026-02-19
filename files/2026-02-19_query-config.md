@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** fullstack-template
-**File:** frontends/react-native-ios/src/core/api/query.config.ts
+**File:** frontends/react-scss/src/core/api/query.config.ts
 **Language:** typescript
-**Lines:** 1-117
+**Lines:** 1-106
 **Complexity:** 0.0
 
 ---
@@ -13,14 +13,13 @@
 
 ```typescript
 // ===================
-// © AngelaMos | 2026
+// © AngelaMos | 2025
 // query.config.ts
 // ===================
 
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
-import { QUERY_CONFIG } from '@/core/config'
-import { queryClientStorage } from '@/core/storage'
+import { toast } from 'sonner'
+import { QUERY_CONFIG } from '@/config'
 import { ApiError, ApiErrorCode } from './errors'
 
 const NO_RETRY_ERROR_CODES: readonly ApiErrorCode[] = [
@@ -45,12 +44,6 @@ const calculateRetryDelay = (attemptIndex: number): number => {
   return Math.min(baseDelay * 2 ** attemptIndex, maxDelay)
 }
 
-let showToast: ((message: string) => void) | null = null
-
-export const setToastHandler = (handler: (message: string) => void): void => {
-  showToast = handler
-}
-
 const handleQueryCacheError = (
   error: Error,
   query: { state: { data: unknown } }
@@ -60,7 +53,7 @@ const handleQueryCacheError = (
       error instanceof ApiError
         ? error.getUserMessage()
         : 'Background update failed'
-    showToast?.(message)
+    toast.error(message)
   }
 }
 
@@ -73,7 +66,7 @@ const handleMutationCacheError = (
   if (mutation.options.onError === undefined) {
     const message =
       error instanceof ApiError ? error.getUserMessage() : 'Operation failed'
-    showToast?.(message)
+    toast.error(message)
   }
 }
 
@@ -109,45 +102,46 @@ export const queryClient = new QueryClient({
       gcTime: QUERY_CONFIG.GC_TIME.DEFAULT,
       retry: shouldRetryQuery,
       retryDelay: calculateRetryDelay,
-      networkMode: 'offlineFirst',
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
     },
     mutations: {
       retry: QUERY_CONFIG.RETRY.NONE,
-      networkMode: 'offlineFirst',
     },
   },
   queryCache: new QueryCache({
     onError: handleQueryCacheError,
   }),
   mutationCache: new MutationCache({
-    onError: han
+    onError: handleMutationCacheError,
+  }),
+})
+
 ```
 
 ---
 
 ## File Overview
 
-# query.config.ts Documentation
+# query.config.ts
 
-## Purpose and Responsibility
-This file configures the `@tanstack/react-query` client for handling API queries and mutations in a React Native application. It sets up caching strategies, error handling, and persistence to ensure efficient data fetching and management.
+**Purpose**: This TypeScript source file configures and manages the `@tanstack/react-query` client for handling queries and mutations, ensuring consistent behavior across different types of API requests.
 
-## Key Exports and Public Interface
-- **QueryStrategy**: Defines different caching strategies (`standard`, `frequent`, `static`, `auth`) that can be applied to queries.
-- **queryClient**: The main `QueryClient` instance configured with various options for handling queries and mutations.
-- **queryClientPersister**: An asynchronous storage persister for persisting the query cache.
+**Key Exports & Public Interface**:
+- **QUERY_STRATEGIES**: A type-safe object defining various strategies for configuring query options.
+- **queryClient**: The main instance of the `QueryClient`, configured with default options and error handlers.
 
-## How it Fits into the Project
-This file is a crucial component of the application's API layer, providing a centralized configuration point for managing data fetching. It interacts with other core modules like `errors` and `storage`, ensuring consistent behavior across different parts of the app.
+**Project Integration**:
+This file is a critical component in the application's API layer, providing centralized configuration for query and mutation handling. It ensures that all queries and mutations adhere to predefined strategies and error management practices, enhancing consistency and reliability across the project.
 
-## Notable Design Decisions
-- **Error Handling**: Custom error handling functions (`handleQueryCacheError`, `handleMutationCacheError`) are used to manage errors gracefully, including showing user-friendly messages.
-- **Retry Mechanism**: A dynamic retry mechanism is implemented based on failure count and error type, ensuring that non-retriable errors do not trigger unnecessary retries.
-- **Caching Strategies**: Different caching strategies (`standard`, `frequent`, `static`, `auth`) are defined to cater to various use cases, optimizing data freshness and performance.
-- **Persistence**: The `queryClientPersister` ensures that query states are saved and restored across application sessions using local storage.
+**Design Decisions & Patterns**:
+- **Strategy Pattern**: The `QUERY_STRATEGIES` object uses a strategy pattern to define different configurations based on use cases.
+- **Error Handling**: Custom error handling functions (`handleQueryCacheError`, `handleMutationCacheError`) are used to manage and display errors appropriately, ensuring user-friendly feedback.
+- **Retry Mechanism**: A dynamic retry mechanism is implemented using `shouldRetryQuery` and `calculateRetryDelay`, allowing controlled retries based on failure count and error type.
 
-This file plays a vital role in maintaining the integrity and efficiency of data operations throughout the application.
+This file acts as a central hub for query management, making it easier to maintain and update API behavior across the application.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 17:17*
+*Generated by CodeWorm on 2026-02-19 17:41*
