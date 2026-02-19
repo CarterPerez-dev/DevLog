@@ -1,0 +1,135 @@
+# LocalAIService
+
+**Type:** Class Documentation
+**Repository:** vuemantics
+**File:** backend/services/ai/service.py
+**Language:** python
+**Lines:** 33-398
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class LocalAIService:
+    """
+    Handles AI processing using local Ollama models
+
+    Workflow:
+    1. Analyze media with Qwen2.5-VL to get text description
+    2. Generate embedding from description using bge-m3
+    3. Update upload record with results
+    """
+    def __init__(self) -> None:
+        """
+        Initialize local AI service.
+        """
+        self._ollama = OllamaManager()
+        self._vision_semaphore = asyncio.Semaphore(
+            config.VISION_SEMAPHORE_LIMIT
+        )
+        self._embedding_semaphore = asyncio.Semaphore(
+            config.EMBEDDING_SEMAPHORE_LIMIT
+        )
+
+        self._vision = VisionService(self._ollama, self._vision_semaphore)
+        self._embedding = EmbeddingService(
+            self._ollama,
+            self._embedding_semaphore
+        )
+
+        logger.info("Local AI service initialized (Ollama-based)")
+
+    async def _publish_progress(
+        self,
+        upload_id: UUID,
+        status: ProcessingStatus,
+        stage: ProcessingStage,
+        progress_percent: int,
+        message: str,
+        error_message: str | None = None,
+        audit_score: int | None = None,
+    ) -> None:
+        """
+        Publish upload progress via WebSocket
+
+        Args:
+            upload_id: Upload's ID
+            status: Current processing status
+            stage: Current processing stage
+            progress_percent: Progress percentage (0-100)
+            message: Human-readable message
+            error_message: Error details if failed
+            audit_score: Description quality score if available
+        """
+        try:
+            publisher = get_publisher()
+            progress_msg = UploadProgressUpdate(
+                payload = UploadProgressPayload(
+                    upload_id = str(upload_id),
+                    status = status,
+                    stage = stage,
+                    progress_percent = progress_percent,
+                    message = message,
+                    error_message = error_message,
+                    description_audit_score = audit_score,
+                ),
+                timestamp = datetime.utcnow(),
+            )
+            await publisher.publish_progress(str(upload_id), progress_msg)
+        except Exception as e:
+            logger.warning(
+                f"Failed to publish progress for {upload_id}: {e}"
+            )
+
+    async def analyze_media(self, upload_id: UUID) -> None:
+        """
+        Analyze media file and generate embeddings
+
+        Args:
+            upload_id: Upload to process
+
+        Updates upload record with:
+        - description: Text description
+        - embedding_local: 1024-dimensional vector
+        - processing_status: completed or failed
+        """
+        upload = await Upload.find_by_id(upload_id)
+        if not upload:
+            logger.error(f"Upload {upload_id} not found")
+            return
+
+        try:
+            await upload.update_status(ProcessingStatus.ANALYZING)
+            await self._publish_progres
+```
+
+---
+
+## Class Documentation
+
+### LocalAIService Documentation
+
+**Class Responsibility and Purpose:**
+The `LocalAIService` class is responsible for handling AI processing using local Ollama models, including analyzing media files, generating embeddings, and updating upload records with results. It orchestrates the workflow from media analysis to embedding generation.
+
+**Public Interface (Key Methods):**
+- **`__init__()`**: Initializes the service by setting up necessary resources like semaphores and services.
+- **`_publish_progress()`**: Publishes progress updates via WebSocket for a given upload ID, status, stage, and other details.
+- **`analyze_media(upload_id: UUID) -> None`**: Analyzes media files (both images and videos), generates embeddings, and updates the upload record.
+
+**Design Patterns Used:**
+- **Factory Method Pattern**: Implicitly used through `OllamaManager`, which manages the creation of AI services.
+- **Observer Pattern**: `_publish_progress()` method acts as an observer to notify other components about progress updates.
+
+**Relationship to Other Classes:**
+- **`OllamaManager` and `VisionService`, `EmbeddingService`**: These are dependencies that handle specific tasks like vision analysis and embedding generation.
+- **`Upload` and `StorageService`**: The service interacts with these classes to fetch upload details and metadata, respectively.
+
+**State Management Approach:**
+The class uses semaphores (`_vision_semaphore`, `_embedding_semaphore`) to manage concurrent access and ensure thread safety during the processing stages. Progress updates are published using a WebSocket connection, providing real-time feedback on the processing status.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 01:28*
