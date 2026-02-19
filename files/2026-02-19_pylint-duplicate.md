@@ -1,0 +1,138 @@
+# pylint_duplicate
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/pytest/pylint_duplicate.py
+**Language:** python
+**Lines:** 1-131
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+Custom Pylint plugin for near-exact duplicate detection (99% similarity)
+Working version for pylint 3.3.7
+"""
+
+from typing import TYPE_CHECKING, ClassVar
+import difflib
+from astroid import nodes
+from pylint.checkers import BaseChecker
+
+if TYPE_CHECKING:
+    from pylint.lint import PyLinter
+
+
+# Global storage for functions across all checker instances
+_COLLECTED_FUNCTIONS = []
+
+
+class StrictDuplicateChecker(BaseChecker):
+    """Check for near-exact duplicates (99% similarity)"""
+
+    name = "strict-duplicate"
+    msgs = {
+        "R9901": (
+            "Near-exact duplicate code found with %s (similarity: %.2f%%)",
+            "near-exact-duplicate",
+            "Function is 99%% similar to another function. "
+            "This usually indicates accidental copy-paste.",
+        ),
+    }
+
+    options = (
+        (
+            "min-similarity-lines",
+            {
+                "default": 4,
+                "type": "int",
+                "metavar": "<int>",
+                "help": "Minimum lines to be considered as duplicate",
+            },
+        ),
+    )
+
+    def __init__(self, linter: "PyLinter") -> None:
+        super().__init__(linter)
+        self._seen_files = set()
+
+    def open(self):
+        """Initialize the checker"""
+        global _COLLECTED_FUNCTIONS
+        # Only clear if this is the first file
+        if not self._seen_files:
+            _COLLECTED_FUNCTIONS = []
+
+    def visit_module(self, node: nodes.Module) -> None:
+        """Track which files we've seen"""
+        if node.file not in self._seen_files:
+            self._seen_files.add(node.file)
+
+    def visit_functiondef(self, node: nodes.FunctionDef) -> None:
+        """Visit function definitions and collect them"""
+        global _COLLECTED_FUNCTIONS
+
+        # Get the source code of the function
+        try:
+            source_lines = node.as_string().splitlines()
+            # Normalize lines - remove empty lines and normalize whitespace
+            normalized_lines = []
+            for line in source_lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#'):  # Skip comments
+                    normalized_lines.append(stripped)
+
+            if len(normalized_lines) >= self.config.min_similarity_lines:
+                func_info = {
+                    'node': node,
+                    'file': node.root().file,
+                    'lines': normalized_lines,
+                    'name': node.name,
+                    'lineno': node.lineno
+                }
+
+                # Check against already collected functions
+                for existing in _COLLECTED_FUNCTIONS:
+                    if existing['name'] != func_info['name']:  # Skip same names
+                        similarity = self._calculate_similarity(
+                            existing['lines'],
+                            func_info['lines']
+                        )
+                        if similarity >= 0.99:
+                            # Report the du
+```
+
+---
+
+## File Overview
+
+"""
+Custom Pylint plugin for detecting near-exact duplicate code with 99% similarity.
+Working version for pylint 3.3.7.
+
+### Purpose and Responsibility
+This file implements a custom Pylint checker to identify nearly identical function definitions across the project, ensuring that accidental copy-pasting is minimized.
+
+### Key Exports and Public Interface
+- **StrictDuplicateChecker**: The main class responsible for detecting near-exact duplicates.
+  - `visit_module`: Tracks which files have been seen.
+  - `visit_functiondef` and `visit_asyncfunctiondef`: Visits function definitions, collects them, and checks for similarities.
+  - `_calculate_similarity`: Calculates the similarity between two code blocks using a sequence matcher.
+
+- **register**: A function to register the checker with Pylint.
+
+### How It Fits into the Project
+This plugin is part of the `CertGames-Core` project's development tools. By integrating it into the linting process, developers can proactively identify and address potential issues related to accidental code duplication, improving code quality and maintainability.
+
+### Notable Design Decisions
+- **Global Collection**: Uses a global list `_COLLECTED_FUNCTIONS` to store function definitions across all checker instances.
+- **Similarity Threshold**: Configurable minimum lines (`min_similarity_lines`) and similarity threshold (99%) for considering functions as duplicates.
+- **Normalization**: Normalizes source code by removing empty lines and comments before comparison, ensuring accurate detection.
+- **Error Reporting**: Reports near-exact duplicate functions with a custom Pylint message detailing the file, function name, and similarity percentage.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 15:01*
