@@ -1,0 +1,158 @@
+# clear_users_except_admin
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/dev-seed/clear_users_except_admin.py
+**Language:** python
+**Lines:** 1-154
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+#!/usr/bin/env python3
+"""
+Clear All Users Except Admin - Development Only
+
+Deletes all users from the database EXCEPT the specified admin user.
+Preserves the admin user's data including UserManagement records.
+
+USAGE:
+    python devtools/seed/clear_users_except_admin.py
+"""
+
+import os
+import sys
+from datetime import datetime
+
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+os.environ.setdefault('ENVIRONMENT', 'development')
+
+try:
+    from mongoengine import connect
+    from bson import ObjectId
+
+    from config import get_config
+    from api.core.database import init_db
+    from api.domains.account.models.User import User
+    from api.admin.models.users.UserManagement import UserManagement
+
+except ImportError as e:
+    print(f"Import Error: {e}")
+    sys.exit(1)
+
+ADMIN_EMAIL = "???"
+ADMIN_USER_ID = "???"
+
+
+def connect_database() -> None:
+    """
+    Connect to MongoDB using application config
+    """
+    try:
+        config = get_config()
+        print(f"Connecting to MongoDB...")
+        init_db()
+        print(f" Connected to database successfully\n")
+    except Exception as e:
+        print(f" Database connection failed: {e}")
+        sys.exit(1)
+
+
+def verify_admin_exists() -> User | None:
+    """
+    Verify the admin user exists before deletion
+    """
+    print(f"Verifying admin user exists...")
+
+    admin = User.objects(email = ADMIN_EMAIL).first()
+
+    if not admin:
+        print(f" ERROR: Admin user with email '{ADMIN_EMAIL}' not found!")
+        print(f"   Cannot proceed without admin user verification.")
+        return None
+
+    print(f" Admin user found:")
+    print(f"   ID: {admin.id}")
+    print(f"   Username: {admin.username}")
+    print(f"   Email: {admin.email}")
+    print(f"   Level: {admin.level}")
+    print(f"   Is Admin: {admin.is_admin}\n")
+
+    return admin
+
+
+def clear_users_except_admin(admin: User) -> None:
+    """
+    Delete all users except the specified admin user
+    """
+    total_users = User.objects.count()
+    print(f"Total users in database: {total_users}")
+
+    if total_users == 1:
+        print(f"✓ Only admin user exists. Nothing to delete.\n")
+        return
+
+    users_to_delete = total_users - 1
+    print(f"Users to delete: {users_to_delete}\n")
+
+    confirm = input(
+        f"WARNING: This will DELETE {users_to_delete} user(s) (keeping only '{admin.email}')!\n"
+        f"   Type 'DELETE' to confirm: "
+    )
+
+    if confirm != 'DELETE':
+        print("✗ Deletion cancelled.\n")
+        sys.exit(0)
+
+    print(f"\nDeleting users (except admin)...")
+
+    deleted_users = User.objects(email__ne = ADMIN_EMAIL).delete()
+    print(f"Deleted {deleted_users} users")
+
+    admin_id = admin.id
+
+    print(f"\nCleaning up UserManagement records...")
+    deleted_mgmt = UserManagement.objects(userId__ne = admin_id).delete()
+    print(f"Deleted {deleted_mgmt} UserManagement records")
+
+    remaining = User.objects.count()
+    print(f"\n✓ Cleanup complete!")
+    print(f"   Remaining users: {remaining}")
+
+
+```
+
+---
+
+## File Overview
+
+# clear_users_except_admin.py
+
+**Purpose:**
+This script is designed to delete all users from the database except for a specified admin user, ensuring that critical administrative data remains intact. It is intended for development environments only and should not be used in production.
+
+**Key Exports/Interface:**
+- `main()`: The entry point of the script.
+- `connect_database()`: Establishes a connection to MongoDB using application configuration.
+- `verify_admin_exists()`: Ensures that the specified admin user exists before proceeding with any deletions.
+- `clear_users_except_admin(admin)`: Deletes all users except for the specified admin, and cleans up related UserManagement records.
+
+**Project Integration:**
+This script is part of the `devtools` directory within CertGames-Core. It leverages existing database models and configurations to perform its task. The script should be run from the command line with proper environment setup to ensure it operates correctly in a development context.
+
+**Notable Design Decisions:**
+- **Error Handling:** Comprehensive error handling ensures that the script stops execution if any critical issues arise, such as missing admin users or database connection failures.
+- **User Interaction:** The script prompts for confirmation before proceeding with deletions, enhancing safety and reducing the risk of accidental data loss.
+- **Environment Check:** Ensures the script is only run in a development environment to prevent accidental execution in production.
+```
+
+This documentation provides an overview of the file's purpose, its key functions, how it integrates into the project, and highlights some important design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 12:28*
