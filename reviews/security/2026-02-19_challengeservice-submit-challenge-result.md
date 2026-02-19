@@ -1,0 +1,144 @@
+# ChallengeService.submit_challenge_result
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** backend/api/domains/social/services/challenge_ops.py
+**Language:** python
+**Lines:** 267-379
+**Complexity:** 17.0
+
+---
+
+## Source Code
+
+```python
+def submit_challenge_result(
+        challenge_id: str | ObjectId,
+        user_id: str | ObjectId,
+        test_attempt_id: str | ObjectId,
+        score: float,
+        total_questions: int
+    ) -> Challenge:
+        """
+        Submit test result for a challenge
+        Updates challenger or challenged test attempt and score
+        If both completed, determines winner and marks as completed
+        """
+        challenge_id = ObjectId(challenge_id) if isinstance(
+            challenge_id,
+            str
+        ) else challenge_id
+        user_id = ObjectId(user_id
+                           ) if isinstance(user_id,
+                                           str) else user_id
+        test_attempt_id = ObjectId(test_attempt_id) if isinstance(
+            test_attempt_id,
+            str
+        ) else test_attempt_id
+
+        challenge = Challenge.objects(id = challenge_id).first()
+        if not challenge:
+            raise NotFoundError("Challenge", str(challenge_id))
+
+        if challenge.status not in [ChallengeStatus.ACCEPTED.value,
+                                    ChallengeStatus.IN_PROGRESS.value]:
+            raise BusinessRuleError(
+                "Challenge must be accepted to submit results",
+                error_code = "CHALLENGE_NOT_ACTIVE"
+            )
+
+        percentage_score = (score / total_questions) * 100
+
+        if user_id == challenge.challengerUserId:
+            challenge.update(
+                set__challengerTestAttemptId = test_attempt_id,
+                set__challengerScore = percentage_score,
+                set__status = ChallengeStatus.IN_PROGRESS.value
+            )
+        elif user_id == challenge.challengedUserId:
+            challenge.update(
+                set__challengedTestAttemptId = test_attempt_id,
+                set__challengedScore = percentage_score,
+                set__status = ChallengeStatus.IN_PROGRESS.value
+            )
+        else:
+            raise BusinessRuleError(
+                "User is not part of this challenge",
+                error_code = "NOT_CHALLENGE_PARTICIPANT"
+            )
+
+        challenge.reload()
+
+        opponent_id = (
+            challenge.challengedUserId if user_id
+            == challenge.challengerUserId else challenge.challengerUserId
+        )
+        submitter = User.objects(id = user_id).only("username").first()
+
+        both_completed = (
+            challenge.challengerScore is not None
+            and challenge.challengedScore is not None
+        )
+
+        if submitter:
+            SocialSocketService.emit_challenge_result_submitted(
+                challenge_id = str(challenge.id),
+                submitter_id = str(user_id),
+                submitter_username = submitter.username,
+                opponent_id = str(opponent_id),
+                score = percentage_score,
+                total_questions = total_questions,
+                test_category = challenge.testCategory,
+                both_completed = both_completed
+            )
+
+     
+```
+
+---
+
+## Security Review
+
+### Security Review
+
+**Vulnerabilities Found:**
+
+1. **Hardcoded Secrets or Credentials:** No hardcoded secrets are present in the provided code.
+   - **Severity:** Info
+
+2. **Input Validation Gaps:** The function does not validate `score` and `total_questions`, which could lead to potential issues if these values are manipulated.
+   - **Severity:** Medium
+   - **Attack Vector:** An attacker could submit invalid or malicious data, potentially causing errors or unexpected behavior.
+
+3. **Error Handling Leaks Information:** The code raises specific exceptions with error codes, which might leak information about the system's internal state.
+   - **Severity:** Low
+   - **Recommendation:** Use generic exception handling and log detailed errors for debugging purposes only.
+
+4. **Overall Security Posture:**
+   - The function is generally secure but could benefit from improved input validation and more robust error handling.
+
+### Recommended Fixes:
+
+1. **Input Validation:**
+   ```python
+   if not 0 <= score <= total_questions:
+       raise ValueError("Score must be between 0 and the number of questions")
+   ```
+
+2. **Error Handling:**
+   ```python
+   try:
+       # Code that might raise an exception
+   except Exception as e:
+       logger.error(f"An error occurred: {e}")
+       raise BusinessRuleError("Unexpected error", error_code="UNEXPECTED_ERROR")
+   ```
+
+3. **Logging and Error Messages:**
+   - Ensure detailed logging is done in a secure manner, avoiding exposing sensitive information.
+
+By addressing these issues, the overall security posture of the function can be significantly improved.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 08:21*
