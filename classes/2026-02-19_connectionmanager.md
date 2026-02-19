@@ -1,10 +1,10 @@
 # ConnectionManager
 
 **Type:** Class Documentation
-**Repository:** vuemantics
-**File:** backend/core/websocket/manager.py
+**Repository:** CodeWorm
+**File:** dashboard/backend/ws.py
 **Language:** python
-**Lines:** 17-177
+**Lines:** 21-54
 **Complexity:** 0.0
 
 ---
@@ -13,99 +13,39 @@
 
 ```python
 class ConnectionManager:
-    """
-    Manages WebSocket connections and subscriptions
-
-    Handles connection lifecycle and routing messages to subscribers
-    Does NOT handle Redis pub/sub (that's in publisher.py)
-    """
     def __init__(self) -> None:
-        """
-        Initialize connection manager
-        """
-        self.user_connections: dict[str, set[WebSocket]] = defaultdict(set)
-        self.upload_subscribers: dict[str, set[str]] = defaultdict(set)
-        self.user_subscriptions: dict[str, set[str]] = defaultdict(set)
+        self.active: list[WebSocket] = []
+        self.log_buffer: deque[dict[str, Any]] = deque(maxlen=LOG_BUFFER_SIZE)
 
-    async def connect(self, user_id: str, websocket: WebSocket) -> None:
-        """
-        Register new WebSocket connection
+    async def connect(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self.active.append(websocket)
+        if self.log_buffer:
+            history = orjson.dumps({
+                "channel": "codeworm:history",
+                "data": list(self.log_buffer),
+            }).decode("utf-8")
+            try:
+                await websocket.send_text(history)
+            except Exception:
+                pass
 
-        Args:
-            user_id: User's ID
-            websocket: WebSocket connection
-        """
-        self.user_connections[user_id].add(websocket)
-        logger.info(
-            f"User {user_id} connected "
-            f"(total connections: {len(self.user_connections[user_id])})"
-        )
+    def disconnect(self, websocket: WebSocket) -> None:
+        if websocket in self.active:
+            self.active.remove(websocket)
 
-    async def disconnect(self, user_id: str, websocket: WebSocket) -> None:
-        """
-        Unregister WebSocket connection and clean up subscriptions
-
-        Args:
-            user_id: User's ID
-            websocket: WebSocket connection
-        """
-        self.user_connections[user_id].discard(websocket)
-
-        if not self.user_connections[user_id]:
-            del self.user_connections[user_id]
-
-            # Clean up all subscriptions for this user
-            for upload_id in list(self.user_subscriptions.get(user_id,
-                                                              [])):
-                await self.unsubscribe_upload(user_id, upload_id)
-
-        logger.info(f"User {user_id} disconnected")
-
-    async def subscribe_upload(self, user_id: str, upload_id: str) -> None:
-        """
-        Subscribe user to upload progress updates
-
-        Args:
-            user_id: User's ID
-            upload_id: Upload's ID
-        """
-        self.upload_subscribers[upload_id].add(user_id)
-        self.user_subscriptions[user_id].add(upload_id)
-        logger.debug(f"User {user_id} subscribed to upload {upload_id}")
-
-    async def unsubscribe_upload(
-        self,
-        user_id: str,
-        upload_id: str
-    ) -> None:
-        """
-        Unsubscribe user from upload updates
-
-        Args:
-            user_id: User's ID
-            upload_id: Upload's ID
-        """
-        self.upload_subscribers[upload_id].discard(user_id)
-        self.user_subscriptions[user_id].discard(upload_id)
-
-        if not self.upload_subscribers[upload_id]:
-            del self.upload_subscribers[upload_id]
-        if not self.user_subscriptions[user_id]:
-            del self.user_subscriptions[user_id]
-
-    async def send_to_user(
-        self,
-        user_id: str,
-        message: ServerMessage
-    ) -> None:
-        """
-        Send message to all connections for a specific user
-
-        Args:
-            user_id: User's ID
-            message: Message to send
-        """
-        connections = self.user_co
+    async def broadcast(self, message: dict[str, Any]) -> None:
+        if message.get("channel") in ("codeworm:logs", "codeworm:events"):
+            self.log_buffer.append(message)
+        payload = orjson.dumps(message).decode("utf-8")
+        disconnected: list[WebSocket] = []
+        for ws in self.active:
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                disconnected.append(ws)
+        for ws in disconnected:
+            self.disconnect(ws)
 ```
 
 ---
@@ -114,27 +54,21 @@ class ConnectionManager:
 
 ### ConnectionManager Documentation
 
-**Class Responsibility and Purpose**
-The `ConnectionManager` class manages WebSocket connections and subscriptions, ensuring that messages are routed correctly to connected users or upload subscribers. It does not handle Redis pub/sub functionality, which is managed by another module (`publisher.py`).
+**Class Responsibility and Purpose:**
+The `ConnectionManager` class manages WebSocket connections for a real-time application, handling connection establishment, disconnection, and message broadcasting. It ensures that active WebSocket clients receive relevant messages and maintains a log buffer for historical data.
 
-**Public Interface (Key Methods)**
-- **`__init__()`**: Initializes the connection manager with data structures for managing user connections, upload subscribers, and user subscriptions.
-- **`connect(user_id: str, websocket: WebSocket)`**: Registers a new WebSocket connection for a given user.
-- **`disconnect(user_id: str, websocket: WebSocket)`**: Unregisters a WebSocket connection and cleans up associated subscriptions if the user has no remaining connections.
-- **`subscribe_upload(user_id: str, upload_id: str)`**: Subscribes a user to receive updates about an upload.
-- **`unsubscribe_upload(user_id: str, upload_id: str)`**: Unsubscribes a user from receiving updates for a specific upload.
-- **`send_to_user(user_id: str, message: ServerMessage)`**: Sends a message to all WebSocket connections associated with a given user.
-- **`send_to_upload_subscribers(upload_id: str, message: ServerMessage)`**: Sends a message to all users subscribed to an upload.
-- **`get_upload_subscriber_ids(upload_id: str) -> set[str]`**: Returns the set of user IDs subscribed to a specific upload.
-- **`disconnect_all()`**: Forces the disconnection of all WebSocket connections during application shutdown.
+**Public Interface (Key Methods):**
+- **`__init__()`**: Initializes the manager with an empty list of active WebSockets and a log buffer.
+- **`connect(websocket: WebSocket) -> None`**: Accepts a WebSocket connection, adds it to the active clients, and sends historical logs if available.
+- **`disconnect(websocket: WebSocket) -> None`**: Removes a WebSocket from the active client list upon disconnection.
+- **`broadcast(message: dict[str, Any]) -> None`**: Broadcasts messages to all connected WebSockets, updating the log buffer as necessary.
 
-**Design Patterns Used**
-- **Observer Pattern**: The class observes WebSocket connections and subscriptions, notifying subscribers when messages are sent or users disconnect.
-- **Strategy Pattern**: Although not explicitly used here, the handling of different types of messages could be abstracted using a strategy pattern if needed in future enhancements.
+**Design Patterns Used:**
+The class employs the **Observer Pattern** through its `connect()` and `disconnect()` methods, where WebSocket clients are observed for connection and disconnection events. It also uses a simple state management approach with a `log_buffer` to manage historical data.
 
-**How it Fits in the Architecture**
-`ConnectionManager` is a central component responsible for managing WebSocket connections and subscriptions. It integrates with other parts of the application by providing methods to send messages to specific users or groups, ensuring that real-time updates are delivered efficiently. This class acts as a bridge between the WebSocket layer and higher-level services, such as user management and upload tracking.
+**How it Fits in the Architecture:**
+In the broader architecture of CodeWorm's backend, `ConnectionManager` acts as a central hub for WebSocket communication. It integrates with other components such as event handlers and loggers, ensuring real-time updates and maintaining session state efficiently. The class is crucial for enabling seamless interaction between the server and connected clients, facilitating dynamic content delivery and real-time data synchronization.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 01:51*
+*Generated by CodeWorm on 2026-02-19 14:36*
