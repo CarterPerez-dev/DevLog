@@ -1,0 +1,120 @@
+# UploadBatch
+
+**Type:** Class Documentation
+**Repository:** vuemantics
+**File:** backend/models/UploadBatch.py
+**Language:** python
+**Lines:** 28-358
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class UploadBatch(BaseModel):
+    """
+    Tracks batches of uploads for bulk processing
+
+    Design for robustness:
+    - Database is source of truth (worker crash = resume from DB)
+    - Sequential processing (one at a time due to compute limits)
+    - Non blocking failures (one bad upload doesn't stop batch)
+    - Retry once per upload (fails twice = permanent failure)
+    - WebSocket progress updates for real-time tracking
+    - MCP-friendly status queries
+    """
+    __tablename__ = "upload_batches"
+
+    def __init__(self, **kwargs: Any) -> None:
+        """
+        Initialize upload batch instance
+        """
+        super().__init__(**kwargs)
+
+        self.id: UUID = kwargs.get("id") or uuid4()
+        self.user_id: UUID = kwargs["user_id"]
+        self.status: str = kwargs.get("status", BatchStatus.PENDING)
+        self.total_uploads: int = kwargs.get("total_uploads", 0)
+        self.processed_uploads: int = kwargs.get("processed_uploads", 0)
+        self.successful_uploads: int = kwargs.get("successful_uploads", 0)
+        self.failed_uploads: int = kwargs.get("failed_uploads", 0)
+        self.error_message: str | None = kwargs.get("error_message")
+        self.started_at: datetime | None = kwargs.get("started_at")
+        self.completed_at: datetime | None = kwargs.get("completed_at")
+
+    @classmethod
+    async def create_table(cls) -> None:
+        """
+        Create upload_batches table with indexes
+        """
+        query = """
+            CREATE TABLE IF NOT EXISTS upload_batches (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+                -- Status
+                status VARCHAR(20) NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+
+                -- Progress counters
+                total_uploads INTEGER NOT NULL DEFAULT 0,
+                processed_uploads INTEGER NOT NULL DEFAULT 0,
+                successful_uploads INTEGER NOT NULL DEFAULT 0,
+                failed_uploads INTEGER NOT NULL DEFAULT 0,
+
+                -- Error tracking
+                error_message TEXT,
+
+                -- Timestamps
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP
+            );
+
+            -- Indexes for performance
+            CREATE INDEX IF NOT EXISTS idx_upload_batches_user_id ON upload_batches(user_id);
+            CREATE INDEX IF NOT EXISTS idx_upload_batches_status ON upload_batches(status);
+            CREATE INDEX IF NOT EXISTS idx_upload_batches_created_at ON upload_batches(created_at DESC);
+        """
+
+        await database.db.execute(query)
+
+    @classmethod
+    async def create(
+        cls,
+        user_id: UUID,
+        total_uploads: int,
+    ) -> UploadBatch:
+        """
+        Create a new upload batch
+
+        A
+```
+
+---
+
+## Class Documentation
+
+### UploadBatch Class Documentation
+
+**Class Responsibility and Purpose:**
+The `UploadBatch` class is responsible for managing batches of uploads, ensuring robustness through database persistence, sequential processing, non-blocking failures, retries, and real-time progress updates via WebSocket. It serves as a central entity for tracking the lifecycle of upload operations, from creation to completion.
+
+**Public Interface (Key Methods):**
+- **Initialization (`__init__`)**: Sets up an `UploadBatch` instance with attributes such as `id`, `user_id`, and various counters.
+- **Table Creation (`create_table`)**: Ensures the database table exists and creates it if necessary, including indexes for performance optimization.
+- **Creation (`create`)**: Creates a new upload batch in the database and returns an instance of `UploadBatch`.
+- **Finding Batches (`find_by_user`, `find_pending`)**: Allows querying batches by user ID or finding pending batches for processing.
+
+**Design Patterns Used:**
+- **Factory Method**: The `create` class method encapsulates the process of creating a new batch, ensuring that the instance is properly initialized.
+- **Observer Pattern**: Implicitly through WebSocket updates, providing real-time progress tracking to clients.
+
+**How It Fits in the Architecture:**
+The `UploadBatch` class integrates into the backend architecture by managing state and operations related to upload batches. It interacts with the database via SQLAlchemy for persistent storage and retrieval of batch data. The class ensures that each batch is processed sequentially and robustly, handling failures gracefully while maintaining a clear audit trail through status updates and error tracking.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 02:24*
