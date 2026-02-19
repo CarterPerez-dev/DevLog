@@ -1,0 +1,152 @@
+# DailyLogService
+
+**Type:** Class Documentation
+**Repository:** ios-test
+**File:** fastapi/app/daily_log/service.py
+**Language:** python
+**Lines:** 19-167
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class DailyLogService:
+    """
+    Business logic for daily log operations
+    """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def _get_partner_id(self, user_id: UUID) -> UUID:
+        """
+        Get partner ID for user, raise if not found
+        """
+        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
+        if not partner:
+            raise PartnerNotFound(str(user_id))
+        return partner.id
+
+    async def create_daily_log(
+        self,
+        user_id: UUID,
+        data: DailyLogCreate,
+    ) -> DailyLogResponse:
+        """
+        Create a new daily log entry
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        existing = await DailyLogRepository.get_by_partner_and_date(
+            self.session,
+            partner_id,
+            data.log_date,
+        )
+        if existing:
+            raise DailyLogAlreadyExists(str(data.log_date))
+
+        daily_log = await DailyLogRepository.create(
+            self.session,
+            partner_id = partner_id,
+            log_date = data.log_date,
+            mood = data.mood,
+            energy_level = data.energy_level,
+            symptoms = data.symptoms,
+            notes = data.notes,
+        )
+        return DailyLogResponse.model_validate(daily_log)
+
+    async def get_daily_logs(
+        self,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 30,
+    ) -> Sequence[DailyLogResponse]:
+        """
+        Get daily logs for user's partner
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        logs = await DailyLogRepository.get_by_partner_id(
+            self.session,
+            partner_id,
+            skip = skip,
+            limit = limit,
+        )
+        return [DailyLogResponse.model_validate(log) for log in logs]
+
+    async def get_daily_log_by_date(
+        self,
+        user_id: UUID,
+        log_date: date,
+    ) -> DailyLogResponse:
+        """
+        Get daily log for a specific date
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        log = await DailyLogRepository.get_by_partner_and_date(
+            self.session,
+            partner_id,
+            log_date,
+        )
+        if not log:
+            raise DailyLogNotFound(str(log_date))
+
+        return DailyLogResponse.model_validate(log)
+
+    async def get_date_range(
+        self,
+        user_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> Sequence[DailyLogResponse]:
+        """
+        Get daily logs within a date range
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        logs = await DailyLogRepository.get_date_range(
+            self.session,
+            partner_id,
+            start_date,
+            end_date,
+        )
+        return [DailyLogResponse.model_validate(log) for log in logs]
+
+    async def update_daily_log(
+        self,
+        user_id: UUID,
+        log_date: date,
+        data: DailyLo
+```
+
+---
+
+## Class Documentation
+
+### DailyLogService
+
+**Class Responsibility and Purpose:**
+The `DailyLogService` class encapsulates business logic for managing daily logs, including creating, retrieving, updating, and deleting log entries. It ensures that operations are performed within a consistent session context and handles partner ID resolution.
+
+**Public Interface (Key Methods):**
+- **create_daily_log**: Creates a new daily log entry.
+- **get_daily_logs**: Retrieves a list of daily logs for a user's partner.
+- **get_daily_log_by_date**: Fetches a specific daily log by date.
+- **get_date_range**: Fetches daily logs within a specified date range.
+- **update_daily_log**: Updates an existing daily log entry.
+- **delete_daily_log**: Deletes a daily log entry.
+
+**Design Patterns Used:**
+The class leverages the **Repository Pattern** for data access, ensuring that business logic remains separate from database operations. This pattern is implemented through `PartnerRepository` and `DailyLogRepository`.
+
+**How It Fits in the Architecture:**
+`DailyLogService` operates as a service layer, providing high-level functionality to the application while abstracting away lower-level details such as session management and repository interactions. It interacts with other services or repositories (e.g., `PartnerRepository`, `DailyLogRepository`) to perform operations, making it easier to manage dependencies and maintain clean code.
+
+This design ensures that the service layer is responsible for orchestrating business logic, while data access remains encapsulated within repositories, promoting a clear separation of concerns.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 09:02*
