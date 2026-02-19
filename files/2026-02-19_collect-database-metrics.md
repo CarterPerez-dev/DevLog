@@ -1,0 +1,147 @@
+# collect_database_metrics
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/scripts/collect_database_metrics.py
+**Language:** python
+**Lines:** 1-126
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+#!/usr/bin/env python3
+"""
+Collect Database Metrics Script
+Run this to populate DatabaseMetrics collection
+"""
+
+import os
+import sys
+import random
+import argparse
+from typing import Any
+from datetime import datetime, timedelta, UTC
+
+
+os.environ.setdefault('ENVIRONMENT', 'development')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+from datetime import datetime, UTC, timedelta
+from api.admin.models.analytics.DatabaseMetrics import DatabaseMetrics
+from api.admin.domains.analytics.services import AnalyticsService
+from mongoengine import connect
+from config import get_config
+import logging
+
+
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def collect_current_metrics():
+    """
+    Collect current database metrics for all collections.
+    """
+    config = get_config()
+    connect('certgames')
+
+    from mongoengine import get_db
+    db = get_db()
+
+    collections = db.list_collection_names()
+
+    collections_to_monitor = [
+        c for c in collections
+        if not c.startswith('system.') and not c.startswith('admin_')
+    ]
+
+    logger.info(
+        f"Found {len(collections_to_monitor)} collections to monitor"
+    )
+
+    now = datetime.now(UTC)
+    period_start = now.replace(
+        hour = 0,
+        minute = 0,
+        second = 0,
+        microsecond = 0
+    )
+
+    for collection_name in collections_to_monitor:
+        try:
+            from api.admin.domains.analytics.queries import DatabasePerformanceAggregator
+
+            metrics = DatabasePerformanceAggregator.aggregate_collection_metrics(
+                collection_name = collection_name,
+                period_type = 'daily',
+                start = period_start,
+                end = now
+            )
+
+            if metrics:
+                existing = DatabaseMetrics.objects(
+                    collection_name = collection_name,
+                    period_type = 'daily',
+                    period_start = period_start
+                ).first()
+
+                if existing:
+                    for key, value in metrics.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
+                    existing.save()
+                    logger.info(f"Updated metrics for {collection_name}")
+                else:
+                    DatabaseMetrics(**metrics).save()
+                    logger.info(f"Created metrics for {collection_name}")
+            else:
+                logger.warning(
+                    f"No metrics returned for {collection_name}"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to collect metrics for {collection_name}: {e}"
+            )
+
+    try:
+        result = AnalyticsService.get_realtime_database_performance(
+            collection_name = 'all',
+            period_type = 'hourly'
+        )
+        logger.info(
+            f"Realtime metrics: {result.get('operation_count', 0)} operations"
+        )
+   
+```
+
+---
+
+## File Overview
+
+# collect_database_metrics.py
+
+## Purpose and Responsibility
+This script is responsible for collecting and updating database metrics, specifically for daily performance data of monitored collections. It runs periodically to ensure that the `DatabaseMetrics` collection stays up-to-date with relevant statistics.
+
+## Key Exports or Public Interface
+- **collect_current_metrics()**: The primary function that collects current metrics from MongoDB collections and updates the `DatabaseMetrics` documents in the database.
+
+## How it Fits into the Project
+This script is part of a larger analytics framework within the CertGames-Core project. It interacts with the `AnalyticsService` to aggregate performance data, ensuring that the system maintains accurate and timely insights into database operations. The collected metrics are crucial for monitoring and optimizing the application's performance.
+
+## Notable Design Decisions
+- **Use of MongoDB**: Direct interaction with MongoDB using `mongoengine` to fetch collection names and perform aggregations.
+- **Logging**: Comprehensive logging is implemented using Python’s built-in `logging` module, providing detailed insights into the script's execution flow and any encountered issues.
+- **Error Handling**: Robust error handling ensures that failures during metric collection are logged, maintaining system integrity even when some collections fail to process.
+- **Configuration Management**: Utilizes a configuration management approach via `get_config()` to ensure flexibility in database connections and settings.
+```
+
+This documentation provides an overview of the script's role within the project, its key functionality, and important design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 16:13*
