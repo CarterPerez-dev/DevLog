@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/intermediate/siem-dashboard/backend/app/core/decorators/schema.py
+**File:** PROJECTS/intermediate/siem-dashboard/backend/app/core/decorators/endpoint.py
 **Language:** python
-**Lines:** 1-79
+**Lines:** 1-89
 **Complexity:** 0.0
 
 ---
@@ -14,82 +14,92 @@
 ```python
 """
 ©AngelaMos | 2026
-schema.py
+endpoint.py
 """
 
 import functools
-from typing import Any, Literal
-from collections.abc import Callable
+from typing import Any
+from collections.abc import Callable, Sequence
 
-from flask import g, request
-from pydantic import (
-    BaseModel,
-    ValidationError as PydanticValidationError,
-)
-from app.core.errors import ValidationError
+import structlog
+from flask import g, jsonify
+
+from app.core.errors import AppError, AuthenticationError, ForbiddenError
+from app.core.auth import decode_access_token, extract_bearer_token
+from app.models.User import User
 
 
-def S(  # noqa: N802
-    schema_class: type[BaseModel],
-    source: Literal["auto",
-                    "query",
-                    "body"] = "auto",
+logger = structlog.get_logger()
+
+
+def endpoint(
+    auth_required: bool = True,
+    roles: Sequence[str] | None = None,
 ) -> Callable[..., Any]:
     """
-    Validate request data with Pydantic and store on g.validated
+    Outermost decorator that provides auth extraction, role gating,
+    and an error boundary
     """
+    effective_auth = auth_required or roles is not None
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            raw = _extract_data(source)
             try:
-                g.validated = schema_class.model_validate(raw)
-            except PydanticValidationError as exc:
-                raise ValidationError(
-                    message = "Validation failed",
-                    errors = [
-                        {
-                            "field": ".".join(str(loc) for loc in e["loc"]),
-                            "message": e["msg"],
-                            "type": e["type"],
-                        } for e in exc.errors()
-                    ],
-                ) from exc
-            return fn(*args, **kwargs)
+                _resolve_auth(effective_auth)
+                if roles is not None:
+                    _enforce_roles(roles)
+                return fn(*args, **kwargs)
+            except AppError:
+                raise
+            except Exception:
+                logger.exception(
+                    "unhandled_error",
+                    endpoint = fn.__name__,
+                )
+                return jsonify({
+                    "error": "InternalServerError",
+                    "message": "Internal server error",
+                }), 500
 
         return wrapper
 
     return decorator
 
 
-def _extract_data(
-    source: Literal["auto",
-                    "query",
-                    "body"],
-) -> dict[str,
-          Any]:
+def _resolve_auth(required: bool) -> None:
     """
-    Pull raw data from the request based on the declared source
+    Extract JWT and load user onto flask g or raise if required
     """
-    if source == "query":
-        return dict(request.args)
-    if source == "body":
-        return _get_body()
-    if source == "auto":
-        if request.method in ("GET", "DELETE", "HEAD", "OPTIONS"):
-            return dict(request.args)
-        return _get_body()
-    return {}
+    g.current_user = None
+    token = extract_bearer_token()
+    if not token:
+        if required:
+            raise AuthenticationError()
+        return
+
+    try:
+        payload = decode_access_token(token)
+    except Exception as exc:
+        if required:
+            raise AuthenticationError("Invalid or expired token") from exc
+        return
+
+    user = User.get_or_none(payload["sub"])
+    if user is None:
+        if required:
+            raise AuthenticationError("User not found")
+        return
+    g.current_user = user
 
 
-def _get_body() -> dict[str, Any]:
+def _enforce_roles(allowed: Sequence[str]) -> None:
     """
-    Extract JSON body from the request or return empty dict
+    Verify the authenticated user holds one of the required roles
     """
-    data = request.get_json(silent = True)
-    if data is None:
-        return {}
-    return data  # type: ignore[no-any-return]
+    user = g.current_user
+    if user is None or user.role not in allowed:
+        raise ForbiddenError()
 
 ```
 
@@ -101,23 +111,20 @@ def _get_body() -> dict[str, Any]:
 
 **Pattern Used:** Decorator Pattern
 
-In the provided code, the `S` function acts as a decorator that validates request data using Pydantic schemas and stores the validated object in `g.validated`. Here’s how it works:
+The `endpoint` function in the provided code implements a decorator pattern to handle authentication, role-based access control (RBAC), and error handling for Flask endpoints. The outermost `endpoint` function returns an inner `decorator`, which wraps the actual endpoint function.
 
-- **Implementation**: The `S` function is defined with type hints for its parameters. It returns another function (`decorator`) which itself takes a callable (the target function) as an argument. This inner function, `wrapper`, handles the validation logic and calls the original function if successful.
-  
-- **Benefits**:
-  - **Modularity**: The decorator pattern allows you to validate request data independently of business logic, making your code more modular and easier to maintain.
-  - **Consistency**: Ensures that all relevant endpoints are validated consistently using Pydantic schemas.
+**Benefits:**
+- **Modularity:** The `endpoint` decorator encapsulates common functionality like authentication and RBAC checks.
+- **Reusability:** This pattern allows reusing the same authentication logic across multiple endpoints without duplicating code.
+- **Error Handling:** Centralized error handling ensures consistent response formats for errors, improving maintainability.
 
-- **Deviations**:
-  - The `S` function is decorated with `functools.wraps(fn)` to preserve the metadata of the original function, but this isn’t strictly necessary for validation purposes.
-  - `_extract_data` and `_get_body` functions are used to extract data from different sources (query or body), adding flexibility.
+**Deviations:**
+- The `endpoint` decorator is designed to be flexible with optional parameters (`auth_required` and `roles`), allowing it to handle different scenarios dynamically.
+- The `_resolve_auth` function uses a try-except block to catch exceptions, which might not be the most Pythonic approach. Typically, explicit error handling would be preferred over exception catching.
 
-- **Appropriateness**:
-  - This pattern is appropriate when you need to apply cross-cutting concerns like validation consistently across multiple functions without cluttering their bodies. It’s particularly useful in web frameworks where request handling and validation are common tasks.
-
-This implementation effectively uses the decorator pattern to encapsulate validation logic, making it reusable and maintainable.
+**Appropriateness:**
+This pattern is highly appropriate for web applications where multiple endpoints require similar authentication and authorization checks. It ensures that common logic is centralized and can be easily maintained or extended without modifying each endpoint individually.
 
 ---
 
-*Generated by CodeWorm on 2026-02-18 21:36*
+*Generated by CodeWorm on 2026-02-18 22:50*
