@@ -1,0 +1,119 @@
+# User.to_dict
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** backend/api/domains/account/models/User.py
+**Language:** python
+**Lines:** 452-616
+**Complexity:** 20.0
+
+---
+
+## Source Code
+
+```python
+def to_dict(self) -> dict[str, Any]:
+        """
+        Convert user to dictionary for API responses
+        """
+        data: dict[str,
+                   Any] = {
+                       "_id":
+                       str(self.id),
+                       "username":
+                       self.username,
+                       "email":
+                       self.email,
+                       "coins":
+                       self.coins,
+                       "xp":
+                       self.xp,
+                       "level":
+                       self.level,
+                       "achievements": [
+                           ach.get('achievementId')
+                           if isinstance(ach,
+                                         dict) else ach.achievementId
+                           for ach in self.achievements_v2
+                       ] if self.achievements_v2 else [],
+                       "achievement_counters":
+                       _serialize_dict_values(self.achievement_counters)
+                       if self.achievement_counters else {},
+                       "currentAvatar":
+                       str(self.currentAvatar)
+                       if self.currentAvatar else None,
+                       "nameColor":
+                       self.nameColor,
+                       "xpBoost":
+                       self.xpBoost,
+                       "purchasedItems":
+                       [str(item_id) for item_id in self.purchasedItems]
+                       if self.purchasedItems else [],
+                       "lastDailyClaim":
+                       self.lastDailyClaim.isoformat()
+                       if self.lastDailyClaim else None,
+                       "tags":
+                       self.tags,
+                       "signUpSource":
+                       self.signUpSource,
+                       "subscriptionActive":
+                       self.subscriptionActive,
+                       "subscriptionType":
+                       self.subscriptionType,
+                       "subscriptionPlan":
+                       self.subscriptionPlan,
+                       "subscriptionStatus":
+                       self.subscriptionStatus,
+                       "subscriptionPlatform":
+                       self.subscriptionPlatform,
+                       "subscriptionStartDate":
+                       self.subscriptionStartDate.isoformat()
+                       if self.subscriptionStartDate else None,
+                       "subscriptionEndDate":
+                       self.subscriptionEndDate.isoformat()
+                       if self.subscriptionEndDate else None,
+                       "subscriptionCanceledAt":
+                       self.subscriptionCanceledAt.isoformat()
+                       if self.subscriptionCanceledAt else None,
+                       "practiceQuestionsRemaining":
+                       self.practiceQuestionsRemaining,
+                       "freeUserCreatedAt":
+                       self.freeUse
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of `to_dict` is primarily determined by the number of attributes being processed, which is O(n), where n is the number of attributes in the User object.
+
+#### Space Complexity and Memory Allocation
+- The function creates a dictionary for each attribute, leading to potential memory overhead.
+- List comprehensions like `[str(item_id) for item_id in self.purchasedItems]` are efficient but consume additional space proportional to the length of `purchasedItems`.
+
+#### Bottlenecks or Inefficiencies
+1. **Redundant Type Checks**: The type check `if isinstance(ach, dict)` is redundant since you handle both cases.
+2. **Nested List Comprehensions**: The nested list comprehension in `achievements` and `equipmentHistory` can be optimized by using a more efficient approach if applicable.
+
+#### Optimization Opportunities
+1. **Remove Redundant Type Checks**: Simplify the type check for achievements:
+   ```python
+   "achievements": [ach.get('achievementId') for ach in self.achievements_v2] if self.achievements_v2 else [],
+   ```
+2. **Use Generators**: Replace list comprehensions with generators where possible to save memory:
+   ```python
+   "achievements": (ach.get('achievementId') for ach in self.achievements_v2) if self.achievements_v2 else (),
+   ```
+
+#### Resource Usage Concerns
+- Ensure that all attributes are properly handled, especially those involving complex objects like `change.to_dict()`.
+- Consider caching frequently accessed data to reduce redundant computations.
+
+By addressing these areas, you can improve both the performance and readability of your code.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 21:01*
