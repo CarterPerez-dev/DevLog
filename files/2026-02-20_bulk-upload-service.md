@@ -1,0 +1,167 @@
+# bulk_upload_service
+
+**Type:** File Overview
+**Repository:** vuemantics
+**File:** backend/services/bulk_upload_service.py
+**Language:** python
+**Lines:** 1-331
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+bulk_upload_service.py
+"""
+
+import logging
+from uuid import UUID, uuid4
+from dataclasses import dataclass
+
+from fastapi import UploadFile
+
+import config
+from core import (
+    FileTooLargeError,
+    UnsupportedFileTypeError,
+    NotFoundError,
+    ValidationError,
+)
+from models.Upload import Upload
+from models.UploadBatch import UploadBatch
+from services.storage_service import storage_service
+from workers.batch_processor import process_batch
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BulkUploadResult:
+    """
+    Result of bulk upload operation
+    """
+    batch_id: UUID
+    total_files: int
+    queued: int
+    failed: int
+    upload_ids: list[str]
+    failed_files: list[dict[str, str]]
+
+
+@dataclass
+class BatchStatusResult:
+    """
+    Batch status information
+    """
+    batch_id: UUID
+    status: str
+    total_uploads: int
+    processed_uploads: int
+    successful_uploads: int
+    failed_uploads: int
+    progress_percentage: float
+    created_at: str | None
+    started_at: str | None
+    completed_at: str | None
+    error_message: str | None
+
+
+class BulkUploadService:
+    """
+    Service for handling bulk upload operations
+
+    Responsibilities:
+    - Validate bulk upload requests
+    - Create batch records
+    - Process and save files
+    - Queue batches for background processing
+    - Track batch status
+    """
+    @staticmethod
+    def _validate_bulk_upload(files: list[UploadFile]) -> None:
+        """
+        Validate bulk upload request
+
+        Args:
+            files: List of uploaded files
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        if len(files) == 0:
+            raise ValidationError("No files provided")
+
+        if len(files) > config.MAX_BULK_FILES:
+            raise ValidationError(
+                f"Too many files. Maximum {config.MAX_BULK_FILES} files per batch"
+            )
+
+        total_size = sum(file.size or 0 for file in files)
+        if total_size > config.MAX_BULK_SIZE:
+            max_gb = config.MAX_BULK_SIZE / (1024 * 1024 * 1024)
+            raise ValidationError(
+                f"Total file size exceeds {max_gb}GB limit"
+            )
+
+    @staticmethod
+    async def create_bulk_upload(
+        user_id: UUID,
+        files: list[UploadFile],
+    ) -> BulkUploadResult:
+        """
+        Create and queue a bulk upload batch
+
+        Args:
+            user_id: User's UUID
+            files: List of files to upload
+
+        Returns:
+            BulkUploadResult with batch info
+
+        Process:
+        1. Validate bulk upload request
+        2. Create batch record
+        3. Save each file to storage
+        4. Create upload records linked to batch
+        5. Queue batch for background processing
+        6. Return batch ID and results
+        """
+        # Validate bulk upload
+        BulkUploadService._validate_bulk_upload(files)
+
+        total_size = sum(file.size or 0 for file in files)
+        logger.info(
+            f"Creating bulk 
+```
+
+---
+
+## File Overview
+
+### `bulk_upload_service.py`
+
+**Purpose and Responsibility:**
+This file implements a service for handling bulk file uploads, ensuring that multiple files are validated, saved, and processed efficiently. It integrates with storage services to validate and save files while maintaining batch records.
+
+**Key Exports or Public Interface:**
+- **`BulkUploadService`:** A class responsible for validating bulk upload requests, creating batch records, saving files, and queuing batches for background processing.
+  - `create_bulk_upload(user_id: UUID, files: list[UploadFile]) -> BulkUploadResult`: Creates a new batch record, saves each file to storage, and queues the batch for background processing.
+
+**How It Fits in the Project:**
+This service is part of the backend module responsible for handling bulk file uploads. It interacts with other services like `storage_service` for file validation and storage, and uses models from the `core` package to manage upload records. The results are returned as structured objects (`BulkUploadResult`), providing clear insights into the upload process.
+
+**Notable Design Decisions:**
+- **Validation:** Files are validated before processing, ensuring compliance with size and type constraints.
+- **Background Processing:** Batches are queued for background processing using a worker (`process_batch`), allowing the main application to remain responsive.
+- **Logging:** Detailed logging is used throughout the process to track operations and errors, aiding in debugging and monitoring.
+```
+
+This documentation provides an overview of the file's purpose, key functionalities, integration within the project, and notable design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 13:06*
