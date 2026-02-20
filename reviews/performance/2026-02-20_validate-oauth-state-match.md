@@ -1,0 +1,132 @@
+# validate_oauth_state_match
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** backend/api/domains/account/middleware/rules.py
+**Language:** python
+**Lines:** 103-187
+**Complexity:** 27.0
+
+---
+
+## Source Code
+
+```python
+def validate_oauth_state_match(provider = None):
+    """
+    Validate OAuth state parameter for CSRF protection.
+    """
+    request_state = g.validated.get('state')
+
+    if not request_state:
+        raise ValidationError("State parameter is required")
+
+    if provider == 'apple' or g.get('oauth_provider') == 'apple':
+        valid_states = session.get('apple_valid_states', [])
+
+        if not valid_states:
+            raise AuthenticationError("No valid Apple states in session")
+
+        current_time = datetime.now(UTC).timestamp()
+        state_found = False
+
+        if isinstance(valid_states[0], tuple | list):
+            for state, timestamp in valid_states:
+                if state == request_state:
+                    if current_time - timestamp > 600:
+                        raise AuthenticationError(
+                            "Apple OAuth state expired (10 min limit)"
+                        )
+                    state_found = True
+                    break
+
+            if not state_found:
+                raise AuthenticationError("Invalid Apple OAuth state")
+
+            valid_states = [
+                (s,
+                 t) for s, t in valid_states if s != request_state
+            ]
+        else:
+            if request_state not in valid_states:
+                raise AuthenticationError("Invalid Apple OAuth state")
+            valid_states.remove(request_state)
+
+        session['apple_valid_states'] = valid_states
+    elif provider == 'google' or request.endpoint and 'google' in request.endpoint:
+        valid_states = session.get('google_valid_states', [])
+
+        if not valid_states:
+            raise AuthenticationError("No valid Google states in session")
+
+        current_time = datetime.now(UTC).timestamp()
+        state_found = False
+
+        if isinstance(valid_states[0], tuple | list):
+            for state, timestamp in valid_states:
+                if state == request_state:
+                    if current_time - timestamp > 600:
+                        raise AuthenticationError(
+                            "Google OAuth state expired (10 min limit)"
+                        )
+                    state_found = True
+                    break
+
+            if not state_found:
+                raise AuthenticationError("Invalid Google OAuth state")
+
+            valid_states = [
+                (s,
+                 t) for s, t in valid_states if s != request_state
+            ]
+        else:
+            if request_state not in valid_states:
+                raise AuthenticationError("Invalid Google OAuth state")
+            valid_states.remove(request_state)
+
+        session['google_valid_states'] = valid_states
+    else:
+        session_state = session.get('oauth_state')
+
+        if not session_state:
+            raise AuthenticationError("No OAuth state in session")
+
+        if request_state != session_state:
+            raise AuthenticationError(
+                "Invalid OAuth state - CSRF protection"
+            )
+
+        
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The function has a time complexity of \(O(n)\), where \(n\) is the number of valid states in the session list. The most costly operations are the iterations over `valid_states` and the conditional checks, which can be significant if the state lists grow large.
+
+#### Space Complexity
+Space complexity is also \(O(n)\) due to the storage requirements for `valid_states`. However, the function does not allocate any additional memory that scales with input size; it only modifies existing session data.
+
+#### Bottlenecks and Inefficiencies
+1. **Redundant Iterations**: The code iterates over `valid_states` multiple times when checking and updating states.
+2. **Unnecessary Conditionals**: The condition to check if the first element of `valid_states` is a tuple or list can be simplified.
+3. **Blocking Calls**: No blocking calls are present, but this function could benefit from asynchronous handling if it interacts with external services.
+
+#### Optimization Opportunities
+1. **Reduce Redundant Iterations**: Combine state validation and removal into one loop to reduce iterations.
+2. **Simplify Conditionals**: Use a single conditional check for the type of `valid_states[0]`.
+3. **Use Context Managers**: Ensure session modifications are atomic using context managers if necessary.
+
+#### Resource Usage Concerns
+- **Session Handling**: Frequent updates to session data could lead to performance degradation over time.
+- **Error Handling**: Consider logging errors instead of raising exceptions for better debugging and monitoring.
+
+By optimizing the iteration logic and simplifying conditionals, you can improve the function's efficiency.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 16:12*
