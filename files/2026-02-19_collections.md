@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** oneIsNun_
-**File:** go-backend/internal/mongodb/collections.go
+**File:** go-backend/internal/handler/collections.go
 **Language:** go
-**Lines:** 1-582
+**Lines:** 1-243
 **Complexity:** 0.0
 
 ---
@@ -17,145 +17,135 @@ AngelaMos | 2026
 collections.go
 */
 
-package mongodb
+package handler
 
 import (
 	"context"
-	"fmt"
-	"sort"
+	"net/http"
+	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/carterperez-dev/templates/go-backend/internal/core"
+	"github.com/carterperez-dev/templates/go-backend/internal/mongodb"
 )
 
-type CollectionsRepository struct {
-	client *Client
+type collectionsRepository interface {
+	ListCollections(ctx context.Context, dbName string) ([]mongodb.CollectionInfo, error)
+	GetCollectionStats(ctx context.Context, dbName, collName string) (*mongodb.CollectionStats, error)
+	AnalyzeSchema(ctx context.Context, dbName, collName string, sampleSize int) (*mongodb.SchemaAnalysis, error)
+	GetIndexes(ctx context.Context, dbName, collName string) ([]mongodb.IndexInfo, error)
+	SampleDocuments(ctx context.Context, dbName, collName string, limit int) ([]bson.M, error)
+	GetFieldStats(ctx context.Context, dbName, collName, fieldName string) (*mongodb.FieldStats, error)
+	CountByFieldValue(ctx context.Context, dbName, collName, fieldName string, value any) (int64, error)
 }
 
-func NewCollectionsRepository(client *Client) *CollectionsRepository {
-	return &CollectionsRepository{client: client}
+type CollectionsHandler struct {
+	repo     collectionsRepository
+	database string
 }
 
-type CollectionInfo struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	DocumentCount int64  `json:"document_count"`
-	SizeBytes    int64  `json:"size_bytes"`
-	AvgDocSize   int64  `json:"avg_doc_size"`
-	IndexCount   int    `json:"index_count"`
-}
-
-type CollectionStats struct {
-	Name          string  `json:"name"`
-	DocumentCount int64   `json:"document_count"`
-	SizeBytes     int64   `json:"size_bytes"`
-	AvgDocSize    int64   `json:"avg_doc_size"`
-	StorageSize   int64   `json:"storage_size"`
-	IndexCount    int     `json:"index_count"`
-	TotalIndexSize int64  `json:"total_index_size"`
-	Capped        bool    `json:"capped"`
-}
-
-type FieldSchema struct {
-	Name       string   `json:"name"`
-	Types      []string `json:"types"`
-	Coverage   float64  `json:"coverage"`
-	Count      int64    `json:"count"`
-	TotalDocs  int64    `json:"total_docs"`
-	SampleValues []any  `json:"sample_values,omitempty"`
-}
-
-type SchemaAnalysis struct {
-	CollectionName string        `json:"collection_name"`
-	TotalDocuments int64         `json:"total_documents"`
-	SampleSize     int64         `json:"sample_size"`
-	Fields         []FieldSchema `json:"fields"`
-}
-
-type IndexInfo struct {
-	Name       string         `json:"name"`
-	Keys       map[string]int `json:"keys"`
-	Unique     bool           `json:"unique"`
-	Sparse     bool           `json:"sparse"`
-	Background bool           `json:"background"`
-	SizeBytes  int64          `json:"size_bytes"`
-}
-
-type FieldStats struct {
-	FieldName    string         `json:"field_name"`
-	TotalDocs    int64          `json:"total_docs"`
-	DocsWithField int64         `json:"docs_with_field"`
-	Coverage     float64        `json:"coverage"`
-	UniqueValues int64          `json:"unique_values"`
-	TopValues    []ValueCount   `json:"top_values,omitempty"`
-	NumericStats *NumericStats  `json:"numeric_stats,omitempty"`
-}
-
-type ValueCount struct {
-	Value any   `json:"value"`
-	Count int64 `json:"count"`
-}
-
-type NumericStats struct {
-	Min float64 `json:"min"`
-	Max float64 `json:"max"`
-	Avg float64 `json:"avg"`
-	Sum float64 `json:"sum"`
-}
-
-func (r *CollectionsRepository) ListCollections(ctx context.Context, dbName string) ([]CollectionInfo, error) {
-	db := r.client.client.Database(dbName)
-
-	cursor, err := db.ListCollections(ctx, bson.D{})
-	if err != nil {
-		return nil, fmt.Errorf("list collections: %w", err)
+func NewCollectionsHandler(repo collectionsRepository, database string) *CollectionsHandler {
+	return &CollectionsHandler{
+		repo:     repo,
+		database: database,
 	}
-	defer cursor.Close(ctx)
+}
 
-	var collections []CollectionInfo
-	for cursor.Next(ctx) {
-		var result bson.M
-		if err := cursor.Decode(&result); err != nil {
-			continue
-		}
+func (h *CollectionsHandler) RegisterRoutes(r chi.Router) {
+	r.Route("/api/collections", func(r chi.Router) {
+		r.Get("/", h.List)
+		r.Get("/{name}", h.GetStats)
+		r.Get("/{name}/schema", h.GetSchema)
+		r.Get("/{name}/indexes", h.GetIndexes)
+		r.Get("/{name}/documents", h.SampleDocuments)
+		r.Get("/{name}/fields/{field}", h.GetFieldStats)
+		r.Get("/{name}/count", h.CountByField)
+	})
+}
 
-		name, _ := result["name"].(string)
-		collType, _ := result["type"].(string)
+type CollectionsListResponse struct {
+	Database    string                    `json:"database"`
+	Count       int                       `json:"count"`
+	Collections []mongodb.CollectionInfo  `json:"collections"`
+}
 
-		if
+func (h *CollectionsHandler) List(w http.ResponseWriter, r *http.Request) {
+	dbName := r.URL.Query().Get("database")
+	if dbName == "" {
+		dbName = h.database
+	}
+
+	collections, err := h.repo.ListCollections(r.Context(), dbName)
+	if err != nil {
+		core.InternalServerError(w, err)
+		return
+	}
+
+	response := CollectionsListResponse{
+		Database:    dbName,
+		Count:       len(collections),
+		Collections: collections,
+	}
+
+	core.OK(w, response)
+}
+
+func (h *CollectionsHandler) GetStats(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	dbName := r.URL.Query().Get("database")
+	if dbName == "" {
+		dbName = h.database
+	}
+
+	stats, err := h.repo.GetCollectionStats(r.Context(), dbName, name)
+	if err != nil {
+		core.InternalServerError(w, err)
+		return
+	}
+
+	core.OK(w, stats)
+}
+
+func (h *CollectionsHandler) GetSchema(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	dbName := r.URL.Query().Get("database")
+	if dbName == "" {
+		dbName = h.database
+	}
+
+	sampleSize := 1000
+	if s := r.URL.Query().Get("sample_size"); s != "" {
+		if parsed, err := strconv.Atoi(s); err == nil &&
 ```
 
 ---
 
 ## File Overview
 
-# collections.go
+# `collections.go` Documentation
 
 ## Purpose and Responsibility
-This Go source file defines a repository for managing MongoDB collections within the `oneIsNun_` project. It provides methods to list collection information, retrieve detailed statistics about specific collections, and analyze field schemas.
+This file defines a handler for managing MongoDB collections within the backend application. It provides endpoints to list collections, retrieve collection statistics, analyze schema, get indexes, sample documents, and count field values.
 
 ## Key Exports and Public Interface
-- **CollectionsRepository**: A struct responsible for interacting with MongoDB collections.
-  - `NewCollectionsRepository`: Constructor function that initializes a new instance of `CollectionsRepository`.
-- **CollectionInfo**: Struct representing basic information about a collection.
-- **CollectionStats**: Struct containing detailed statistics about a specific collection.
-- **FieldSchema**: Struct describing the schema and coverage of fields within a collection.
-- **SchemaAnalysis**: Struct for analyzing field schemas across multiple documents.
-- **IndexInfo**: Struct detailing index information for collections.
-- **FieldStats**: Struct providing statistical analysis on individual fields.
+- **CollectionsHandler**: A struct that encapsulates the logic for handling requests related to MongoDB collections.
+- **RegisterRoutes**: Registers routes for various operations on collections.
+- **List**, **GetStats**, **GetSchema**, **GetIndexes**, **SampleDocuments**, and **CountByField**: Functions that handle specific HTTP GET requests.
 
-## How It Fits in the Project
-This file is part of the `mongodb` package, which handles database operations. The `CollectionsRepository` provides essential functionality to manage and analyze MongoDB collections, making it a crucial component for data management within the project.
+## How It Fits into the Project
+This file is part of the `handler` package, which contains business logic for handling API requests. The `CollectionsHandler` struct interacts with a repository (`collectionsRepository`) to perform operations on MongoDB collections. These operations are exposed via RESTful endpoints, allowing external clients to interact with the database.
 
 ## Notable Design Decisions
-- **Error Handling**: Uses Go's idiomatic error handling with `fmt.Errorf` to provide clear error messages.
-- **Goroutines and Contexts**: While not explicitly used in this file, goroutines and context are common patterns in the broader project for asynchronous operations and graceful shutdowns.
-- **BSON Decoding**: Utilizes MongoDB's `bson` package for efficient data decoding from JSON-like documents.
-- **Sorting**: Implements sorting of collections based on document count to provide a meaningful order in results.
+- **Dependency Injection**: The `CollectionsHandler` constructor accepts an instance of `collectionsRepository`, promoting loose coupling.
+- **Error Handling**: All functions use a consistent error handling pattern by calling `core.InternalServerError` for non-nil errors, ensuring proper response codes and messages are returned to the client.
+- **Query Parameters**: Functions like `GetStats` and `SampleDocuments` handle query parameters to provide flexible filtering options.
+- **Context Usage**: Context is used throughout to propagate request-specific values such as database names and limits.
+```
 
-This file ensures robust management and analysis of MongoDB collections, contributing to the overall data handling capabilities of the project.
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and design choices.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 23:21*
+*Generated by CodeWorm on 2026-02-19 23:27*
