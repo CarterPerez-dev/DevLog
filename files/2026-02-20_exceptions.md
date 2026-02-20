@@ -1,10 +1,10 @@
 # exceptions
 
 **Type:** File Overview
-**Repository:** my-portfolio
-**File:** v1/backend/app/core/exceptions.py
+**Repository:** vuemantics
+**File:** backend/core/exceptions.py
 **Language:** python
-**Lines:** 1-249
+**Lines:** 1-170
 **Complexity:** 0.0
 
 ---
@@ -13,7 +13,7 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
+ⒸAngelaMos | 2026
 exceptions.py
 """
 
@@ -22,67 +22,107 @@ from typing import Any
 
 class BaseAppException(Exception):
     """
-    Base exception for all application specific errors
+    Base exception class for all application exceptions
+    All custom exceptions should inherit from this
     """
     def __init__(
         self,
         message: str,
         status_code: int = 500,
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
+        **kwargs: Any
+    ):
         self.message = message
         self.status_code = status_code
-        self.extra = extra or {}
+        self.extra = kwargs
         super().__init__(self.message)
 
 
-class ResourceNotFound(BaseAppException):
+class StorageError(BaseAppException):
     """
-    Raised when a requested resource does not exist
-    """
-    def __init__(
-        self,
-        resource: str,
-        identifier: str | int,
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(
-            message = f"{resource} with id '{identifier}' not found",
-            status_code = 404,
-            extra = extra,
-        )
-        self.resource = resource
-        self.identifier = identifier
-
-
-class ConflictError(BaseAppException):
-    """
-    Raised when an operation conflicts with existing state
+    Base exception for storage operations
     """
     def __init__(
         self,
-        message: str,
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(message = message, status_code = 409, extra = extra)
+        message: str = "Storage operation failed",
+        **kwargs: Any
+    ):
+        super().__init__(message, status_code = 500, **kwargs)
 
 
-class ValidationError(BaseAppException):
+class FileTooLargeError(StorageError):
     """
-    Raised when input validation fails outside of Pydantic
+    Raised when uploaded file exceeds size limit
+    """
+    def __init__(self, message: str = "File too large", **kwargs: Any):
+        super().__init__(message, status_code = 413, **kwargs)
+
+
+class UnsupportedFileTypeError(StorageError):
+    """
+    Raised when file type is not supported
     """
     def __init__(
         self,
-        message: str,
-        field: str | None = None,
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(message = message, status_code = 422, extra = extra)
-        self.field = field
+        message: str = "Unsupported file type",
+        **kwargs: Any
+    ):
+        super().__init__(message, status_code = 415, **kwargs)
+
+
+class LocalAIError(BaseAppException):
+    """
+    Base exception for local AI service errors
+    """
+    def __init__(self, message: str = "AI service error", **kwargs: Any):
+        super().__init__(message, status_code = 500, **kwargs)
+
+
+class VisionError(LocalAIError):
+    """
+    Raised when Qwen2.5-VL inference fails
+    """
+    def __init__(
+        self,
+        message: str = "Vision analysis failed",
+        **kwargs: Any
+    ):
+        super().__init__(message, **kwargs)
+
+
+class EmbeddingError(LocalAIError):
+    """
+    Raised when bge-m3 embedding fails
+    """
+    def __init__(
+        self,
+        message: str = "Embedding generation failed",
+        **kwargs: Any
+    ):
+        super().__init__(message, **kwargs)
+
+
+class SearchServiceError(BaseAppException):
+    """
+    Base exception for search service errors
+    """
+    def __init__(
+        self,
+        message: str = "Search service error",
+        **kwargs: Any
+    ):
+        super().__init__(message, status_code = 500, **kwargs)
+
+
+class QueryEmbeddingError(SearchServiceError):
+    """
+    Raised when query embedding generation fails
+    """
+    def __init__(
+        self,
+        message: str = "Query embedding generation failed",
+        **kwargs: Any
+    ):
+        super().__init__(message, **kwargs)
 
 
 class AuthenticationError(BaseAppException):
@@ -92,77 +132,43 @@ class AuthenticationError(BaseAppException):
     def __init__(
         self,
         message: str = "Authentication failed",
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(message = message, status_code = 401, extra = extra)
+        **kwargs: Any
+    ):
+        super().__init__(message, status_code = 401, **kwargs)
 
 
-class TokenError(AuthenticationError):
+class AuthorizationError(BaseAppException):
     """
-    Raised for JWT token specific errors
+    Raised when user is not authorized to perform an action
     """
-    def __init__(
-        self,
-        message: str = "Invalid or expired token",
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(message = message, extra = extra)
-
-
-class TokenRevokedError(TokenError):
-    """
-    Raised when a revoked token is used
-    """
-    def __init__(self, extra: dict[str, Any] | None = None) -> None:
-        super().__init__(message = "Token has been revoked", extra = extra)
-
-
-class PermissionDenied(BaseAppException):
-    """
-    Raised when user lacks required permissions
-    """
-    def __init__(
-        self,
-        message: str = "Permission denied",
-        required_permission: str | None = None,
-        extra: dict[str,
-                    Any] | None = None,
-    ) -> None:
-        super().__init__(message = message, status_code = 403, extra = extra)
- 
+    def __init__(self, message: str = "N
 ```
 
 ---
 
 ## File Overview
 
-### Purpose and Responsibility
-This file defines a suite of custom exceptions for the application, ensuring consistent error handling across the codebase. Each exception class provides specific context and status codes relevant to different failure scenarios.
+### exceptions.py
 
-### Key Exports and Public Interface
-- **BaseAppException**: The base class for all application-specific exceptions.
-- **ResourceNotFound**: Raised when a requested resource does not exist.
-- **ConflictError**: Indicates an operation conflicts with the existing state.
-- **ValidationError**: Thrown when input validation fails outside of Pydantic.
-- **AuthenticationError**: Base exception for authentication failures, including `TokenError`, `TokenRevokedError`.
-- **PermissionDenied**: Raised when a user lacks required permissions.
-- **RateLimitExceeded**: Indicates that the rate limit has been exceeded.
-- **UserNotFound**: A specific case of `ResourceNotFound` for users.
-- **EmailAlreadyExists**: Conflicts when attempting to register with an existing email.
-- **InvalidCredentials**: Thrown during failed login attempts.
-- **InactiveUser**: Raised when an inactive user tries to authenticate.
+**Purpose and Responsibility:**
+This Python file defines a hierarchy of custom exception classes for handling various errors within the application. It ensures consistent error handling by providing specific exceptions for different scenarios, such as storage operations, AI services, authentication, authorization, validation, and more.
 
-### How It Fits in the Project
-This file is crucial for maintaining a consistent error handling strategy throughout the application. Exceptions are used not only for error reporting but also for controlling flow and enforcing business rules. They integrate seamlessly with the Flask framework, providing clear status codes and messages that can be easily handled by both the backend and frontend.
+**Key Exports or Public Interface:**
+- `BaseAppException`: The base class for all application-specific exceptions.
+- Various derived exception classes like `StorageError`, `FileTooLargeError`, `UnsupportedFileTypeError`, `LocalAIError`, `VisionError`, `EmbeddingError`, `SearchServiceError`, `QueryEmbeddingError`, `AuthenticationError`, `AuthorizationError`, `NotFoundError`, `ValidationError`, `ConflictError`, and `RateLimitExceeded`.
 
-### Notable Design Decisions
-- **Inheritance**: All exceptions inherit from `BaseAppException`, ensuring a uniform structure.
-- **Type Hints**: Use of `typing` for type annotations to enhance code readability and maintainability.
-- **Contextual Information**: Each exception includes additional context via the `extra` parameter, which can be useful for logging or detailed error messages.
-- **Status Codes**: Custom status codes are assigned based on the nature of the failure, improving HTTP response consistency.
+**How it Fits in the Project:**
+This file serves as a central repository for exception handling, ensuring that specific error types are appropriately raised and caught throughout the application. It integrates with other modules by providing consistent error messages and status codes, facilitating easier debugging and user feedback.
+
+**Notable Design Decisions:**
+- Inheritance hierarchy is used to create a structured system of exceptions.
+- Each derived class inherits from `BaseAppException`, which sets common attributes like `message` and `status_code`.
+- Type hints are used for function parameters and return types, enhancing code readability and maintainability.
+- The use of `**kwargs` allows for flexible additional information in exception messages.
+```
+
+This documentation provides an overview of the file's role within the project, its key components, and design choices that ensure a robust error handling mechanism.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 07:37*
+*Generated by CodeWorm on 2026-02-20 13:34*
