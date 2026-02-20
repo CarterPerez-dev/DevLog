@@ -1,0 +1,152 @@
+# emergency-protocols
+
+**Type:** File Overview
+**Repository:** ios-test
+**File:** red-recon/app/(app)/emergency-protocols.tsx
+**Language:** tsx
+**Lines:** 1-320
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+/**
+ * @AngelaMos | 2026
+ * emergency-protocols.tsx
+ */
+
+import { DottedBackground } from '@/shared/components'
+import { colors } from '@/theme/tokens'
+import { router } from 'expo-router'
+import {
+  AlertTriangle,
+  ChevronLeft,
+  Cookie,
+  Flame,
+  Heart,
+  MessageCircleOff,
+  Shield,
+  Skull,
+  Sofa,
+  ThermometerSun,
+  Tv,
+  Zap,
+} from 'lucide-react-native'
+import type React from 'react'
+import { Pressable, ScrollView } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Stack, Text, XStack, YStack } from 'tamagui'
+
+interface Protocol {
+  icon: React.ReactNode
+  title: string
+  threat: string
+  steps: string[]
+}
+
+const EMERGENCY_PROTOCOLS: Protocol[] = [
+  {
+    icon: <Skull size={20} color={colors.errorDefault.val} />,
+    title: 'SILENT TREATMENT',
+    threat: 'CRITICAL',
+    steps: [
+      "do NOT ask what's wrong more than once",
+      "exist silently in her general vicinity",
+      "offer snacks without making eye contact",
+      "wait for her to speak first or perish",
+      "if she says 'it's fine' - it is not fine",
+    ],
+  },
+  {
+    icon: <Flame size={20} color="#f97316" />,
+    title: 'MELTDOWN MODE',
+    threat: 'SEVERE',
+    steps: [
+      "do not try to fix it. just don't.",
+      "nod and say 'that's valid' on repeat",
+      "tissues within arm's reach at all times",
+      "do NOT mention hormones unless you want death",
+      "her feelings are facts rn. accept it.",
+    ],
+  },
+  {
+    icon: <Cookie size={20} color="#f59e0b" />,
+    title: 'SNACK EMERGENCY',
+    threat: 'HIGH',
+    steps: [
+      "chocolate is not a want, it's a NEED",
+      "wrong snack = starting over from scratch",
+      "if unsure, get one of everything",
+      "ice cream is a food group this week",
+      "delivery apps are your best friend",
+    ],
+  },
+  {
+    icon: <ThermometerSun size={20} color="#dc2626" />,
+    title: 'CRAMP CRISIS',
+    threat: 'CRITICAL',
+    steps: [
+      "heating pad must be located IMMEDIATELY",
+      "offer pain meds with water (not just meds)",
+      "blanket deployment is mandatory",
+      "do not question why she's in fetal position",
+      "if she says 'I'm dying' - she's not lying to her",
+    ],
+  },
+  {
+    icon: <MessageCircleOff size={20} color="#64748b" />,
+    title: '"DO I LOOK BLOATED?"',
+    threat: 'EXTREME',
+    steps: [
+      "THE ANSWER IS ALWAYS NO",
+      "follow up with 'you look amazing'",
+      "do not hesitate. hesitation = guilt",
+      "compliment something specific immediately",
+      "this is not a drill. your life depends on it.",
+    ],
+  },
+  {
+    icon: <Tv size={20} color="#8b5cf6" />,
+    title: 'COMFORT SHOW',
+    threat: 'MODERATE',
+    steps: [
+      "surrender the remote. it's hers now.",
+      "yes, even if it's the 47th rewatch",
+      "prepare to pretend you also love it",
+      "do NOT suggest something 'better'",
+      "your opinion was not asked for bestie",
+    ],
+  },
+  {
+    icon: <Sofa size={20} color="#22c55e" />,
+    title: 'COUCH QUARAN
+```
+
+---
+
+## File Overview
+
+### emergency-protocols.tsx
+
+**Purpose and Responsibility:**
+This file defines a component that displays emergency protocols for handling various emotional and physical crises, ensuring users know how to respond appropriately. It is part of a larger application aimed at supporting mental health and well-being.
+
+**Key Exports or Public Interface:**
+The primary export is the `ProtocolCard` component, which renders individual protocol cards with icons, titles, threat levels, and steps. The component leverages Tamagui for styling and React Native components for layout.
+
+**How It Fits in the Project:**
+This file resides within a directory structure that includes shared components and theme tokens. It is likely imported into a higher-level component or screen to display emergency protocols to users. The `emergencies` page might use this component to provide detailed guidance on how to handle different situations.
+
+**Notable Design Decisions:**
+- **Icon Usage:** Icons from `lucide-react-native` are used to visually represent each protocol, enhancing user understanding.
+- **Threat Levels:** Different threat levels are color-coded and styled differently to quickly convey the severity of a situation.
+- **Step-by-Step Guidance:** Each protocol includes multiple steps, providing detailed instructions for handling various scenarios.
+- **Responsive Design:** The component uses Tamagui's responsive design features to ensure it looks good on different devices and screen sizes.
+
+This file is crucial for ensuring users have clear guidance during critical moments, promoting a supportive environment within the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 15:57*
