@@ -1,0 +1,159 @@
+# storage_service
+
+**Type:** File Overview
+**Repository:** vuemantics
+**File:** backend/services/storage_service.py
+**Language:** python
+**Lines:** 1-526
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+storage_service.py
+"""
+
+import asyncio
+import logging
+import os
+import shutil
+from pathlib import Path
+from typing import BinaryIO
+from uuid import UUID
+
+import aiofiles
+import cv2
+from PIL import Image
+
+import config
+from core.validators import FileValidator
+from core.validators.file import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+
+
+logger = logging.getLogger(__name__)
+
+
+class StorageService:
+    """
+    Handles file storage operations with cloud-ready interface
+
+    Currently uses local filesystem but designed for easy migration
+    to cloud storage services like S3 or Google Cloud Storage
+    """
+    def __init__(self, base_path: Path | None = None):
+        """
+        Initialize storage service
+
+        Args:
+            base_path: Base directory for uploads (defaults to settings)
+        """
+        self.base_path = base_path or config.settings.upload_path
+        logger.info(
+            f"Storage service initialized with base path: {self.base_path}"
+        )
+
+    def _get_upload_dir(self, user_id: UUID, upload_id: UUID) -> Path:
+        """
+        Get directory path for specific upload.
+
+        Structure: base_path/user_id/upload_id/
+        """
+        return self.base_path / str(user_id) / str(upload_id)
+
+    async def validate_file(
+        self,
+        filename: str,
+        mime_type: str,
+        file_size: int
+    ) -> tuple[str,
+               str]:
+        """
+        Validate uploaded file using FileValidator.
+
+        Args:
+            filename: Original filename
+            mime_type: MIME type
+            file_size: Size in bytes
+
+        Returns:
+            Tuple of (file_type, extension)
+        """
+        result = FileValidator.validate(filename, mime_type, file_size)
+        return result.file_type, result.extension
+
+    async def save_upload(
+        self,
+        file_content: BinaryIO,
+        user_id: UUID,
+        upload_id: UUID,
+        extension: str,
+    ) -> str:
+        """
+        Save uploaded file to storage
+
+        Args:
+            file_content: File content as binary stream
+            user_id: User's ID
+            upload_id: Upload's ID
+            extension: File extension
+
+        Returns:
+            Relative path to saved file
+        """
+        # Create dir structure
+        upload_dir = self._get_upload_dir(user_id, upload_id)
+        upload_dir.mkdir(parents = True, exist_ok = True)
+
+        # Save original file
+        filename = f"original.{extension}"
+        file_path = upload_dir / filename
+
+        async with aiofiles.open(file_path, "wb") as f:
+            # Read chunks to handle large files
+            while chunk := file_content.read(config.FILE_UPLOAD_CHUNK_SIZE
+                                             ):
+                await f.write(chunk)
+
+        relative_path = file_path.relative_to(self.base_path)
+        logger.info(f"Saved upload to: {relative_path}")
+
+        return str(relative_path)
+
+    async def generate_thumbnail(
+        self,
+        user_id: 
+```
+
+---
+
+## File Overview
+
+### storage_service.py
+
+**Purpose and Responsibility:**
+This file implements a `StorageService` class responsible for handling file uploads, validation, and thumbnail generation. It currently uses local filesystem storage but is designed to be easily migrated to cloud services like S3 or Google Cloud Storage.
+
+**Key Exports and Public Interface:**
+- **StorageService**: The main service class with methods for validating files, saving them, and generating thumbnails.
+  - `validate_file`: Validates the uploaded file using a `FileValidator`.
+  - `save_upload`: Saves an uploaded file to the storage directory.
+  - `generate_thumbnail`: Generates a thumbnail for image or video uploads.
+
+**How it Fits in the Project:**
+This service is part of the backend infrastructure, handling all file-related operations. It interacts with other services and components through its public API, ensuring that files are stored and processed correctly before being used elsewhere in the application.
+
+**Notable Design Decisions:**
+- **Asynchronous Operations**: The class uses `asyncio` for asynchronous file I/O to handle large files efficiently.
+- **Error Handling**: Errors during thumbnail generation are logged, allowing graceful failure without crashing the service.
+- **Modular Structure**: Methods like `_generate_image_thumbnail_sync` and `_get_upload_dir` are separated into smaller functions for better readability and maintainability.
+```
+
+This documentation provides an overview of the file's purpose, its key methods, how it integrates with other parts of the project, and highlights some design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 11:57*
