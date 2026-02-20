@@ -1,0 +1,136 @@
+# meets_achievement_criteria
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** backend/api/domains/progression/services/achieve_engine.py
+**Language:** python
+**Lines:** 12-61
+**Complexity:** 20.0
+
+---
+
+## Source Code
+
+```python
+def meets_achievement_criteria(
+    criteria: dict[str,
+                   Any],
+    user: User,
+    user_counters: dict[str,
+                        Any]
+) -> bool:
+    """
+    Check if user meets the achievement criteria for unlock eligibility.
+    """
+    if not criteria:
+        return False
+
+    if "level" in criteria and (user.level or 1) < criteria["level"]:
+        return False
+
+    if "coins" in criteria and (user.coins or 0) < criteria["coins"]:
+        return False
+
+    if "testCount" in criteria:
+        current_tests = user_counters.get("total_tests_completed", 0)
+        if current_tests < criteria["testCount"]:
+            return False
+
+    if "perfectTests" in criteria:
+        current_perfect = user_counters.get("perfect_tests_count", 0)
+        if current_perfect < criteria["perfectTests"]:
+            return False
+
+    if "totalQuestions" in criteria:
+        current_questions = user_counters.get(
+            "total_questions_answered",
+            0
+        )
+        if current_questions < criteria["totalQuestions"]:
+            return False
+
+    if "minScore" in criteria:
+        highest_score = user_counters.get("highest_score_ever", 0)
+        if highest_score < criteria["minScore"]:
+            return False
+
+    if "minScoreBefore" in criteria and "minScoreAfter" in criteria:
+        lowest_score = user_counters.get("lowest_score_ever", 100)
+        highest_score = user_counters.get("highest_score_ever", 0)
+        if not (lowest_score <= criteria["minScoreBefore"]
+                and highest_score >= criteria["minScoreAfter"]):
+            return False
+
+    return True
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(n)\), where \(n\) is the number of criteria keys in `criteria`. Each key check involves a dictionary lookup, which is generally \(O(1)\) on average.
+
+**Space Complexity:** The space complexity is \(O(1)\) as no additional data structures are created that scale with input size. However, the function does rely on global state through `user` and `user_counters`.
+
+**Bottlenecks or Inefficiencies:**
+- **Redundant Operations:** Each key check in `criteria` involves a dictionary lookup, which is repeated for each criterion.
+- **Unnecessary Iterations:** The function iterates over the keys of `criteria`, even if earlier checks return `False`.
+
+### Optimization Opportunities:
+1. **Early Exit Strategy:** Use an early exit strategy by returning `False` as soon as any condition fails. This reduces unnecessary iterations.
+2. **Memoization:** If criteria are frequently checked, consider caching results to avoid redundant calculations.
+
+```python
+def meets_achievement_criteria(
+    criteria: dict[str,
+                   Any],
+    user: User,
+    user_counters: dict[str,
+                        Any]
+) -> bool:
+    if not criteria:
+        return False
+
+    for key in criteria:
+        if key == "level" and (user.level or 1) < criteria[key]:
+            return False
+        elif key == "coins" and (user.coins or 0) < criteria[key]:
+            return False
+        elif key == "testCount":
+            current_tests = user_counters.get("total_tests_completed", 0)
+            if current_tests < criteria[key]:
+                return False
+        elif key == "perfectTests":
+            current_perfect = user_counters.get("perfect_tests_count", 0)
+            if current_perfect < criteria[key]:
+                return False
+        elif key == "totalQuestions":
+            current_questions = user_counters.get(
+                "total_questions_answered",
+                0
+            )
+            if current_questions < criteria[key]:
+                return False
+        elif key == "minScore":
+            highest_score = user_counters.get("highest_score_ever", 0)
+            if highest_score < criteria[key]:
+                return False
+        elif key == "minScoreBefore" and "minScoreAfter" in criteria:
+            lowest_score = user_counters.get("lowest_score_ever", 100)
+            highest_score = user_counters.get("highest_score_ever", 0)
+            if not (lowest_score <= criteria["minScoreBefore"]
+                    and highest_score >= criteria["minScoreAfter"]):
+                return False
+
+    return True
+```
+
+**Resource Usage Concerns:**
+- Ensure `user` and `user_counters` are properly managed to avoid resource leaks. Use context managers or ensure they are closed when no longer needed.
+- Consider the impact of dictionary lookups on performance, especially if these dictionaries are large.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 18:29*
