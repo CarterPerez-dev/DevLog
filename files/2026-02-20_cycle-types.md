@@ -1,0 +1,117 @@
+# cycle.types
+
+**Type:** File Overview
+**Repository:** ios-test
+**File:** red-recon/src/api/types/cycle.types.ts
+**Language:** typescript
+**Lines:** 1-213
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+/**
+ * @AngelaMos | 2026
+ * cycle.types.ts
+ */
+
+import { z } from 'zod'
+import { Mood } from './dailyLog.types'
+
+export const CyclePhase = {
+  MENSTRUAL: 'menstrual',
+  FOLLICULAR: 'follicular',
+  OVULATION: 'ovulation',
+  LUTEAL: 'luteal',
+  UNKNOWN: 'unknown',
+} as const
+
+export type CyclePhase = (typeof CyclePhase)[keyof typeof CyclePhase]
+
+export const PHASE_COLORS: Record<CyclePhase, string> = {
+  [CyclePhase.MENSTRUAL]: '#dc2626',
+  [CyclePhase.FOLLICULAR]: '#ec4899',
+  [CyclePhase.OVULATION]: '#f59e0b',
+  [CyclePhase.LUTEAL]: '#64748b',
+  [CyclePhase.UNKNOWN]: '#525252',
+}
+
+export const PHASE_BG_COLORS: Record<CyclePhase, string> = {
+  [CyclePhase.MENSTRUAL]: 'rgba(220, 38, 38, 0.12)',
+  [CyclePhase.FOLLICULAR]: 'rgba(236, 72, 153, 0.10)',
+  [CyclePhase.OVULATION]: 'rgba(245, 158, 11, 0.12)',
+  [CyclePhase.LUTEAL]: 'rgba(100, 116, 139, 0.10)',
+  [CyclePhase.UNKNOWN]: 'rgba(82, 82, 82, 0.10)',
+}
+
+export const PHASE_LABELS: Record<CyclePhase, string> = {
+  [CyclePhase.MENSTRUAL]: 'Menstrual',
+  [CyclePhase.FOLLICULAR]: 'Follicular',
+  [CyclePhase.OVULATION]: 'Ovulation',
+  [CyclePhase.LUTEAL]: 'Luteal',
+  [CyclePhase.UNKNOWN]: 'Unknown',
+}
+
+export const DEFCON_LEVELS: Record<CyclePhase, { level: number; label: string }> = {
+  [CyclePhase.MENSTRUAL]: { level: 1, label: 'DEFCON 1' },
+  [CyclePhase.LUTEAL]: { level: 2, label: 'DEFCON 2' },
+  [CyclePhase.OVULATION]: { level: 3, label: 'DEFCON 3' },
+  [CyclePhase.FOLLICULAR]: { level: 5, label: 'DEFCON 5' },
+  [CyclePhase.UNKNOWN]: { level: 4, label: 'DEFCON ?' },
+}
+
+export const PHASE_CODENAMES: Record<CyclePhase, string> = {
+  [CyclePhase.MENSTRUAL]: 'CODE RED',
+  [CyclePhase.FOLLICULAR]: 'MAIN CHARACTER ERA',
+  [CyclePhase.OVULATION]: 'THE GLOW UP',
+  [CyclePhase.LUTEAL]: 'STORM WARNING',
+  [CyclePhase.UNKNOWN]: 'UNCHARTED TERRITORY',
+}
+
+export const PHASE_DESCRIPTIONS: Record<CyclePhase, string> = {
+  [CyclePhase.MENSTRUAL]: "she's literally going through it and you're asking what's for dinner? read the room bestie",
+  [CyclePhase.FOLLICULAR]: "she's in her bag rn. this is your window. plan dates. be cute. she might actually laugh at your mid jokes",
+  [CyclePhase.OVULATION]: "she's glowing but also... biology is biologying. compliments hit different rn, gas her up king",
+  [CyclePhase.LUTEAL]: "PMS has entered the chat. the vibes are giving immaculate-to-unhinged pipeline speedrun",
+  [CyclePhase.UNKNOWN]: "no intel available. you're flying blind soldier. godspeed",
+}
+
+export const TACTICAL_TIPS: Record<CyclePhase, string[]> = {
+  [CyclePhase.MENSTRUAL]: [
+    "heating pad is NOT optional, it's a war crime to hide it",
+    "if she says she's fine, she is in fact not fine",
+    "chocolate is a human right rn, not a suggestion",
+    "do NOT ask why she's emotional. just don't. trust.",
+    "the couch has your name on it if you fumble this",
+    "cramps are literally her organs fighting for their life",
+    "whatever she wants to watch, that's what we're watching",
+    "exist near her quietly. 
+```
+
+---
+
+## File Overview
+
+### Documenting `cycle.types.ts`
+
+**File Purpose and Responsibility:**
+This TypeScript file defines constants, types, and schemas related to menstrual cycle phases for a health tracking application. It provides essential data structures and utility functions to manage and display information about different cycle stages.
+
+**Key Exports or Public Interface:**
+- **CyclePhase:** An enum representing the various phases of a menstrual cycle.
+- **PHASE_COLORS, PHASE_BG_COLORS, PHASE_LABELS, DEFCON_LEVELS, PHASE_CODENAMES, PHASE_DESCRIPTIONS, TACTICAL_TIPS:** Records mapping each phase to specific colors, background colors, labels, defense readiness levels, codenames, descriptions, and tactical tips. These are used for visual representation and user guidance.
+- **cycleStatusSchema:** A Zod schema for validating cycle status data.
+
+**How It Fits in the Project:**
+This file is crucial for the project's health tracking module, providing a standardized way to handle menstrual cycle phases across different components. The exported constants and schemas ensure consistency and facilitate easy integration with other parts of the application, such as UI elements, notifications, and user guidance features.
+
+**Notable Design Decisions:**
+- **Zod Schema:** Utilizing Zod for validation ensures data integrity when handling cycle status information.
+- **Enum with Constants:** Using an enum for `CyclePhase` enhances type safety and readability throughout the codebase.
+- **Rich Metadata:** Detailed metadata like colors, labels, descriptions, and tactical tips provide a comprehensive user experience, making it easier to understand and navigate different phases of the menstrual cycle.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 15:59*
