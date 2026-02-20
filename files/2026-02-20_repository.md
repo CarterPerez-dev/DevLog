@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** my-portfolio
-**File:** v1/backend/app/user/repository.py
+**File:** v1/backend/app/certification/repository.py
 **Language:** python
-**Lines:** 1-110
+**Lines:** 1-95
 **Complexity:** 0.0
 
 ---
@@ -16,111 +16,96 @@
 ⒸAngelaMos | 2025
 repository.py
 """
-from uuid import UUID
 
-from sqlalchemy import select
+from collections.abc import Sequence
+
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import UserRole
-from .User import User
+import config
 from core.base_repository import BaseRepository
+from .Certification import Certification
 
 
-class UserRepository(BaseRepository[User]):
+class CertificationRepository(BaseRepository[Certification]):
     """
-    Repository for User model database operations
+    Repository for Certification model database operations.
     """
-    model = User
+    model = Certification
 
     @classmethod
-    async def get_by_email(
+    async def get_visible_by_language(
         cls,
         session: AsyncSession,
-        email: str,
-    ) -> User | None:
+        language: config.Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> Sequence[Certification]:
         """
-        Get user by email address
-        """
-        result = await session.execute(select(User).where(User.email == email))
-        return result.scalars().first()
-
-    @classmethod
-    async def get_by_id(
-        cls,
-        session: AsyncSession,
-        id: UUID,
-    ) -> User | None:
-        """
-        Get user by ID
-        """
-        return await session.get(User, id)
-
-    @classmethod
-    async def email_exists(
-        cls,
-        session: AsyncSession,
-        email: str,
-    ) -> bool:
-        """
-        Check if email is already registered
+        Get all visible certifications for a language.
+        Ordered by display_order for consistent listing.
         """
         result = await session.execute(
-            select(User.id).where(User.email == email)
+            select(Certification).where(
+                Certification.language == language
+            ).where(Certification.is_visible == True).order_by(
+                Certification.display_order
+            ).offset(skip).limit(limit)
         )
-        return result.scalars().first() is not None
+        return result.scalars().all()
 
     @classmethod
-    async def create_user(
+    async def get_active_by_language(
         cls,
         session: AsyncSession,
-        email: str,
-        hashed_password: str,
-        full_name: str | None = None,
-        role: UserRole = UserRole.USER,
-    ) -> User:
+        language: config.Language,
+    ) -> Sequence[Certification]:
         """
-        Create a new user
+        Get non-expired certifications for a language.
         """
-        user = User(
-            email = email,
-            hashed_password = hashed_password,
-            full_name = full_name,
-            role = role,
+        result = await session.execute(
+            select(Certification).where(
+                Certification.language == language
+            ).where(Certification.is_visible == True).where(
+                Certification.is_expired == False
+            ).order_by(Certification.display_order)
         )
-        session.add(user)
-        await session.flush()
-        await session.refresh(user)
-        return user
+        return result.scalars().all()
 
     @classmethod
-    async def update_password(
+    async def get_by_category_and_language(
         cls,
         session: AsyncSession,
-        user: User,
-        hashed_password: str,
-    ) -> User:
+        category: config.CertificationCategory,
+        language: config.Language,
+    ) -> Sequence[Certification]:
         """
-        Update user password and increment token version
+        Get certifications by category and language.
         """
-        user.hashed_password = hashed_password
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
+        result = await session.execute(
+            select(Certification).where(
+                Certification.language == language
+            ).where(Certification.category == category).where(
+                Certification.is_visible == True
+            ).order_by(Certification.display_order)
+        )
+        return result.scalars().all()
 
     @classmethod
-    async def increment_token_version(
+    async def count_visible_by_language(
         cls,
         session: AsyncSession,
-        user: User,
-    ) -> User:
+        language: config.Language,
+    ) -> int:
         """
-        Invalidate all user tokens
+        Count visible certifications for pagination.
         """
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
+        result = await session.execute(
+            select(func.count()).select_from(Certification).where(
+                Certification.language == language
+            ).where(Certification.is_visible == True)
+        )
+        return result.scalar_one()
 
 ```
 
@@ -130,28 +115,30 @@ class UserRepository(BaseRepository[User]):
 
 ### Purpose and Responsibility
 
-This file, `repository.py`, is responsible for defining a repository class that encapsulates database operations for the `User` model. It provides methods to interact with user data such as retrieving users by email or ID, checking if an email is already registered, creating new users, updating passwords, and incrementing token versions.
+This file, `repository.py`, is part of the Certification module within the my-portfolio application. It provides an asynchronous repository for managing operations related to the `Certification` model, including fetching visible certifications by language, category, or language alone, as well as counting such certifications.
 
 ### Key Exports and Public Interface
 
-- **BaseRepository**: Inherits from this base class.
-- **get_by_email(session: AsyncSession, email: str) -> User | None**: Retrieves a user by their email address.
-- **get_by_id(session: AsyncSession, id: UUID) -> User | None**: Retrieves a user by their unique ID.
-- **email_exists(session: AsyncSession, email: str) -> bool**: Checks if an email is already registered in the database.
-- **create_user(session: AsyncSession, email: str, hashed_password: str, full_name: str | None = None, role: UserRole = UserRole.USER) -> User**: Creates a new user with specified details.
-- **update_password(session: AsyncSession, user: User, hashed_password: str) -> User**: Updates the password and increments the token version for an existing user.
-- **increment_token_version(session: AsyncSession, user: User) -> User**: Invalidates all tokens associated with a user by incrementing their token version.
+The primary public interface includes:
+- `get_visible_by_language`: Fetches visible certifications for a given language.
+- `get_active_by_language`: Retrieves non-expired certifications for a given language.
+- `get_by_category_and_language`: Finds certifications by category and language.
+- `count_visible_by_language`: Counts visible certifications for pagination.
 
-### How It Fits into the Project
+### How It Fits in the Project
 
-This repository class is part of the `User` module in the broader project structure. It adheres to the Single Responsibility Principle by focusing solely on database operations related to users, making it easier to manage and test these functionalities. The methods are designed to be reusable across different parts of the application, ensuring consistency in user data handling.
+This repository is a critical component of the data access layer, ensuring that operations on the `Certification` model are consistent and efficient. It leverages SQLAlchemy for database interactions and follows a base repository pattern to maintain uniformity across different models.
 
 ### Notable Design Decisions
 
-- **Use of SQLAlchemy**: Leverages SQLAlchemy for asynchronous database interactions, providing a robust and efficient way to handle CRUD operations.
-- **Type Hints and Annotations**: Utilizes Python's type hints and annotations to ensure clear and maintainable code. This is particularly useful in an async context where session management can be complex.
-- **Inheritance from BaseRepository**: Inherits from `BaseRepository` to standardize common repository functionalities, promoting DRY principles and reducing redundancy.
+- **Asynchronous Operations**: All methods are designed to be asynchronous, utilizing `AsyncSession` from SQLAlchemy.
+- **Pagination Support**: Methods like `get_visible_by_language` support pagination through `skip` and `limit` parameters.
+- **SQLAlchemy ORM**: Utilizes SQLAlchemy's ORM for querying the database, ensuring type safety and ease of use.
+- **Type Hints and Annotations**: Comprehensive use of type hints and annotations to ensure clarity and maintainability.
+```
+
+This documentation provides a high-level overview of the file's purpose, its public interface, integration within the project, and key design decisions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 08:37*
+*Generated by CodeWorm on 2026-02-20 09:17*
