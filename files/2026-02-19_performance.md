@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** kill-pr0cess.inc
-**File:** backend/src/routes/performance.rs
+**File:** backend/src/models/performance.rs
 **Language:** rust
-**Lines:** 1-414
+**Lines:** 1-678
 **Complexity:** 0.0
 
 ---
@@ -13,131 +13,124 @@
 
 ```rust
 /*
- * Performance monitoring route handlers providing real-time system metrics and benchmark capabilities for the showcase.
- * I'm implementing comprehensive performance endpoints that demonstrate system capabilities while providing valuable diagnostic information.
+ * Performance monitoring models defining comprehensive system metrics, benchmark structures, and analytical data for the showcase backend.
+ * I'm implementing detailed performance tracking with time-series data, alerting capabilities, and resource utilization monitoring that showcases the application's computational efficiency.
  */
 
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    Json,
-    response::Json as JsonResponse,
-};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use tracing::{info, warn, error};
-use sysinfo::{System, SystemExt, CpuExt, DiskExt, NetworkExt};
+use validator::{Validate, ValidationError};
 
-use crate::{
-    utils::error::{AppError, Result},
-    AppState,
-};
-
-#[derive(Debug, Deserialize)]
-pub struct MetricsQuery {
-    pub history_limit: Option<usize>,
-    pub include_history: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CurrentMetricsResponse {
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub system: SystemPerformance,
-    pub application: ApplicationPerformance,
-    pub hardware: HardwareInfo,
-    pub runtime: RuntimeInfo,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SystemPerformance {
+/// Comprehensive system performance metrics snapshot
+/// I'm capturing all essential system performance indicators for real-time monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub timestamp: DateTime<Utc>,
+    pub cpu_model: String,
+    pub cpu_cores: u32,
+    pub cpu_threads: u32,
     pub cpu_usage_percent: f64,
+    pub cpu_frequency_mhz: Option<u32>,
+    pub memory_total_mb: u64,
+    pub memory_available_mb: u64,
     pub memory_usage_percent: f64,
-    pub memory_total_gb: f64,
-    pub memory_available_gb: f64,
+    pub swap_total_mb: u64,
+    pub swap_used_mb: u64,
+    pub disk_total_gb: f64,
+    pub disk_available_gb: f64,
     pub disk_usage_percent: f64,
+    pub network_interfaces: Vec<NetworkInterface>,
     pub load_average_1m: f64,
     pub load_average_5m: f64,
     pub load_average_15m: f64,
     pub uptime_seconds: u64,
     pub active_processes: u32,
+    pub system_temperature: Option<f64>,
+    pub power_consumption: Option<PowerMetrics>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ApplicationPerformance {
-    pub requests_handled: u64,
-    pub average_response_time_ms: f64,
-    pub fractal_computations: u64,
-    pub github_api_calls: u64,
-    pub cache_hit_rate: f64,
-    pub database_connections: u32,
-    pub memory_usage_mb: f64,
+/// Network interface performance metrics
+/// I'm tracking network performance for comprehensive system monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkInterface {
+    pub name: String,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+    pub packets_sent: u64,
+    pub packets_received: u64,
+    pub errors_in: u64,
+    pub errors_out: u64,
+    pub speed_mbps: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct HardwareInfo {
-    pub cpu_model: String,
-    pub cpu_cores: u32,
-    pub cpu_threads: u32,
-    pub architecture: String,
-    pub total_memory_gb: f64,
+/// Power consumption and efficiency metrics
+/// I'm monitoring power usage for sustainability insights
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PowerMetrics {
+    pub total_watts: f64,
+    pub cpu_watts: Option<f64>,
+    pub gpu_watts: Option<f64>,
+    pub efficiency_score: f64,
 }
 
-#[derive(Debug, Serialize)]
-pub struct RuntimeInfo {
-    pub rust_version: String,
-    pub build_type: String,
-    pub optimization_level: String,
-    pub features_enabled: Vec<String>,
+/// Individual performance metric with metadata and context
+/// I'm implementing flexible metric tracking with rich metadata support
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PerformanceMetric {
+    pub id: uuid::Uuid,
+    pub metric_type: String,
+    pub metric_name: String,
+    pub metric_value: f64,
+    pub metric_unit: String,
+    pub tags: serde_json::Value,
+    pub timestamp: DateTime<Utc>,
+    pub endpoint: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<std::net::IpAddr>,
+    pub session_id: Option<uuid::Uuid>,
+    pub server_instance: Option<String>,
+    pub environment: String,
 }
 
-/// Get current performance metrics with comprehensive system analysis
-/// I'm providing real-time performance data for monitoring and display
-pub async fn get_current_metrics(
-    State(app_state): State<AppState>,
-    Query(params): Query<MetricsQuery>,
-) -> Result<JsonResponse<CurrentMetricsResponse>> {
-    info!("Fetching current performance metrics");
-
-    // Collect system metrics
-    let mut system = System::new_all();
-    system.refresh_all();
-
-    let system_perf = SystemPerformance {
-        cpu_usage_percent: system.global_cpu_info().cpu_usage() as f64,
-        memory_usage_percent: {
-            let total = system.total_memory() as f64;
-            let available = system.available_memory() as f64;
-            ((total - available) / total) * 100.0
-        },
-        memory_total_gb: system.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
-        memory_available_gb: system.available_memory() as f64 / (1
+impl PerformanceMetric {
+    pub fn new(
+        metric_type: impl Into<String>,
+        metric_name: impl Into<String>,
+        value: f64,
+        unit: impl Into<String>,
+    ) -> Self {
+   
 ```
 
 ---
 
 ## File Overview
 
-### Performance Monitoring Route Handlers
+# Performance Monitoring Models
 
 **Purpose and Responsibility:**
-This file defines route handlers for real-time performance monitoring, providing system metrics and application performance data to demonstrate and diagnose system capabilities.
+This file defines comprehensive performance monitoring models for the backend of the `kill-pr0cess.inc` application. It includes system information, network interfaces, power consumption metrics, individual performance metrics with metadata, and standardized metric types. These models facilitate real-time monitoring, alerting, and resource utilization analysis.
 
 **Key Exports and Public Interface:**
-- `get_current_metrics`: A handler function that fetches and returns current performance metrics.
-- Data structures like `MetricsQuery`, `CurrentMetricsResponse`, `SystemPerformance`, `ApplicationPerformance`, `HardwareInfo`, and `RuntimeInfo` for structured data representation.
+- **SystemInfo:** A comprehensive snapshot of system performance indicators.
+- **NetworkInterface:** Metrics for each network interface.
+- **PowerMetrics:** Power consumption and efficiency metrics.
+- **PerformanceMetric:** Individual performance metric with rich metadata support.
+- **MetricType:** Enumerated types for standardized categorization.
 
 **How It Fits in the Project:**
-This file is part of the backend API, specifically handling requests related to system performance. It integrates with other components such as database connections (`AppState`) and utility functions for error handling. The metrics collected are crucial for monitoring and debugging the application's runtime behavior.
+This file is a crucial component of the backend, providing essential data models used by various modules for monitoring system health. `SystemInfo` and `NetworkInterface` are used to capture real-time system and network performance, while `PerformanceMetric` and `PowerMetrics` enable detailed tracking of application-specific metrics.
 
 **Notable Design Decisions:**
-- **Comprehensive Metrics**: The handler collects a wide range of system and application performance data, ensuring a holistic view.
-- **Error Handling**: Uses `Result` to manage potential errors gracefully, logging issues with `tracing`.
-- **Lazy Initialization**: CPU core and thread counts are calculated lazily for efficiency.
-- **External Dependencies**: Relies on `sysinfo` for system metrics and `axum` for HTTP request handling.
+- **Strong Typing:** The use of enums like `MetricType` ensures type safety and consistent categorization.
+- **Metadata Support:** `PerformanceMetric` includes extensive metadata fields to provide context for each metric, enhancing data integrity and usability.
+- **Serde Integration:** Serialization and deserialization support via `serde` and `FromRow` enable easy integration with database operations.
 ```
 
-This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and design choices.
+This documentation provides a high-level overview of the file's purpose, key exports, role in the project, and notable design decisions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 21:30*
+*Generated by CodeWorm on 2026-02-19 22:34*
