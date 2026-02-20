@@ -1,0 +1,137 @@
+# UploadBatch
+
+**Type:** File Overview
+**Repository:** vuemantics
+**File:** backend/models/UploadBatch.py
+**Language:** python
+**Lines:** 1-359
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+UploadBatch.py
+"""
+
+from __future__ import annotations
+
+from typing import Any
+from datetime import datetime
+from uuid import UUID, uuid4
+
+import config
+import database
+from models.Base import BaseModel
+
+
+class BatchStatus:
+    """
+    Batch processing status constants
+    """
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class UploadBatch(BaseModel):
+    """
+    Tracks batches of uploads for bulk processing
+
+    Design for robustness:
+    - Database is source of truth (worker crash = resume from DB)
+    - Sequential processing (one at a time due to compute limits)
+    - Non blocking failures (one bad upload doesn't stop batch)
+    - Retry once per upload (fails twice = permanent failure)
+    - WebSocket progress updates for real-time tracking
+    - MCP-friendly status queries
+    """
+    __tablename__ = "upload_batches"
+
+    def __init__(self, **kwargs: Any) -> None:
+        """
+        Initialize upload batch instance
+        """
+        super().__init__(**kwargs)
+
+        self.id: UUID = kwargs.get("id") or uuid4()
+        self.user_id: UUID = kwargs["user_id"]
+        self.status: str = kwargs.get("status", BatchStatus.PENDING)
+        self.total_uploads: int = kwargs.get("total_uploads", 0)
+        self.processed_uploads: int = kwargs.get("processed_uploads", 0)
+        self.successful_uploads: int = kwargs.get("successful_uploads", 0)
+        self.failed_uploads: int = kwargs.get("failed_uploads", 0)
+        self.error_message: str | None = kwargs.get("error_message")
+        self.started_at: datetime | None = kwargs.get("started_at")
+        self.completed_at: datetime | None = kwargs.get("completed_at")
+
+    @classmethod
+    async def create_table(cls) -> None:
+        """
+        Create upload_batches table with indexes
+        """
+        query = """
+            CREATE TABLE IF NOT EXISTS upload_batches (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+                -- Status
+                status VARCHAR(20) NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+
+                -- Progress counters
+                total_uploads INTEGER NOT NULL DEFAULT 0,
+                processed_uploads INTEGER NOT NULL DEFAULT 0,
+                successful_uploads INTEGER NOT NULL DEFAULT 0,
+                failed_uploads INTEGER NOT NULL DEFAULT 0,
+
+                -- Error tracking
+                error_message TEXT,
+
+                -- Timestamps
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP
+            );
+
+            -- Indexes for performance
+            CREATE INDEX IF NOT EXISTS idx_upload_batches_user_id ON upload_batches(user_id);
+```
+
+---
+
+## File Overview
+
+**UploadBatch.py**
+
+This Python source file is responsible for managing batches of uploads, providing a robust mechanism for bulk processing. It includes models and database operations to track upload statuses, progress, and errors.
+
+### Key Exports and Public Interface
+
+- **`BatchStatus`**: Enum-like class defining batch status constants.
+- **`UploadBatch`**: A subclass of `BaseModel`, representing an upload batch with attributes like `id`, `status`, `total_uploads`, etc. It includes methods for creating, finding, and managing batches.
+
+### How it Fits into the Project
+
+This file is a critical component in the backend logic for handling bulk uploads. It interacts with the database to ensure data integrity and provides real-time tracking through WebSocket updates. The `UploadBatch` class is used by various parts of the application to manage upload processes efficiently, ensuring that each batch's status and progress are accurately recorded.
+
+### Notable Design Decisions
+
+- **Database as Source of Truth**: Ensures that even if a worker process crashes, processing can resume from where it left off.
+- **Sequential Processing**: Limits parallel processing to avoid overloading the system.
+- **Non-blocking Failures**: Allows individual uploads to fail without stopping the entire batch.
+- **Retry Mechanism**: Each upload is retried once before marking as failed permanently.
+- **WebSocket Updates**: Provides real-time progress updates for users.
+- **Indexes and Performance Optimization**: Optimized queries with indexes to improve performance.
+
+This design ensures a robust, scalable, and maintainable system for handling bulk uploads in the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 12:28*
