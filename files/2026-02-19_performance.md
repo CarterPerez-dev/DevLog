@@ -2,160 +2,142 @@
 
 **Type:** File Overview
 **Repository:** kill-pr0cess.inc
-**File:** frontend/src/services/performance.ts
-**Language:** typescript
-**Lines:** 1-602
+**File:** backend/src/routes/performance.rs
+**Language:** rust
+**Lines:** 1-414
 **Complexity:** 0.0
 
 ---
 
 ## Source Code
 
-```typescript
+```rust
 /*
- * Performance monitoring service providing real-time metrics collection, WebSocket integration, and comprehensive system performance analysis.
- * I'm implementing intelligent data aggregation, alerting capabilities, and seamless integration with the backend performance monitoring system for live dashboard updates.
+ * Performance monitoring route handlers providing real-time system metrics and benchmark capabilities for the showcase.
+ * I'm implementing comprehensive performance endpoints that demonstrate system capabilities while providing valuable diagnostic information.
  */
 
-import { apiClient } from './api';
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    Json,
+    response::Json as JsonResponse,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tracing::{info, warn, error};
+use sysinfo::{System, SystemExt, CpuExt, DiskExt, NetworkExt};
 
-interface SystemMetrics {
-  timestamp: string;
-  cpu_usage_percent: number;
-  memory_usage_percent: number;
-  memory_total_gb: number;
-  memory_available_gb: number;
-  disk_usage_percent: number;
-  load_average_1m: number;
-  load_average_5m: number;
-  load_average_15m: number;
-  cpu_cores: number;
-  cpu_threads: number;
-  cpu_model: string;
-  uptime_seconds: number;
-  active_processes: number;
-  system_temperature?: number;
+use crate::{
+    utils::error::{AppError, Result},
+    AppState,
+};
+
+#[derive(Debug, Deserialize)]
+pub struct MetricsQuery {
+    pub history_limit: Option<usize>,
+    pub include_history: Option<bool>,
 }
 
-interface ApplicationMetrics {
-  requests_handled: number;
-  average_response_time_ms: number;
-  fractal_computations: number;
-  github_api_calls: number;
-  cache_hit_rate: number;
-  database_connections: number;
-  memory_usage_mb: number;
+#[derive(Debug, Serialize)]
+pub struct CurrentMetricsResponse {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub system: SystemPerformance,
+    pub application: ApplicationPerformance,
+    pub hardware: HardwareInfo,
+    pub runtime: RuntimeInfo,
 }
 
-interface PerformanceSnapshot {
-  timestamp: string;
-  system: SystemMetrics;
-  application: ApplicationMetrics;
-  hardware: {
-    cpu_model: string;
-    cpu_cores: number;
-    cpu_threads: number;
-    architecture: string;
-    total_memory_gb: number;
-  };
-  runtime: {
-    rust_version: string;
-    build_type: string;
-    optimization_level: string;
-    features_enabled: string[];
-  };
+#[derive(Debug, Serialize)]
+pub struct SystemPerformance {
+    pub cpu_usage_percent: f64,
+    pub memory_usage_percent: f64,
+    pub memory_total_gb: f64,
+    pub memory_available_gb: f64,
+    pub disk_usage_percent: f64,
+    pub load_average_1m: f64,
+    pub load_average_5m: f64,
+    pub load_average_15m: f64,
+    pub uptime_seconds: u64,
+    pub active_processes: u32,
 }
 
-interface BenchmarkResult {
-  benchmark_id: string;
-  timestamp: string;
-  total_duration_ms: number;
-  system_info: any;
-  benchmarks: {
-    cpu: any;
-    memory: any;
-  };
-  performance_rating: string;
+#[derive(Debug, Serialize)]
+pub struct ApplicationPerformance {
+    pub requests_handled: u64,
+    pub average_response_time_ms: f64,
+    pub fractal_computations: u64,
+    pub github_api_calls: u64,
+    pub cache_hit_rate: f64,
+    pub database_connections: u32,
+    pub memory_usage_mb: f64,
 }
 
-interface MetricsHistory {
-  timestamp: string;
-  period_minutes: number;
-  data_points: number;
-  metrics: {
-    cpu_usage: Array<{ timestamp: string; value: number }>;
-    memory_usage: Array<{ timestamp: string; value: number }>;
-    disk_usage: Array<{ timestamp: string; value: number }>;
-    load_average: Array<{ timestamp: string; value: number }>;
-    response_times: Array<{ timestamp: string; value: number }>;
-  };
-  summary: {
-    average_cpu: number;
-    peak_cpu: number;
-    average_memory: number;
-    peak_memory: number;
-    incidents: number;
-    uptime_percentage: number;
-  };
+#[derive(Debug, Serialize)]
+pub struct HardwareInfo {
+    pub cpu_model: String,
+    pub cpu_cores: u32,
+    pub cpu_threads: u32,
+    pub architecture: String,
+    pub total_memory_gb: f64,
 }
 
-interface AlertConfig {
-  metric: string;
-  threshold: number;
-  operator: '>' | '<' | '=';
-  duration: number; // milliseconds
-  enabled: boolean;
+#[derive(Debug, Serialize)]
+pub struct RuntimeInfo {
+    pub rust_version: String,
+    pub build_type: String,
+    pub optimization_level: String,
+    pub features_enabled: Vec<String>,
 }
 
-interface Alert {
-  id: string;
-  timestamp: string;
-  metric: string;
-  value: number;
-  threshold: number;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  message: string;
-  acknowledged: boolean;
-}
+/// Get current performance metrics with comprehensive system analysis
+/// I'm providing real-time performance data for monitoring and display
+pub async fn get_current_metrics(
+    State(app_state): State<AppState>,
+    Query(params): Query<MetricsQuery>,
+) -> Result<JsonResponse<CurrentMetricsResponse>> {
+    info!("Fetching current performance metrics");
 
-class PerformanceService {
-  private wsConnection: WebSocket | null = null;
-  private metricsCache: Map<string, { data: any; timestamp: number }>;
-  private realTimeMetrics: SystemMetrics | null = null;
-  private alertConfig: AlertConfig[];
-  private activeAlerts: Map<string, Alert>;
-  private metricsHistory: Array<{
-    timestamp: number;
-    metrics: SystemMetrics;
-  }>;
-  private subscribers: Map<s
+    // Collect system metrics
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let system_perf = SystemPerformance {
+        cpu_usage_percent: system.global_cpu_info().cpu_usage() as f64,
+        memory_usage_percent: {
+            let total = system.total_memory() as f64;
+            let available = system.available_memory() as f64;
+            ((total - available) / total) * 100.0
+        },
+        memory_total_gb: system.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+        memory_available_gb: system.available_memory() as f64 / (1
 ```
 
 ---
 
 ## File Overview
 
-# PerformanceService.ts Documentation
+### Performance Monitoring Route Handlers
 
-**File Purpose and Responsibility:**
-This TypeScript file implements a `PerformanceService` class responsible for collecting, processing, and managing real-time system performance metrics. It includes WebSocket integration for live updates, alerting capabilities based on predefined thresholds, and historical data storage.
+**Purpose and Responsibility:**
+This file defines route handlers for real-time performance monitoring, providing system metrics and application performance data to demonstrate and diagnose system capabilities.
 
-**Key Exports or Public Interface:**
-- **Class:** `PerformanceService`
-  - Constructor initializes the service with default configurations.
-  - Methods:
-    - `getDefaultAlertConfig`: Sets up initial alert configurations.
-    - `cleanupCache`: Cleans up old cache entries to prevent memory leaks.
-    - `initializeRealTimeMonitoring`: Starts real-time monitoring using intervals, transitioning to WebSocket in future updates.
+**Key Exports and Public Interface:**
+- `get_current_metrics`: A handler function that fetches and returns current performance metrics.
+- Data structures like `MetricsQuery`, `CurrentMetricsResponse`, `SystemPerformance`, `ApplicationPerformance`, `HardwareInfo`, and `RuntimeInfo` for structured data representation.
 
 **How It Fits in the Project:**
-The `PerformanceService` is a crucial component of the frontend application, interfacing with backend APIs and WebSocket connections. It provides essential data for real-time performance analysis and alerting, which are critical for maintaining system health and user experience.
+This file is part of the backend API, specifically handling requests related to system performance. It integrates with other components such as database connections (`AppState`) and utility functions for error handling. The metrics collected are crucial for monitoring and debugging the application's runtime behavior.
 
 **Notable Design Decisions:**
-- **WebSocket Integration:** Planned to replace periodic polling intervals for more efficient live updates.
-- **Caching Mechanism:** Implements automatic cache cleanup to manage memory usage effectively.
-- **Alert System:** Configurable alerts based on thresholds, ensuring timely notifications for critical issues.
+- **Comprehensive Metrics**: The handler collects a wide range of system and application performance data, ensuring a holistic view.
+- **Error Handling**: Uses `Result` to manage potential errors gracefully, logging issues with `tracing`.
+- **Lazy Initialization**: CPU core and thread counts are calculated lazily for efficiency.
+- **External Dependencies**: Relies on `sysinfo` for system metrics and `axum` for HTTP request handling.
+```
+
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and design choices.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 20:54*
+*Generated by CodeWorm on 2026-02-19 21:30*
