@@ -1,0 +1,141 @@
+# UserEngagementCalculator.calculate_engagement_score
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** backend/api/admin/domains/users/queries.py
+**Language:** python
+**Lines:** 192-262
+**Complexity:** 20.0
+
+---
+
+## Source Code
+
+```python
+def calculate_engagement_score(self) -> tuple[float, dict[str, float]]:
+        """
+        Calculate engagement score (0-100) based on activity
+        """
+        score = 0.0
+        factors = {}
+
+        if self.user.lastLoginAt:
+            days_since_login = (
+                datetime.now(UTC) - (
+                    self.user.lastLoginAt.replace(tzinfo = UTC)
+                    if self.user.lastLoginAt.tzinfo is None else
+                    self.user.lastLoginAt
+                )
+            ).days
+            if days_since_login == 0:
+                login_score = 25
+            elif days_since_login <= 7:
+                login_score = 20
+            elif days_since_login <= 30:
+                login_score = 10
+            else:
+                login_score = 0
+            factors['login_frequency'] = float(login_score)
+            score += login_score
+        else:
+            factors['login_frequency'] = 0.0
+
+        tests_per_day = self.test_attempts / self.days_since_signup
+        if tests_per_day >= 1:
+            test_score = 25
+        elif tests_per_day >= 0.5:
+            test_score = 20
+        elif tests_per_day >= 0.1:
+            test_score = 10
+        else:
+            test_score = 5 if self.test_attempts > 0 else 0
+        factors['test_activity'] = float(test_score)
+        score += test_score
+
+        achievement_count = len(
+            self.user.achievements_v2
+        ) if self.user.achievements_v2 else 0
+        if achievement_count >= 20:
+            achievement_score = 25
+        elif achievement_count >= 10:
+            achievement_score = 20
+        elif achievement_count >= 5:
+            achievement_score = 15
+        elif achievement_count >= 1:
+            achievement_score = 10
+        else:
+            achievement_score = 0
+        factors['achievement_progress'] = float(achievement_score)
+        score += achievement_score
+
+        expected_level = min(self.days_since_signup / 10, 50)
+        if self.user.level >= expected_level:
+            level_score = 25
+        elif self.user.level >= expected_level * 0.75:
+            level_score = 20
+        elif self.user.level >= expected_level * 0.5:
+            level_score = 15
+        elif self.user.level >= expected_level * 0.25:
+            level_score = 10
+        else:
+            level_score = 5 if self.user.level > 1 else 0
+        factors['level_progression'] = float(level_score)
+        score += level_score
+
+        return score, factors
+```
+
+---
+
+## Security Review
+
+### Security Review
+
+#### Vulnerabilities Found:
+
+1. **Info - Hardcoded Constants**: The constants used for scoring (e.g., `25`, `20`, etc.) are hardcoded, which is fine but should be considered in case of future changes.
+   - **Line Numbers**: N/A
+
+2. **Info - Insecure Deserialization**: There's no deserialization involved in this code snippet.
+
+3. **Info - Error Handling**: The function does not handle errors explicitly, but it doesn't expose sensitive information through error messages.
+
+4. **Info - Input Validation Gaps**: No external input is directly used in the calculations, so there are no immediate input validation issues.
+
+5. **Info - Authentication and Authorization Issues**: There's no direct interaction with user authentication or authorization mechanisms within this function.
+
+#### Attack Vectors:
+
+- None of the identified issues directly lead to a security vulnerability that could be exploited through an attack vector.
+
+#### Recommended Fixes:
+
+1. **Consider Using Constants for Scoring**:
+   ```python
+   LOGIN_FREQUENCY_SCORES = {0: 25, 7: 20, 30: 10}
+   TEST_ACTIVITY_SCORES = {1: 25, 0.5: 20, 0.1: 10, 0: 5}
+   ACHIEVEMENT_PROGRESS_SCORES = {20: 25, 10: 20, 5: 15, 1: 10, 0: 0}
+   LEVEL_PROGRESSION_SCORES = {5: 25, 3.75: 20, 2.5: 15, 1.25: 10, 1: 5}
+   ```
+
+2. **Add Context Managers for Date Handling**:
+   ```python
+   from datetime import datetime
+
+   days_since_login = (
+       (datetime.now(UTC) - self.user.lastLoginAt.replace(tzinfo=UTC)).days
+       if self.user.lastLoginAt.tzinfo is None else
+       (datetime.now(UTC) - self.user.lastLoginAt).days
+   )
+   ```
+
+3. **Ensure User Data Integrity**:
+   - Validate and sanitize `self.user` data before processing to prevent potential issues.
+
+#### Overall Security Posture:
+
+The code snippet does not exhibit any critical or high-severity vulnerabilities. The primary recommendations are for improving the readability and maintainability of the scoring logic through the use of constants. The overall security posture is good, but minor improvements can be made to ensure best practices are followed.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 19:57*
