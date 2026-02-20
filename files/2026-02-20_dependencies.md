@@ -145,30 +145,35 @@ class RequireRole:
 
 ## File Overview
 
-### dependencies.py
+**dependencies.py**
 
-**Purpose and Responsibility:**
-This file defines core dependency injection mechanisms for a FastAPI application, ensuring secure and role-based access control. It handles token validation, user retrieval, and role checks to enforce permissions.
+This Python source file is responsible for defining key dependencies and utilities used throughout the application, primarily focusing on user authentication, authorization, and context management.
 
-**Key Exports and Public Interface:**
-- `get_current_user`: Validates an access token and returns the current authenticated user.
-- `get_current_active_user`: Ensures the user is active before returning them.
-- `get_optional_user`: Returns the current user if authenticated or `None` otherwise.
-- `RequireRole`: A dependency class to enforce specific user roles.
-- `CurrentUser`, `OptionalUser`: Type annotations for dependencies.
-- `ClientIP`: Extracts client IP considering proxy headers.
-- `QueryLanguage`: Defines query language based on request parameters.
+### Key Exports and Public Interface
 
-**How it Fits in the Project:**
-This file is central to the application's security and authorization logic. It integrates with FastAPI’s dependency injection system, ensuring that every endpoint can access a validated user object or `None` if unauthenticated. The `RequireRole` class allows for fine-grained role-based permissions.
+- **User Authentication:**
+  - `get_current_user`: Validates an access token and returns the current authenticated user.
+  - `get_current_active_user`: Ensures the user is active before returning them.
+  - `get_optional_user`: Returns the current user if authenticated, or `None` otherwise.
 
-**Notable Design Decisions:**
-- **JWT Token Validation:** Uses `jwt` to decode and validate tokens.
-- **Dependency Injection:** Leverages FastAPI’s `Depends` to manage dependencies, promoting reusable and maintainable code.
-- **Role-Based Access Control (RBAC):** Implements role checks using the `RequireRole` class to enforce permissions based on user roles.
-```
+- **Authorization:**
+  - `RequireRole`: A dependency class to enforce specific roles for certain routes.
 
-This documentation provides a high-level overview of the file's purpose, key exports, integration within the project, and notable design decisions.
+- **Context Management:**
+  - `ClientIP`: Extracts and provides the client's IP address.
+  - `QueryLanguage`: Provides the query language preference (defaulting to English).
+
+### How It Fits into the Project
+
+This file serves as a central hub for dependency injection, ensuring that authentication and authorization checks are consistent across the application. The `get_current_user` function is crucial for protected routes, while `RequireRole` enforces role-based access control.
+
+### Notable Design Decisions
+
+- **JWT Token Handling:** Utilizes `jwt` to validate tokens, ensuring secure and stateless authentication.
+- **Dependency Injection:** Uses `Depends` from FastAPI to manage dependencies, promoting clean and modular code.
+- **Contextual Information:** Provides context such as the client's IP address and preferred language, enhancing usability and logging.
+
+This file is integral for maintaining security and consistency in user interactions within the application.
 
 ---
 
