@@ -1,10 +1,10 @@
 # dependencies
 
 **Type:** File Overview
-**Repository:** my-portfolio
-**File:** v1/backend/app/core/dependencies.py
+**Repository:** vuemantics
+**File:** backend/auth/dependencies.py
 **Language:** python
-**Lines:** 1-159
+**Lines:** 1-126
 **Complexity:** 0.0
 
 ---
@@ -13,168 +13,137 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
+ⒸAngelaMos | 2026
 dependencies.py
 """
 
-from __future__ import annotations
-
-from typing import Annotated
+import asyncio
+import contextlib
+import logging
 from uuid import UUID
 
-import jwt
-from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
+from auth import get_current_user
+from auth.jwt_auth import decode_token, TokenType
+from core import NotFoundError, AuthenticationError
+from core.websocket.messages import AuthSuccess, AuthError
+from models.Upload import Upload
+from models.User import User
 import config
-from config import (
-    TokenType,
-    UserRole,
-)
-from .database import get_db_session
-from .exceptions import (
-    InactiveUser,
-    PermissionDenied,
-    TokenError,
-    TokenRevokedError,
-    UserNotFound,
-)
-from user.User import User
-from .security import decode_access_token
-from user.repository import UserRepository
 
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl = f"{config.API_PREFIX}/auth/login",
-    auto_error = True,
-)
-
-oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl = f"{config.API_PREFIX}/auth/login",
-    auto_error = False,
-)
-
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
+logger = logging.getLogger(__name__)
 
 
-async def get_current_user(
-    token: Annotated[str,
-                     Depends(oauth2_scheme)],
-    db: DBSession,
-) -> User:
+async def verify_upload_ownership(
+    upload_id: UUID,
+    current_user: User = Depends(get_current_user),
+) -> Upload:
     """
-    Validate access token and return current user
+    Verify user owns the upload and return it
     """
+    upload = await Upload.find_by_id(upload_id)
+
+    if not upload or upload.user_id != current_user.id:
+        raise NotFoundError("Upload not found")
+
+    return upload
+
+
+async def authenticate_websocket(websocket: WebSocket) -> str | None:
+    """
+    Authenticate WebSocket connection via first message pattern
+
+    Returns:
+        User ID if authentication successful, None otherwise
+    """
+    origin = websocket.headers.get("origin", "")
+    if origin and origin not in config.settings.cors_origins:
+        logger.warning(f"WebSocket from unauthorized origin: {origin}")
+        return None
+
+    await websocket.accept()
+
     try:
-        payload = decode_access_token(token)
-    except jwt.InvalidTokenError as e:
-        raise TokenError(message = str(e)) from e
+        auth_data = await asyncio.wait_for(
+            websocket.receive_json(),
+            timeout = config.WEBSOCKET_AUTH_TIMEOUT
+        )
+    except TimeoutError:
+        await websocket.send_json(
+            AuthError(message = "Authentication timeout").model_dump()
+        )
+        await websocket.close(
+            code = config.WEBSOCKET_CLOSE_AUTH_TIMEOUT,
+            reason = "Authentication timeout"
+        )
+        return None
+    except WebSocketDisconnect:
+        logger.debug(
+            "WebSocket disconnected before auth (likely React StrictMode)"
+        )
+        return None
+    except Exception as e:
+        logger.error(f"Error receiving auth message: {e}")
+        with contextlib.suppress(RuntimeError):
+            await websocket.close(
+                code = config.WEBSOCKET_CLOSE_INVALID_MESSAGE,
+                reason = "Invalid message format"
+            )
+        return None
 
-    if payload.get("type") != TokenType.ACCESS.value:
-        raise TokenError(message = "Invalid token type")
-
-    user_id = UUID(payload["sub"])
-    user = await UserRepository.get_by_id(db, user_id)
-
-    if user is None:
-        raise UserNotFound(identifier = str(user_id))
-
-    if payload.get("token_version") != user.token_version:
-        raise TokenRevokedError()
-
-    return user
-
-
-async def get_current_active_user(
-    user: Annotated[User,
-                    Depends(get_current_user)],
-) -> User:
-    """
-    Ensure user is active
-    """
-    if not user.is_active:
-        raise InactiveUser()
-    return user
-
-
-async def get_optional_user(
-    token: Annotated[str | None,
-                     Depends(oauth2_scheme_optional)],
-    db: DBSession,
-) -> User | None:
-    """
-    Return current user if authenticated, None otherwise
-    """
-    if token is None:
+    if auth_data.get("type") != "auth" or not auth_data.get("token"):
+        await websocket.send_json(
+            AuthError(message = "Authentication required").model_dump()
+        )
+        await websocket.close(
+            code = config.WEBSOCKET_CLOSE_AUTH_REQUIRED,
+            reason = "Authentication required"
+        )
         return None
 
     try:
-        payload = decode_access_token(token)
-        if payload.get("type") != TokenType.ACCESS.value:
-            return None
-        user_id = UUID(payload["sub"])
-        user = await UserRepository.get_by_id(db, user_id)
-        if user and user.token_version == payload.get("token_version"):
-            return user
-    except (jwt.InvalidTokenError, ValueError):
-        pass
+        payload = decode_token(
+            auth_data["token"],
+            expected_type = TokenType.ACCESS
+        )
 
-    return None
+        user_id_raw = payload.get("sub")
+        if not user_id_raw:
+            raise AuthenticationError("Missing user ID in token")
 
-
-class RequireRole:
-    """
-    Dependency class to check user role
-    """
-    def __init__(self, *allowed_roles: UserRole) -> None:
-        self.allowed_roles = allowed_roles
-
-    async def __call__(
-        self,
-        user: Annotated[User,
-                        Depends(get_current_active_user)],
-    ) -> User:
-        if user.role not in self.allowed_roles:
-            raise PermissionDenied(
-                message =
-   
+        user_id: str = str(user_id_raw)
+        user = await User.find_by_id(UUID(user_id))
+        if not user or
 ```
 
 ---
 
 ## File Overview
 
-**dependencies.py**
+### dependencies.py
 
-This Python source file is responsible for defining key dependencies and utilities used throughout the application, primarily focusing on user authentication, authorization, and context management.
+**Purpose and Responsibility:**
+This Python file contains dependency functions for authentication and WebSocket handling in a FastAPI application. It ensures that users are authenticated before accessing certain resources, particularly uploads, and handles WebSocket connections securely.
 
-### Key Exports and Public Interface
+**Key Exports and Public Interface:**
+- `verify_upload_ownership`: Verifies the user owns an upload.
+- `authenticate_websocket`: Authenticates WebSocket connections using JWT tokens.
 
-- **User Authentication:**
-  - `get_current_user`: Validates an access token and returns the current authenticated user.
-  - `get_current_active_user`: Ensures the user is active before returning them.
-  - `get_optional_user`: Returns the current user if authenticated, or `None` otherwise.
+**How it Fits into the Project:**
+This file is crucial for maintaining security and proper access control. It integrates with other modules like `auth`, `models`, and `config` to provide a secure environment for handling uploads and WebSocket communications. The functions are used throughout the application, particularly in routes that require user authentication.
 
-- **Authorization:**
-  - `RequireRole`: A dependency class to enforce specific roles for certain routes.
+**Notable Design Decisions:**
+- **JWT Token Verification**: Uses `decode_token` from `jwt_auth` to validate JWT tokens.
+- **WebSocket Authentication**: Implements a timeout mechanism to prevent indefinite waits for authentication messages and handles various error cases gracefully.
+- **Dependency Injection**: Utilizes FastAPI's `Depends` to inject the current user into functions, ensuring that every function requiring authentication has access to the authenticated user object.
+- **Error Handling**: Comprehensive error handling ensures that any issues during authentication or WebSocket communication are logged and handled appropriately, maintaining application stability.
+```
 
-- **Context Management:**
-  - `ClientIP`: Extracts and provides the client's IP address.
-  - `QueryLanguage`: Provides the query language preference (defaulting to English).
-
-### How It Fits into the Project
-
-This file serves as a central hub for dependency injection, ensuring that authentication and authorization checks are consistent across the application. The `get_current_user` function is crucial for protected routes, while `RequireRole` enforces role-based access control.
-
-### Notable Design Decisions
-
-- **JWT Token Handling:** Utilizes `jwt` to validate tokens, ensuring secure and stateless authentication.
-- **Dependency Injection:** Uses `Depends` from FastAPI to manage dependencies, promoting clean and modular code.
-- **Contextual Information:** Provides context such as the client's IP address and preferred language, enhancing usability and logging.
-
-This file is integral for maintaining security and consistency in user interactions within the application.
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and notable design choices.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 07:14*
+*Generated by CodeWorm on 2026-02-20 14:19*
