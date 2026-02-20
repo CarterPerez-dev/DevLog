@@ -1,0 +1,162 @@
+# AnalyzeSlowQueries
+
+**Type:** Security Review
+**Repository:** angelamos-operations
+**File:** CertGamesDB-Argos/go-backend/internal/metrics/service.go
+**Language:** go
+**Lines:** 307-407
+**Complexity:** 15.0
+
+---
+
+## Source Code
+
+```go
+func (s *Service) AnalyzeSlowQueries(ctx context.Context, minMillis, limit int) (*SlowQueryAnalysis, error) {
+	queries, err := s.repo.GetSlowQueries(ctx, s.database, minMillis, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get slow queries: %w", err)
+	}
+
+	collectionMap := make(map[string]*collectionAggregator)
+	operationMap := make(map[string]*operationAggregator)
+	suggestionMap := make(map[string]*IndexSuggestion)
+
+	for _, q := range queries {
+		if agg, ok := collectionMap[q.Namespace]; ok {
+			agg.count++
+			agg.totalMillis += q.MillisRuntime
+			if q.MillisRuntime > agg.maxMillis {
+				agg.maxMillis = q.MillisRuntime
+			}
+		} else {
+			collectionMap[q.Namespace] = &collectionAggregator{
+				namespace:   q.Namespace,
+				count:       1,
+				totalMillis: q.MillisRuntime,
+				maxMillis:   q.MillisRuntime,
+			}
+		}
+
+		if agg, ok := operationMap[q.Op]; ok {
+			agg.count++
+			agg.totalMillis += q.MillisRuntime
+		} else {
+			operationMap[q.Op] = &operationAggregator{
+				operation:   q.Op,
+				count:       1,
+				totalMillis: q.MillisRuntime,
+			}
+		}
+
+		if q.PlanSummary == "COLLSCAN" && q.DocsExamined > 100 {
+			key := q.Namespace + ":COLLSCAN"
+			if sug, ok := suggestionMap[key]; ok {
+				sug.Occurrences++
+			} else {
+				suggestionMap[key] = &IndexSuggestion{
+					Collection:     q.Namespace,
+					SuggestedIndex: []string{"_id"},
+					Reason:         "Collection scan detected with high document examination",
+					QueryPattern:   "COLLSCAN",
+					Occurrences:    1,
+				}
+			}
+		}
+
+		if q.KeysExamined > 0 && q.DocsExamined > q.KeysExamined*10 {
+			key := q.Namespace + ":INEFFICIENT_INDEX"
+			if sug, ok := suggestionMap[key]; ok {
+				sug.Occurrences++
+			} else {
+				suggestionMap[key] = &IndexSuggestion{
+					Collection:     q.Namespace,
+					SuggestedIndex: []string{"examine query filter fields"},
+					Reason:         fmt.Sprintf("Inefficient index usage: %d docs examined vs %d keys", q.DocsExamined, q.KeysExamined),
+					QueryPattern:   q.PlanSummary,
+					Occurrences:    1,
+				}
+			}
+		}
+	}
+
+	var topCollections []CollectionStats
+	for _, agg := range collectionMap {
+		topCollections = append(topCollections, CollectionStats{
+			Namespace: agg.namespace,
+			Count:     agg.count,
+			AvgMillis: float64(agg.totalMillis) / float64(agg.count),
+			MaxMillis: agg.maxMillis,
+		})
+	}
+
+	var topOperations []OperationStats
+	for _, agg := range operationMap {
+		topOperations = append(topOperations, OperationStats{
+			Operation: agg.operation,
+			Count:     agg.count,
+			AvgMillis: float64(agg.totalMillis) / float64(agg.count),
+		})
+	}
+
+	var suggestions []IndexSuggestion
+	for _, sug := range suggestionMap {
+		suggestions = append(suggestions, *sug)
+	}
+
+	return &SlowQueryAnalysis{
+		Database:        s.database,
+		TotalQueries:    len(queries),
+		AnalyzedQueries: len(queries),
+		Suggestions:     suggestions,
+		TopCollections:  topCollections,
+		TopOperations:   topOperations,
+	}, nil
+}
+```
+
+---
+
+## Security Review
+
+### Security Review for `AnalyzeSlowQueries` Function
+
+#### Vulnerabilities Found:
+
+- **Info: Input Validation Gaps**
+  - Lines 15-20 and 26-31: The code iterates over the results of a database query without validating input fields like `q.Namespace`, `q.Op`, or `q.PlanSummary`. This could potentially lead to unexpected behavior if these values are manipulated.
+
+#### Attack Vectors:
+
+- An attacker could modify the input data to cause unintended aggregation or suggest incorrect optimizations, leading to misinterpretation of slow query analysis results.
+
+#### Recommended Fixes:
+
+1. **Input Validation:**
+   - Add validation checks for `q.Namespace`, `q.Op`, and `q.PlanSummary` to ensure they are within expected ranges.
+     ```go
+     if q.Namespace == "" || q.Op == "" || (q.PlanSummary != "COLLSCAN" && q.PlanSummary != "INEFFICIENT_INDEX") {
+         return nil, fmt.Errorf("invalid query data")
+     }
+     ```
+
+2. **Logging and Error Handling:**
+   - Improve error handling to log errors without exposing sensitive information.
+     ```go
+     if err := s.repo.GetSlowQueries(ctx, s.database, minMillis, limit); err != nil {
+         return nil, fmt.Errorf("get slow queries: %w", err)
+     }
+     ```
+
+#### Overall Security Posture:
+
+The current implementation is relatively secure but can be improved by adding input validation to prevent unexpected behavior. Ensuring robust error handling and logging will further enhance the security posture of this function.
+
+**Severity Ratings:**
+- Input Validation Gaps: **Info**
+
+By addressing these issues, you can improve the reliability and security of your slow query analysis functionality.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 14:30*
