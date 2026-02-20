@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/user/repository.py
+**File:** TEMPLATES/fullstack-template/backend/app/auth/service.py
 **Language:** python
-**Lines:** 1-112
+**Lines:** 1-213
 **Complexity:** 0.0
 
 ---
@@ -14,116 +14,122 @@
 ```python
 """
 ⒸAngelaMos | 2025
-repository.py
+service.py
 """
-from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid6
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+)
 
-from config import UserRole
-from .User import User
-from core.base_repository import BaseRepository
+from core.exceptions import (
+    InvalidCredentials,
+    TokenError,
+    TokenRevokedError,
+)
+from core.security import (
+    hash_token,
+    create_access_token,
+    create_refresh_token,
+    verify_password_with_timing_safety,
+)
+from user.User import User
+from user.repository import UserRepository
+from .repository import RefreshTokenRepository
+from .schemas import (
+    TokenResponse,
+    TokenWithUserResponse,
+)
+from user.schemas import UserResponse
 
 
-class UserRepository(BaseRepository[User]):
+class AuthService:
     """
-    Repository for User model database operations
+    Business logic for authentication operations
     """
-    model = User
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    @classmethod
-    async def get_by_email(
-        cls,
-        session: AsyncSession,
+    async def authenticate(
+        self,
         email: str,
-    ) -> User | None:
+        password: str,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> tuple[str,
+               str,
+               User]:
         """
-        Get user by email address
+        Authenticate user and create tokens
         """
-        result = await session.execute(
-            select(User).where(User.email == email)
+        user = await UserRepository.get_by_email(self.session, email)
+        hashed_password = user.hashed_password if user else None
+
+        is_valid, new_hash = await verify_password_with_timing_safety(
+            password, hashed_password
         )
-        return result.scalars().first()
 
-    @classmethod
-    async def get_by_id(
-        cls,
-        session: AsyncSession,
-        id: UUID,
-    ) -> User | None:
-        """
-        Get user by ID
-        """
-        return await session.get(User, id)
+        if not is_valid or user is None:
+            raise InvalidCredentials()
 
-    @classmethod
-    async def email_exists(
-        cls,
-        session: AsyncSession,
+        if not user.is_active:
+            raise InvalidCredentials()
+
+        if new_hash:
+            await UserRepository.update_password(
+                self.session,
+                user,
+                new_hash
+            )
+
+        access_token = create_access_token(user.id, user.token_version)
+
+        family_id = uuid6.uuid7()
+        raw_refresh, token_hash, expires_at = create_refresh_token(user.id, family_id)
+
+        await RefreshTokenRepository.create_token(
+            self.session,
+            user_id = user.id,
+            token_hash = token_hash,
+            family_id = family_id,
+            expires_at = expires_at,
+            device_id = device_id,
+            device_name = device_name,
+            ip_address = ip_address,
+        )
+
+        return access_token, raw_refresh, user
+
+    async def login(
+        self,
         email: str,
-    ) -> bool:
+        password: str,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> tuple[TokenWithUserResponse,
+               str]:
         """
-        Check if email is already registered
+        Login and return tokens with user data
         """
-        result = await session.execute(
-            select(User.id).where(User.email == email)
+        access_token, refresh_token, user = await self.authenticate(
+            email,
+            password,
+            device_id,
+            device_name,
+            ip_address,
         )
-        return result.scalars().first() is not None
 
-    @classmethod
-    async def create_user(
-        cls,
-        session: AsyncSession,
-        email: str,
-        hashed_password: str,
-        full_name: str | None = None,
-        role: UserRole = UserRole.USER,
-    ) -> User:
-        """
-        Create a new user
-        """
-        user = User(
-            email = email,
-            hashed_password = hashed_password,
-            full_name = full_name,
-            role = role,
+        response = TokenWithUserResponse(
+            access_token = access_token,
+            user = UserResponse.model_validate(user),
         )
-        session.add(user)
-        await session.flush()
-        await session.refresh(user)
-        return user
+        return response, refresh_token
 
-    @classmethod
-    async def update_password(
-        cls,
-        session: AsyncSession,
-        user: User,
-        hashed_password: str,
-    ) -> User:
-        """
-        Update user password and increment token version
-        """
-        user.hashed_password = hashed_password
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
-
-    @classmethod
-    async def increment_token_version(
-        cls,
-        session: AsyncSession,
-        user: User,
-    ) -> User:
-        """
-        Invalidate all user tokens
-        """
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
-
+    async def refresh_tokens(
+        self,
+        refresh_token: str
 ```
 
 ---
@@ -134,24 +140,26 @@ class UserRepository(BaseRepository[User]):
 
 **Pattern Used:** Repository Pattern
 
-The `UserRepository` class implements the **Repository Pattern**, which encapsulates data access logic for a specific entity (`User`). This implementation provides methods to perform CRUD operations, ensuring that database interactions are abstracted away from the business logic.
+The `AuthService` class in the provided code implements the **Repository Pattern**, which abstracts data access operations behind a common interface. This pattern is used to encapsulate database interactions within the `UserRepository` and `RefreshTokenRepository` classes.
 
 #### Implementation Details:
-- The `get_by_email`, `get_by_id`, `email_exists`, `create_user`, and `update_password` methods handle common database operations.
-- Each method is a class method (`@classmethod`) that takes an `AsyncSession` for database interaction, ensuring asynchronous operations are handled properly.
+- The `authenticate`, `login`, `refresh_tokens`, and `logout` methods interact with these repositories through their respective interfaces.
+- For example, in the `authenticate` method, `UserRepository.get_by_email` is called to fetch a user by email, and `RefreshTokenRepository.create_token` is used to store new tokens.
 
 #### Benefits:
-1. **Encapsulation:** The repository abstracts the database interactions, making the business logic cleaner and more testable.
-2. **Decoupling:** It decouples the application from the data access layer, allowing changes in the database schema or storage mechanism without affecting the business logic.
-3. **Consistency:** Ensures consistent behavior across different parts of the application.
+1. **Decoupling:** The service layer is decoupled from the database implementation details.
+2. **Testability:** Repositories can be easily mocked or replaced for unit testing.
+3. **Maintainability:** Changes in data storage (e.g., switching from SQLAlchemy to another ORM) are isolated.
 
 #### Deviations:
-- The `BaseRepository` class is not shown but assumed to provide common functionality like session handling and model mapping.
-- Methods are implemented as class methods, which might be less flexible for unit testing compared to instance methods.
+- The `AuthService` class directly instantiates repositories and sessions, which is not a typical pattern. Normally, these dependencies would be injected via constructor parameters or a dependency injection framework.
+- The `logout` method does not return any value but still adheres to the pattern by performing an operation (revoking tokens).
 
 #### Appropriateness:
-This pattern is highly appropriate in this context where the application needs to interact with a database. It provides a clear separation of concerns between data access and business logic, making the codebase easier to maintain and extend. However, if the repository needs to be used across multiple entities or requires more complex interactions, additional refactoring might be necessary.
+This pattern is highly appropriate in this context as it clearly separates business logic from data access. However, for better testability and maintainability, consider using dependency injection to pass repositories and session objects into `AuthService`.
+
+By following these guidelines, you can ensure that the service layer remains clean and focused on its core responsibilities while abstracting away complex database interactions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 20:38*
+*Generated by CodeWorm on 2026-02-19 21:05*
