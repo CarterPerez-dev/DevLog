@@ -1,0 +1,136 @@
+# EndpointHealthScore
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** frontend/admin-app/src/modules/analytics/components/endpoints/EndpointHealthScore.tsx
+**Language:** tsx
+**Lines:** 37-268
+**Complexity:** 29.0
+
+---
+
+## Source Code
+
+```tsx
+function EndpointHealthScore({ endpoint, days }: Props): React.JSX.Element {
+  const { data: health, isLoading, isError } = useEndpointHealth(endpoint, days);
+
+  const getFactorStatus = (score: number): 'good' | 'warning' | 'critical' => {
+    if (score >= 80) return 'good';
+    if (score >= 50) return 'warning';
+    return 'critical';
+  };
+
+  const renderHealthFactors = (): React.JSX.Element => {
+    if (health?.health === null || health?.health === undefined) {
+      return <div className={styles.noData}>No health data available</div>;
+    }
+
+    const factors: HealthFactor[] = Object.entries(health.health.factors).map(
+      ([key, value]) => ({
+        name: formatDisplayText(key),
+        value: typeof value === 'number' ? value : 0,
+        weight: 25, // Equal weight for simplicity
+        status: getFactorStatus(typeof value === 'number' ? value : 0),
+      }),
+    );
+
+    return (
+      <div className={styles.factorsList}>
+        {factors.map((factor) => (
+          <div
+            key={factor.name}
+            className={styles.factorItem}
+          >
+            <div className={styles.factorHeader}>
+              <span className={styles.factorName}>{factor.name}</span>
+              <span className={`${styles.factorScore} ${styles[factor.status]}`}>
+                {factor.value.toFixed(0)}%
+              </span>
+            </div>
+            <div className={styles.factorBar}>
+              <div
+                className={`${styles.factorProgress} ${styles[factor.status]}`}
+                style={{ width: `${String(factor.value)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderSLAViolations = (): React.JSX.Element | null => {
+    if (health?.sla_violations === null || health?.sla_violations === undefined) {
+      return null;
+    }
+
+    const violations = [
+      {
+        name: 'Response Time',
+        violated: health.sla_violations.response_time_violated,
+        icon: FiClock,
+      },
+      {
+        name: 'Error Rate',
+        violated: health.sla_violations.error_rate_violated,
+        icon: FiAlertCircle,
+      },
+      {
+        name: 'Availability',
+        violated: health.sla_violations.availability_violated,
+        icon: FiHeart,
+      },
+    ];
+
+    return (
+      <div className={styles.slaSection}>
+        <h4 className={styles.sectionTitle}>SLA Compliance</h4>
+        <div className={styles.slaGrid}>
+          {violations.map((violation) => {
+            const Icon = violation.icon;
+            return (
+              <div
+                key={violation.name}
+                className={`${styles.slaItem} ${violation.violated ? styles.violated : styles.compliant}`}
+              >
+                <Icon className={styles.slaIcon} />
+                <span className={styles.slaName}>{violation.name}</span>
+                {violation.violated ? (
+                  <FiXCircle className={styles.statusIcon} />
+                ) : (
+                  <FiCheckCircle
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity**: The function has a time complexity of \(O(n)\), where \(n\) is the number of health factors, due to the `.map()` operations on `health.health.factors` and `violations`. This is efficient but could be optimized further.
+
+**Space Complexity**: The space complexity is also \(O(n)\) for storing the `factors` array. Memory usage can be reduced by avoiding unnecessary intermediate arrays or objects.
+
+**Bottlenecks/Inefficiencies**:
+1. **Redundant Operations**: The function `getFactorStatus` and `getHealthScoreLabel` are called multiple times, which is redundant.
+2. **Unnecessary Iterations**: Both `renderHealthFactors` and `renderSLAViolations` involve iterating over arrays to render components.
+
+**Optimization Opportunities**:
+1. **Memoization**: Use React.memo or useCallback for the `getFactorStatus` function to avoid unnecessary re-renders.
+2. **Lazy Loading**: Consider lazy loading the health data if it's not required immediately.
+3. **Conditional Rendering**: Simplify conditional checks by using logical operators directly in JSX.
+
+**Resource Usage Concerns**:
+1. **Memory Leaks**: Ensure all API calls and subscriptions are properly cleaned up to avoid memory leaks.
+2. **Performance Metrics**: Consider using performance metrics like Lighthouse or WebPageTest to identify specific bottlenecks.
+
+### Suggested Optimizations
+
+- Use `useCallback` for the `getFactorStatus` function to memoize it.
+- Simplify conditional checks in JSX by combining conditions, e.g., use `&&` instead of nested `if`.
+- Optimize repeated calculations by caching results where possible.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 22:25*
