@@ -1,0 +1,200 @@
+# 02_cache_service
+
+**Type:** File Overview
+**Repository:** fastapi-rc
+**File:** fastapi-rc/examples/02_cache_service.py
+**Language:** python
+**Lines:** 1-227
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+02_cache_service.py
+
+Advanced usage with CacheService wrapper
+"""
+
+import uvicorn
+from typing import Annotated
+from contextlib import asynccontextmanager
+
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    status,
+)
+from pydantic import (
+    BaseModel,
+    Field,
+)
+
+from fastapi_rc import (
+    cachemanager,
+    RedisClient,
+    CacheService,
+)
+
+
+class User(BaseModel):
+    """
+    User model
+    """
+    id: str
+    email: str
+    name: str
+    role: str
+
+
+class UserCreate(BaseModel):
+    """
+    User creation schema
+    """
+    email: str = Field(..., min_length = 3)
+    name: str = Field(..., min_length = 1)
+    role: str = "user"
+
+
+class UserUpdate(BaseModel):
+    """
+    User update schema
+    """
+    name: str | None = None
+    role: str | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize Redis with production config
+    """
+    cachemanager.init(
+        redis_url = "redis://localhost:6379/0",
+        max_connections = 50,
+        socket_timeout = 5.0,
+        socket_connect_timeout = 2.0,
+        health_check_interval = 30,
+    )
+    yield
+    await cachemanager.close()
+
+
+app = FastAPI(lifespan = lifespan)
+
+
+async def get_user_cache(redis: RedisClient) -> CacheService[User]:
+    """
+    Custom cache dependency for users
+
+    10 minute TTL with jitter to prevent stampedes
+    """
+    return CacheService(
+        redis,
+        namespace = "users",
+        model = User,
+        default_ttl = 600,
+        use_jitter = True,
+        prefix = "api",
+        version = "v1",
+    )
+
+
+UserCache = Annotated[CacheService[User], Depends(get_user_cache)]
+
+
+async def fetch_user_from_db(user_id: str) -> User:
+    """
+    Simulate database fetch
+    """
+    if user_id == "999":
+        raise HTTPException(
+            status_code = status.HTTP_404_NOT_FOUND,
+            detail = "User not found",
+        )
+
+    return User(
+        id = user_id,
+        email = f"user{user_id}@example.com",
+        name = f"User {user_id}",
+        role = "user",
+    )
+
+
+@app.get("/users/{user_id}", response_model = User)
+async def get_user(user_id: str, user_cache: UserCache):
+    """
+    Get user with cache-aside pattern
+
+    Automatically caches miss, returns cached hit
+    """
+    user = await user_cache.get_or_set(
+        identifier = user_id,
+        factory = lambda: fetch_user_from_db(user_id),
+        ttl = 600,
+    )
+
+    return user
+
+
+@app.post(
+    "/users",
+    response_model = User,
+    status_code = status.HTTP_201_CREATED
+)
+async def create_user(data: UserCreate, user_cache: UserCache):
+    """
+    Create user and cache immediately
+    """
+    user = User(
+        id = "new_123",
+        email = data.email,
+        name = data.name,
+        role = data.role,
+    )
+
+    await user_cache.set(
+        identifier = user.id,
+        value = user,
+        ttl = 600,
+    )
+
+    return user
+
+
+@app.put("/users/{user_id}", response_model = User)
+async def update_user(
+    user_id: s
+```
+
+---
+
+## File Overview
+
+### 02_cache_service.py
+
+**Purpose and Responsibility:**
+This file implements a FastAPI service with caching capabilities using Redis, leveraging the `CacheService` wrapper for efficient data management. It demonstrates various cache operations including fetching, creating, updating, deleting, and invalidating user data.
+
+**Key Exports/Interface:**
+- **User, UserCreate, UserUpdate:** Pydantic models defining user schema.
+- **get_user_cache:** Dependency function that initializes a `CacheService` for users with a 10-minute TTL.
+- **lifespan:** Application lifespan manager to initialize and close Redis connections.
+- **FastAPI app instance:** Configured with custom cache dependencies and routes.
+
+**Project Fit:**
+This file is part of the `fastapi-rc` repository, specifically showcasing advanced caching patterns in FastAPI applications. It integrates with the `cachemanager`, `RedisClient`, and `CacheService` from `fastapi_rc` to provide a robust caching solution for user data operations.
+
+**Notable Design Decisions:**
+1. **Cache Service Wrapper:** Utilizes `CacheService` for consistent cache management, including TTL, jitter, and pattern invalidation.
+2. **Dependency Injection:** Uses `Depends` for automatic dependency injection of the cache service throughout the application.
+3. **Lifespan Manager:** Ensures Redis connections are properly initialized and closed during app startup/shutdown.
+4. **Cache Aside Pattern:** Implements a cache-aside strategy to ensure data consistency between database and cache.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 01:49*
