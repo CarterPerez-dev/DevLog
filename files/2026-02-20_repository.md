@@ -1,0 +1,162 @@
+# repository
+
+**Type:** File Overview
+**Repository:** my-portfolio
+**File:** v1/backend/app/auth/repository.py
+**Language:** python
+**Lines:** 1-177
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+repository.py
+"""
+
+from uuid import UUID
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .RefreshToken import RefreshToken
+from core.base_repository import BaseRepository
+
+
+class RefreshTokenRepository(BaseRepository[RefreshToken]):
+    """
+    Repository for RefreshToken model database operations
+    """
+    model = RefreshToken
+
+    @classmethod
+    async def get_by_hash(
+        cls,
+        session: AsyncSession,
+        token_hash: str,
+    ) -> RefreshToken | None:
+        """
+        Get refresh token by its hash
+        """
+        result = await session.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def get_valid_by_hash(
+        cls,
+        session: AsyncSession,
+        token_hash: str,
+    ) -> RefreshToken | None:
+        """
+        Get valid (not revoked, not expired) refresh token by hash
+        """
+        result = await session.execute(
+            select(RefreshToken).where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.is_revoked == False,
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def create_token(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        token_hash: str,
+        family_id: UUID,
+        expires_at: datetime,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> RefreshToken:
+        """
+        Create a new refresh token
+        """
+        token = RefreshToken(
+            user_id = user_id,
+            token_hash = token_hash,
+            family_id = family_id,
+            expires_at = expires_at,
+            device_id = device_id,
+            device_name = device_name,
+            ip_address = ip_address,
+        )
+        session.add(token)
+        await session.flush()
+        await session.refresh(token)
+        return token
+
+    @classmethod
+    async def revoke_token(
+        cls,
+        session: AsyncSession,
+        token: RefreshToken,
+    ) -> RefreshToken:
+        """
+        Revoke a single token
+        """
+        token.revoke()
+        await session.flush()
+        await session.refresh(token)
+        return token
+
+    @classmethod
+    async def revoke_family(
+        cls,
+        session: AsyncSession,
+        family_id: UUID,
+    ) -> int:
+        """
+        Revoke all tokens in a family (for replay attack response)
+
+        Returns count of revoked tokens
+        """
+        result = await session.execute(
+            update(RefreshToken).where(
+                RefreshToken.family_id == family_id,
+                RefreshToken.is_revoked == False,
+            ).values(is_revoked = True,
+                     revoked_at = datetime.now(UTC)
+```
+
+---
+
+## File Overview
+
+### Purpose and Responsibility
+
+This file defines a repository for managing `RefreshToken` entities within the application's database. It provides methods to create, retrieve, revoke, and clean up tokens, ensuring secure user sessions.
+
+### Key Exports and Public Interface
+
+- **get_by_hash**: Retrieves a token by its hash.
+- **get_valid_by_hash**: Fetches valid (non-revoked, non-expired) tokens by hash.
+- **create_token**: Creates a new refresh token for a given user.
+- **revoke_token**: Revokes a single token.
+- **revoke_family**: Revokes all tokens in a family to prevent replay attacks.
+- **revoke_all_user_tokens**: Logs out all devices associated with a user.
+- **get_user_active_sessions**: Lists active sessions for a specific user.
+- **cleanup_expired**: Cleans up expired tokens during maintenance.
+
+### How It Fits into the Project
+
+This repository is part of the authentication module, facilitating secure token management. It interacts with the `RefreshToken` model and uses SQLAlchemy to perform database operations asynchronously. The methods are designed to be reusable across different parts of the application, ensuring consistent handling of refresh tokens.
+
+### Notable Design Decisions
+
+- **Asynchronous Operations**: All methods are asynchronous, leveraging `AsyncSession` for efficient database interactions.
+- **Type Hints and Validation**: Use of type hints and validation ensure robustness and maintainability.
+- **Context Managers and SQLAlchemy**: Utilizes SQLAlchemy's ORM capabilities to handle database transactions and queries efficiently.
+- **Revoke Mechanisms**: Implements comprehensive token revocation strategies, including family-wide revocations for security.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 07:03*
