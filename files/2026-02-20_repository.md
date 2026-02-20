@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** my-portfolio
-**File:** v1/backend/app/auth/repository.py
+**File:** v1/backend/app/project/repository.py
 **Language:** python
-**Lines:** 1-177
+**Lines:** 1-120
 **Complexity:** 0.0
 
 ---
@@ -17,114 +17,108 @@
 repository.py
 """
 
-from uuid import UUID
-from datetime import UTC, datetime
+from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .RefreshToken import RefreshToken
+import config
+from config import Language
 from core.base_repository import BaseRepository
 
+from .Project import Project
 
-class RefreshTokenRepository(BaseRepository[RefreshToken]):
+
+class ProjectRepository(BaseRepository[Project]):
     """
-    Repository for RefreshToken model database operations
+    Repository for Project model database operations
     """
-    model = RefreshToken
+    model = Project
 
     @classmethod
-    async def get_by_hash(
+    async def get_by_slug_and_language(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+        slug: str,
+        language: Language,
+    ) -> Project | None:
         """
-        Get refresh token by its hash
+        Get a single project by slug and language
+        Primary lookup for public project pages
         """
         result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+            select(Project).where(Project.slug == slug
+                                  ).where(Project.language == language)
         )
         return result.scalars().first()
 
     @classmethod
-    async def get_valid_by_hash(
+    async def get_visible_by_language(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+        language: Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> Sequence[Project]:
         """
-        Get valid (not revoked, not expired) refresh token by hash
+        Get all visible (complete) projects for a language
+        Ordered by display_order for consistent nav/listing
         """
         result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash,
-                RefreshToken.is_revoked == False,
-                RefreshToken.expires_at > datetime.now(UTC),
-            )
+            select(Project).where(Project.language == language).order_by(
+                Project.display_order
+            ).offset(skip).limit(limit)
         )
-        return result.scalars().first()
+        return result.scalars().all()
 
     @classmethod
-    async def create_token(
+    async def get_featured_by_language(
         cls,
         session: AsyncSession,
-        user_id: UUID,
-        token_hash: str,
-        family_id: UUID,
-        expires_at: datetime,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> RefreshToken:
+        language: Language,
+        limit: int = config.PAGINATION_FEATURED_LIMIT,
+    ) -> Sequence[Project]:
         """
-        Create a new refresh token
+        Get featured projects for a language.
+        Used for overview page highlights.
         """
-        token = RefreshToken(
-            user_id = user_id,
-            token_hash = token_hash,
-            family_id = family_id,
-            expires_at = expires_at,
-            device_id = device_id,
-            device_name = device_name,
-            ip_address = ip_address,
+        result = await session.execute(
+            select(Project).where(Project.language == language).where(
+                Project.is_complete == True
+            ).where(Project.is_featured == True).order_by(
+                Project.display_order
+            ).limit(limit)
         )
-        session.add(token)
-        await session.flush()
-        await session.refresh(token)
-        return token
+        return result.scalars().all()
 
     @classmethod
-    async def revoke_token(
+    async def count_visible_by_language(
         cls,
         session: AsyncSession,
-        token: RefreshToken,
-    ) -> RefreshToken:
-        """
-        Revoke a single token
-        """
-        token.revoke()
-        await session.flush()
-        await session.refresh(token)
-        return token
-
-    @classmethod
-    async def revoke_family(
-        cls,
-        session: AsyncSession,
-        family_id: UUID,
+        language: Language,
     ) -> int:
         """
-        Revoke all tokens in a family (for replay attack response)
-
-        Returns count of revoked tokens
+        Count visible projects for pagination
         """
         result = await session.execute(
-            update(RefreshToken).where(
-                RefreshToken.family_id == family_id,
-                RefreshToken.is_revoked == False,
-            ).values(is_revoked = True,
-                     revoked_at = datetime.now(UTC)
+            select(func.count()
+                   ).select_from(Project).where(Project.language == language)
+        )
+        return result.scalar_one()
+
+    @classmethod
+    async def get_all_slugs(
+        cls,
+        session: AsyncSession,
+    ) -> Sequence[str]:
+        """
+        Get all unique project slugs.
+        Useful for generating nav or validating slugs
+        """
+        result = await session.execute(select(Project.slug).distinct())
+        return result.scalars().all()
+
+    @classm
 ```
 
 ---
@@ -133,30 +127,30 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
 
 ### Purpose and Responsibility
 
-This file defines a repository for managing `RefreshToken` entities within the application's database. It provides methods to create, retrieve, revoke, and clean up tokens, ensuring secure user sessions.
+This file, `repository.py`, is responsible for defining a repository class to manage database operations related to the `Project` model. It provides methods to retrieve projects based on various criteria such as slug, language, visibility status, and featured status.
 
 ### Key Exports and Public Interface
 
-- **get_by_hash**: Retrieves a token by its hash.
-- **get_valid_by_hash**: Fetches valid (non-revoked, non-expired) tokens by hash.
-- **create_token**: Creates a new refresh token for a given user.
-- **revoke_token**: Revokes a single token.
-- **revoke_family**: Revokes all tokens in a family to prevent replay attacks.
-- **revoke_all_user_tokens**: Logs out all devices associated with a user.
-- **get_user_active_sessions**: Lists active sessions for a specific user.
-- **cleanup_expired**: Cleans up expired tokens during maintenance.
+- **Class**: `ProjectRepository`
+  - **Methods**:
+    - `get_by_slug_and_language`: Fetches a single project by its slug and language.
+    - `get_visible_by_language`: Retrieves all visible projects for a given language.
+    - `get_featured_by_language`: Fetches featured projects for a specific language.
+    - `count_visible_by_language`: Counts the number of visible projects for pagination.
+    - `get_all_slugs`: Returns all unique project slugs.
+    - `slug_exists`: Checks if a project slug exists.
 
-### How It Fits into the Project
+### How It Fits in the Project
 
-This repository is part of the authentication module, facilitating secure token management. It interacts with the `RefreshToken` model and uses SQLAlchemy to perform database operations asynchronously. The methods are designed to be reusable across different parts of the application, ensuring consistent handling of refresh tokens.
+`ProjectRepository` is part of the data access layer, specifically designed to interact with the database. It adheres to the repository pattern by encapsulating database operations and providing a clean interface for other parts of the application to use. This class interacts directly with `BaseRepository`, inheriting common functionality while implementing specific methods tailored to project management.
 
 ### Notable Design Decisions
 
-- **Asynchronous Operations**: All methods are asynchronous, leveraging `AsyncSession` for efficient database interactions.
-- **Type Hints and Validation**: Use of type hints and validation ensure robustness and maintainability.
-- **Context Managers and SQLAlchemy**: Utilizes SQLAlchemy's ORM capabilities to handle database transactions and queries efficiently.
-- **Revoke Mechanisms**: Implements comprehensive token revocation strategies, including family-wide revocations for security.
+- **Type Hints**: The use of type hints ensures that method parameters and return types are explicitly defined, enhancing code readability and maintainability.
+- **Async Operations**: All methods are asynchronous, leveraging SQLAlchemy’s `AsyncSession` for database operations, which is crucial for handling concurrent requests efficiently.
+- **Pagination Support**: Methods like `get_visible_by_language` and `count_visible_by_language` support pagination through configurable `skip` and `limit` parameters, ensuring efficient data retrieval even with large datasets.
+- **SQLAlchemy ORM**: The repository uses SQLAlchemy’s ORM to interact with the database, providing a flexible and powerful way to manage project data.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 07:03*
+*Generated by CodeWorm on 2026-02-20 08:12*
