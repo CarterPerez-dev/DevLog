@@ -1,0 +1,128 @@
+# connection
+
+**Type:** File Overview
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/database/connection.rs
+**Language:** rust
+**Lines:** 1-476
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```rust
+/*
+ * Database connection pool management with optimized settings, health monitoring, and automatic recovery.
+ * I'm implementing robust PostgreSQL connection handling with performance optimization and comprehensive error recovery mechanisms.
+ */
+
+use sqlx::{
+    postgres::{PgPool, PgPoolOptions, PgConnectOptions, PgSslMode},
+    ConnectOptions, Row,
+};
+use std::time::Duration;
+use tracing::{info, warn, error, debug};
+use std::str::FromStr;
+
+use crate::{
+    utils::{
+        error::{AppError, Result},
+        config::{Config, DatabasePoolConfig},
+    },
+};
+
+/// Type alias for our PostgreSQL connection pool
+/// I'm providing a convenient type alias used throughout the application
+pub type DatabasePool = PgPool;
+
+/// Database connection manager with health monitoring and optimization
+/// I'm implementing comprehensive database management with performance tracking
+pub struct DatabaseManager {
+    pool: DatabasePool,
+    config: DatabasePoolConfig,
+    health_check_query: String,
+}
+
+impl DatabaseManager {
+    /// Create a new database manager with the provided pool
+    /// I'm setting up comprehensive database management with health monitoring
+    pub fn new(pool: DatabasePool, config: DatabasePoolConfig) -> Self {
+        Self {
+            pool,
+            config,
+            health_check_query: "SELECT 1 as health_check".to_string(),
+        }
+    }
+
+    /// Get a reference to the connection pool
+    /// I'm providing access to the underlying pool for queries
+    pub fn pool(&self) -> &DatabasePool {
+        &self.pool
+    }
+
+    /// Perform a health check on the database connection
+    /// I'm implementing comprehensive health verification
+    pub async fn health_check(&self) -> Result<DatabaseHealthStatus> {
+        let start_time = std::time::Instant::now();
+
+        match sqlx::query(&self.health_check_query)
+        .fetch_one(&self.pool)
+        .await
+        {
+            Ok(row) => {
+                let response_time = start_time.elapsed();
+                let health_value: i32 = row.try_get("health_check")?;
+
+                if health_value == 1 {
+                    Ok(DatabaseHealthStatus {
+                        healthy: true,
+                        response_time_ms: response_time.as_millis() as u64,
+                       active_connections: self.get_active_connections().await.unwrap_or(0),
+                       pool_size: self.pool.size(),
+                       idle_connections: self.get_idle_connections().await.unwrap_or(0),
+                       error_message: None,
+                    })
+                } else {
+                    Err(AppError::DatabaseError("Health check returned unexpected value".to_string()))
+                }
+            }
+            Err(e) => {
+                let response_time = start_time.elapsed();
+                Ok(DatabaseHealthStatus {
+                    healthy: false,
+                    response_time_ms: response_time.as_millis() as u64,
+                   active_connections: 0,
+          
+```
+
+---
+
+## File Overview
+
+# Database Connection Management
+
+**Purpose:** This file manages PostgreSQL database connections with optimized settings, health monitoring, and automatic recovery mechanisms. It ensures robust connection handling, performance optimization, and comprehensive error recovery.
+
+**Key Exports:**
+- `DatabasePool`: A type alias for the PostgreSQL connection pool.
+- `DatabaseManager`: Manages database connections, including health checks and statistics retrieval.
+  - `new`: Initializes a new `DatabaseManager` with a connection pool and configuration.
+  - `pool`: Provides access to the underlying connection pool.
+  - `health_check`: Performs a health check on the database connection.
+  - `get_active_connections`, `get_idle_connections`: Tracks active and idle connections in the pool.
+
+**Project Integration:**
+This module is part of the backend service, responsible for managing database interactions. It integrates with the main application through configuration settings and provides essential utilities for monitoring and maintaining database health.
+
+**Design Decisions:**
+- **Health Checks:** Comprehensive health checks are implemented to ensure database availability and performance.
+- **Error Handling:** Utilizes `Result` and `Option` patterns to handle errors gracefully, providing detailed error messages when necessary.
+- **Performance Optimization:** Optimized SQL queries and connection pool management enhance application responsiveness and efficiency.
+```
+
+This documentation provides a high-level overview of the file's purpose, key exports, integration within the project, and notable design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 21:46*
