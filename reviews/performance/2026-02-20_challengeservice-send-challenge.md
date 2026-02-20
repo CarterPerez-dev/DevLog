@@ -1,0 +1,140 @@
+# ChallengeService.send_challenge
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** backend/api/domains/social/services/challenge_ops.py
+**Language:** python
+**Lines:** 30-141
+**Complexity:** 9.0
+
+---
+
+## Source Code
+
+```python
+def send_challenge(
+        challenger_id: str | ObjectId,
+        challenged_id: str | ObjectId,
+        test_category: str,
+        test_id: int | None,
+        question_count: int,
+        mode: str
+    ) -> Challenge:
+        """
+        Create a new challenge
+        If test_id is None, randomly select a test from the category
+        Validates test exists in database before creating challenge
+        """
+        challenger_id = ObjectId(challenger_id) if isinstance(
+            challenger_id,
+            str
+        ) else challenger_id
+        challenged_id = ObjectId(challenged_id) if isinstance(
+            challenged_id,
+            str
+        ) else challenged_id
+
+        if test_id is None:
+            available_tests = list(
+                Test.objects(category = test_category).only('testId')
+            )
+
+            if not available_tests:
+                raise NotFoundError(
+                    "Test",
+                    f"No tests found for category '{test_category}'"
+                )
+
+            random_test = random.choice(available_tests)
+            test_id = random_test.testId
+        else:
+            test = Test.objects(
+                testId = test_id,
+                category = test_category
+            ).first()
+
+            if not test:
+                raise NotFoundError(
+                    "Test",
+                    f"Test {test_id} not found in category '{test_category}'"
+                )
+
+        existing_challenge = Challenge.objects(
+            testCategory = test_category,
+            testId = test_id,
+            status__in = [
+                ChallengeStatus.PENDING.value,
+                ChallengeStatus.ACCEPTED.value,
+                ChallengeStatus.IN_PROGRESS.value
+            ]
+        ).filter(
+            __raw__ = {
+                "$or": [
+                    {
+                        "challengerUserId": challenger_id,
+                        "challengedUserId": challenged_id
+                    },
+                    {
+                        "challengerUserId": challenged_id,
+                        "challengedUserId": challenger_id
+                    }
+                ]
+            }
+        ).first()
+
+        if existing_challenge:
+            raise BusinessRuleError(
+                f"You already have an active challenge for {test_category} Test #{test_id} with this user. Complete or cancel it first.",
+                error_code = "DUPLICATE_CHALLENGE"
+            )
+
+        challenge = Challenge(
+            challengerUserId = challenger_id,
+            challengedUserId = challenged_id,
+            testCategory = test_category,
+            testId = test_id,
+            questionCount = question_count,
+            mode = mode,
+            status = ChallengeStatus.PENDING.value,
+            createdAt = datetime.now(UTC)
+        )
+        challenge.save()
+
+        challenger = User.objects(
+            id = challenger_id
+        ).only("username",
+               "level",
+               "c
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The function has a time complexity dominated by the database queries, which are \(O(n)\) for listing tests and \(O(1)\) for other operations. The overall complexity is approximately \(O(n + m)\), where \(n\) is the number of available tests and \(m\) is the number of existing challenges.
+
+#### Space Complexity
+The space complexity is \(O(1)\) as no additional data structures are created that scale with input size, except for a few temporary variables. However, database operations can be costly due to network latency and server load.
+
+#### Bottlenecks or Inefficiencies
+- **N+1 Query Pattern**: The function makes multiple database queries (e.g., listing tests, checking existing challenges) which could lead to performance issues.
+- **Redundant Operations**: Converting `ObjectId` twice if the input is already an `ObjectId`.
+- **Blocking Calls**: Database operations are blocking and can be slow.
+
+#### Optimization Opportunities
+1. **Batch Queries**: Use batch queries or eager loading for listing tests and checking existing challenges to reduce the number of database calls.
+2. **Caching**: Cache test categories and user information to avoid repeated database hits.
+3. **Asynchronous Calls**: Convert synchronous database operations to asynchronous using `asyncio` or `motor` (for MongoDB) to handle I/O efficiently.
+
+#### Resource Usage Concerns
+- Ensure that database connections are properly managed, especially in a production environment where connection pooling is crucial.
+- Use context managers for file handles if any are used externally.
+
+By addressing these points, the function can be made more efficient and scalable.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 14:53*
