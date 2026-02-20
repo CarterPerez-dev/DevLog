@@ -1,0 +1,140 @@
+# cache_service
+
+**Type:** File Overview
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/services/cache_service.rs
+**Language:** rust
+**Lines:** 1-583
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```rust
+// backend/src/services/cache_service.rs
+
+use redis::{Client, AsyncCommands}; // Removed `Connection` as it wasn't directly used in the struct
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tracing::{info, warn, error, debug};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+use crate::utils::error::{AppError, Result};
+
+
+#[derive(Clone)]
+pub struct CacheService {
+    client: Client,
+    key_prefix: String,
+    default_ttl: u64,
+    connection_pool: Arc<RwLock<Option<redis::aio::ConnectionManager>>>,
+}
+
+// Manually implement Debug for CacheService
+impl std::fmt::Debug for CacheService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CacheService")
+            .field("client", &"<RedisClient>") // Placeholder for client as it might not be Debug or simple to Debug
+            .field("key_prefix", &self.key_prefix)
+            .field("default_ttl", &self.default_ttl)
+            .field("connection_pool", &"<ConnectionPool>") // Placeholder for connection_pool
+            .finish()
+        // Or, if you want to indicate that some fields are not shown:
+        // .finish_non_exhaustive()
+    }
+}
+
+/// Cache entry with metadata for advanced cache management
+/// I'm including metadata to enable sophisticated cache analytics and management
+#[derive(Debug, Serialize, Deserialize)]
+struct CacheEntry<T> {
+    data: T,
+    created_at: u64,
+    expires_at: u64,
+    access_count: u64,
+    last_accessed: u64,
+    version: u32,
+}
+
+/// Cache statistics for monitoring and optimization
+/// I'm providing comprehensive cache analytics for performance tuning
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CacheStats {
+    pub total_keys: u64,
+    pub hit_rate: f64,
+    pub miss_rate: f64,
+    pub memory_usage_bytes: u64,
+    pub expired_keys: u64,
+    pub evicted_keys: u64,
+    pub average_ttl_seconds: f64,
+    pub most_accessed_keys: Vec<String>,
+}
+
+/// Cache operation types for metrics tracking
+/// I'm categorizing cache operations for detailed performance analysis
+#[derive(Debug, Clone)]
+pub enum CacheOperation {
+    Get,
+    Set,
+    Delete,
+    Expire,
+    Flush,
+}
+
+impl CacheService {
+    /// Create a new cache service with Redis connection
+    /// I'm setting up comprehensive cache configuration with connection management
+    pub fn new(redis_client: Client) -> Self {
+        Self {
+            client: redis_client,
+            key_prefix: "perf_showcase:".to_string(),
+            default_ttl: 3600, // 1 hour default TTL
+            connection_pool: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Create cache service with custom configuration
+    /// I'm providing flexibility for different caching strategies and environments
+    pub fn with_config(redis_client: Client, key_prefix: String, default_ttl: u64) -> Self {
+        Self {
+            client: redis_client,
+            key_prefix,
+            default_ttl,
+            connection_pool: 
+```
+
+---
+
+## File Overview
+
+# `cache_service.rs` Documentation
+
+## Purpose and Responsibility
+This file defines the `CacheService`, a module responsible for managing cache operations using Redis. It provides methods to interact with Redis, manage connection pools, and handle cache entries with metadata.
+
+## Key Exports or Public Interface
+- **Structs:**
+  - `CacheService`: Manages cache operations with Redis.
+  - `CacheEntry<T>`: Represents a cached item with metadata.
+  - `CacheStats`: Provides statistics for monitoring and optimizing the cache.
+  - `CacheOperation`: Enumerates different cache operation types.
+
+- **Methods:**
+  - `new(Client)`: Creates a new `CacheService` instance.
+  - `with_config(Client, String, u64)`: Configures the `CacheService` with custom settings.
+  - `get_connection() -> Result<redis::aio::ConnectionManager>`: Retrieves or creates a Redis connection manager.
+
+## How It Fits in the Project
+The `CacheService` is part of the backend services layer. It interacts with Redis to store and retrieve data efficiently, supporting various application modules that require caching. The service ensures robust connection management through intelligent pooling and health checks.
+
+## Notable Design Decisions
+- **Connection Pooling:** Implements a read-write lock (`RwLock`) for managing a connection pool, ensuring thread-safe access.
+- **Health Checks:** Automatically recovers stale connections by testing them with a ping before use.
+- **Custom Metadata:** Uses `CacheEntry` to store additional metadata with each cache item, enabling detailed analytics and management.
+- **Error Handling:** Utilizes the `Result` type from the `AppError` enum for robust error handling throughout the service.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 21:17*
