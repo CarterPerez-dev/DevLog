@@ -1,0 +1,138 @@
+# PdfFormatter.format
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** frontend/admin-app/src/lib/export/formatters/pdfFormatter.ts
+**Language:** typescript
+**Lines:** 20-126
+**Complexity:** 19.0
+
+---
+
+## Source Code
+
+```typescript
+format(data: T[], config: ExportConfig<T>, options: ExportOptions): void {
+    try {
+      if (data === null || data === undefined) {
+        throw new Error('Data is required for export');
+      }
+
+      if (!Array.isArray(data)) {
+        throw new Error('Data must be an array');
+      }
+
+      const orientation = config.pdfOrientation ?? 'landscape';
+      const pageSize = config.pdfPageSize ?? 'a4';
+      const pdf = new jsPDF(orientation, 'mm', pageSize);
+
+      const primaryColor: [number, number, number] = [99, 102, 241]; // $primary-500
+      const textColor: [number, number, number] = [31, 41, 55]; // $gray-800
+      const headerBg: [number, number, number] = [243, 244, 246]; // $gray-100
+
+      const title = options.title ?? 'Data Export';
+      pdf.setFontSize(18);
+      pdf.setTextColor(...primaryColor);
+      pdf.text(title, 14, 20);
+
+      let yPosition = 25;
+      if (
+        options.description !== null &&
+        options.description !== undefined &&
+        options.description.length > 0
+      ) {
+        pdf.setFontSize(10);
+        pdf.setTextColor(...textColor);
+        pdf.text(options.description, 14, yPosition);
+        yPosition += 5;
+      }
+
+      if (options.includeMetadata === true) {
+        pdf.setFontSize(9);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(
+          `Exported: ${format(new Date(), 'MMM dd, yyyy HH:mm')}`,
+          14,
+          yPosition,
+        );
+        pdf.text(`Records: ${String(data.length)}`, 14, yPosition + 4);
+        yPosition += 10;
+      }
+
+      const tableData = this.prepareTableData(data, config);
+
+      const headers = config.columns.map((col) => col.label);
+
+      const columnWidths = this.calculateColumnWidths(config, orientation);
+
+      autoTable(pdf, {
+        head: [headers],
+        body: tableData,
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: {
+          fillColor: headerBg,
+          textColor,
+          fontSize: 10,
+          fontStyle: 'bold',
+        },
+        bodyStyles: {
+          fontSize: 9,
+          cellPadding: 3,
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251], // $gray-50
+        },
+        columnStyles: this.getColumnStyles(config, columnWidths),
+        margin: { top: yPosition, left: 14, right: 14 },
+        didDrawPage: (_hookData): void => {
+          const pageCount = pdf.getNumberOfPages();
+          pdf.setFontSize(8);
+          pdf.setTextColor(150, 150, 150);
+
+          for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            const pageText = `Page ${String(i)} of ${String(pageCount)}`;
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            pdf.text(
+              pageText,
+              pageWidth - 30,
+              pdf.internal.pageSize.getHeight() - 10,
+            );
+          }
+        },
+      });
+
+      const timestamp = format(new Date(), 'yyyy-MM-dd-HHmmss');
+      const filename =
+        options.filename ?? config.defaultFilename
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(n + m)\), where \(n\) is the number of data rows, and \(m\) is the number of columns. This is due to the iteration over `data` and `config.columns`.
+
+**Space Complexity:** The space complexity is \(O(1)\) for variables like `primaryColor`, `textColor`, etc., but it increases with the size of `data`. The `autoTable` function uses additional memory proportional to the number of rows and columns.
+
+**Bottlenecks or Inefficiencies:**
+- **Redundant Operations:** The `if` conditions checking for `options.description` and `options.includeMetadata` are redundant if these options are always provided.
+- **Multiple Font Size Changes:** Changing font sizes multiple times can be costly. Consider setting the default font size at the beginning.
+- **Unnecessary Iterations:** The `didDrawPage` hook iterates over all pages, which is unnecessary as it only needs to add page numbers.
+
+**Optimization Opportunities:**
+- Combine font size changes into a single operation by setting them once before drawing text.
+- Remove redundant `if` checks if these options are always provided or use default values.
+- Optimize the `didDrawPage` hook by adding page numbers only on the last page.
+
+**Resource Usage Concerns:**
+- Ensure that all file handles and connections are properly closed, though this function does not explicitly manage such resources. Consider using a try-finally block to ensure proper cleanup if needed.
+
+By addressing these points, you can improve both the performance and readability of your code.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 11:48*
