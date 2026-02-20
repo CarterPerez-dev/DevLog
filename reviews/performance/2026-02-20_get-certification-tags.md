@@ -1,0 +1,126 @@
+# get_certification_tags
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** backend/devtools/migrations/migrate_resources.py
+**Language:** python
+**Lines:** 30-118
+**Complexity:** 34.0
+
+---
+
+## Source Code
+
+```python
+def get_certification_tags(name, url, description = ""):
+    """
+    Determine certification tags based on resource name, URL, and description
+    """
+    name_lower = name.lower()
+    url_lower = url.lower()
+    desc_lower = description.lower()
+    combined = f"{name_lower} {url_lower} {desc_lower}"
+
+    tags = []
+
+    # A+ patterns
+    if any(pattern in combined for pattern in
+           ['a+', 'a plus', '220-1101', '220-1102', 'core 1', 'core 2']):
+        if not any(exclude in combined for exclude in
+                   ['network+', 'security+', 'casp', 'pentest+']):
+            tags.append(Certification.A_PLUS.value)
+
+    # Network+ patterns
+    if any(pattern in combined for pattern in
+           ['network+', 'n10-008', 'n10-009', 'networking', 'subnet']):
+        if not any(exclude in combined
+                   for exclude in ['a+', 'security+', 'casp', 'pentest+']):
+            tags.append(Certification.NETWORK_PLUS.value)
+
+    # Security+ patterns
+    if any(pattern in combined
+           for pattern in ['security+', 'sy0-701', 'sec+']):
+        tags.append(Certification.SECURITY_PLUS.value)
+
+    # CySA+ patterns
+    if any(pattern in combined
+           for pattern in ['cysa+', 'cs0-003', 'cybersecurity analyst']):
+        tags.append(Certification.CYSA_PLUS.value)
+
+    # CASP+/SecurityX patterns
+    if any(pattern in combined
+           for pattern in ['casp', 'cas-004', 'cas-005', 'securityx']):
+        tags.append(Certification.CASP_PLUS.value)
+
+    # PenTest+ patterns
+    if any(pattern in combined
+           for pattern in ['pentest+', 'pt0-002', 'pt0-003', 'penetration',
+                           'ethical hack']):
+        tags.append(Certification.PENTEST_PLUS.value)
+
+    # Cloud+ patterns
+    if any(pattern in combined for pattern in
+           ['cloud+', 'cv0-003', 'cloud essentials', 'cl0-002']):
+        tags.append(Certification.CLOUD_PLUS.value)
+
+    # Linux+ patterns
+    if any(pattern in combined
+           for pattern in ['linux+', 'xk0-005', 'kali linux', 'ubuntu']):
+        tags.append(Certification.LINUX_PLUS.value)
+
+    # Data+ patterns
+    if any(pattern in combined for pattern in ['data+', 'da0-001']):
+        tags.append(Certification.DATA_PLUS.value)
+
+    # Server+ patterns
+    if any(pattern in combined for pattern in ['server+', 'sk0-005']):
+        tags.append(Certification.SERVER_PLUS.value)
+
+    # Project+ patterns
+    if any(pattern in combined for pattern in ['project+', 'pk0-005']):
+        tags.append(Certification.PROJECT_PLUS.value)
+
+    # ITF/TECH+ patterns
+    if any(pattern in combined for pattern in
+           ['itf', 'tech+', 'fc0-u61', 'fc0-u71', 'it fundamentals']):
+        tags.append(Certification.TECH_PLUS.value)
+
+    # AWS Cloud patterns
+    if any(pattern in combined
+           for pattern in ['aws', 'amazon web services', 'clf-c02',
+                           'cloud practitioner']):
+        tags.append(Certification.AWS_CLOUD.value)
+
+    # CISSP patterns
+    if any(pattern in combined for p
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity (Big O Notation)
+The function `get_certification_tags` has a time complexity of \(O(n \times m)\), where \(n\) is the length of the combined string and \(m\) is the number of patterns to check. This is because the `any()` function iterates over each pattern for every character in the combined string.
+
+#### Space Complexity
+The space complexity is \(O(1)\) since the memory used by variables (`name_lower`, `url_lower`, `desc_lower`, and `tags`) does not depend on the input size. However, the number of tags appended to the list can grow with the input.
+
+#### Bottlenecks or Inefficiencies
+- **Redundant Operations**: The function performs multiple string lowercasing operations (`name_lower`, `url_lower`, `desc_lower`), which are redundant if the inputs are already in lowercase.
+- **Multiple Iterations**: Each pattern check involves iterating over a list of patterns, leading to repeated work.
+
+#### Optimization Opportunities
+1. **Pre-Lowercase Input**: Ensure that all input strings are pre-lowered before processing to avoid multiple conversions.
+2. **Use `re` for Pattern Matching**: Replace the `any()` and list comprehensions with regular expressions (`re`) for potentially faster pattern matching.
+3. **Memoization/Caching**: If this function is called frequently with the same inputs, consider caching results using decorators like `functools.lru_cache`.
+
+#### Resource Usage Concerns
+- Ensure that all resources (connections, file handles) are properly managed and closed to avoid leaks.
+
+By optimizing these aspects, you can significantly improve the performance of the function.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 14:03*
