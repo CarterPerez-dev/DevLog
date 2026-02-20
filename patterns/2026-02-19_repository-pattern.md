@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/advanced/bug-bounty-platform/backend/app/program/service.py
+**File:** TEMPLATES/fullstack-template/backend/app/user/repository.py
 **Language:** python
-**Lines:** 1-376
+**Lines:** 1-112
 **Complexity:** 0.0
 
 ---
@@ -14,118 +14,116 @@
 ```python
 """
 ⒸAngelaMos | 2025
-service.py
+repository.py
 """
-
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import (
-    AssetNotFound,
-    NotProgramOwner,
-    ProgramNotFound,
-    SlugAlreadyExists,
-)
-from user.User import User
-from .schemas import (
-    AssetCreate,
-    AssetResponse,
-    AssetUpdate,
-    ProgramCreate,
-    ProgramDetailResponse,
-    ProgramListResponse,
-    ProgramResponse,
-    ProgramUpdate,
-    RewardTierCreate,
-    RewardTierResponse,
-)
-from .repository import (
-    AssetRepository,
-    ProgramRepository,
-    RewardTierRepository,
-)
+from config import UserRole
+from .User import User
+from core.base_repository import BaseRepository
 
 
-class ProgramService:
+class UserRepository(BaseRepository[User]):
     """
-    Business logic for program operations
+    Repository for User model database operations
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    model = User
 
-    async def create_program(
-        self,
+    @classmethod
+    async def get_by_email(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> User | None:
+        """
+        Get user by email address
+        """
+        result = await session.execute(
+            select(User).where(User.email == email)
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def get_by_id(
+        cls,
+        session: AsyncSession,
+        id: UUID,
+    ) -> User | None:
+        """
+        Get user by ID
+        """
+        return await session.get(User, id)
+
+    @classmethod
+    async def email_exists(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> bool:
+        """
+        Check if email is already registered
+        """
+        result = await session.execute(
+            select(User.id).where(User.email == email)
+        )
+        return result.scalars().first() is not None
+
+    @classmethod
+    async def create_user(
+        cls,
+        session: AsyncSession,
+        email: str,
+        hashed_password: str,
+        full_name: str | None = None,
+        role: UserRole = UserRole.USER,
+    ) -> User:
+        """
+        Create a new user
+        """
+        user = User(
+            email = email,
+            hashed_password = hashed_password,
+            full_name = full_name,
+            role = role,
+        )
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
+
+    @classmethod
+    async def update_password(
+        cls,
+        session: AsyncSession,
         user: User,
-        program_data: ProgramCreate,
-    ) -> ProgramResponse:
+        hashed_password: str,
+    ) -> User:
         """
-        Create a new bug bounty program
+        Update user password and increment token version
         """
-        if await ProgramRepository.slug_exists(self.session,
-                                               program_data.slug):
-            raise SlugAlreadyExists(program_data.slug)
+        user.hashed_password = hashed_password
+        user.increment_token_version()
+        await session.flush()
+        await session.refresh(user)
+        return user
 
-        program = await ProgramRepository.create(
-            self.session,
-            company_id = user.id,
-            name = program_data.name,
-            slug = program_data.slug,
-            description = program_data.description,
-            rules = program_data.rules,
-            response_sla_hours = program_data.response_sla_hours,
-            visibility = program_data.visibility,
-        )
-        return ProgramResponse.model_validate(program)
+    @classmethod
+    async def increment_token_version(
+        cls,
+        session: AsyncSession,
+        user: User,
+    ) -> User:
+        """
+        Invalidate all user tokens
+        """
+        user.increment_token_version()
+        await session.flush()
+        await session.refresh(user)
+        return user
 
-    async def get_program_by_slug(
-        self,
-        slug: str,
-    ) -> ProgramDetailResponse:
-        """
-        Get program by slug with full details
-        """
-        program = await ProgramRepository.get_by_slug_with_details(
-            self.session,
-            slug
-        )
-        if not program:
-            raise ProgramNotFound(slug)
-
-        return ProgramDetailResponse(
-            id = program.id,
-            created_at = program.created_at,
-            updated_at = program.updated_at,
-            company_id = program.company_id,
-            name = program.name,
-            slug = program.slug,
-            description = program.description,
-            rules = program.rules,
-            response_sla_hours = program.response_sla_hours,
-            status = program.status,
-            visibility = program.visibility,
-            assets = [
-                AssetResponse.model_validate(a) for a in program.assets
-            ],
-            reward_tiers = [
-                RewardTierResponse.model_validate(r)
-                for r in program.reward_tiers
-            ],
-        )
-
-    async def get_program_by_id(
-        self,
-        program_id: UUID,
-    ) -> ProgramResponse:
-        """
-        Get program by ID
-        """
-        program = await ProgramRepository.get_by_id(
-            self.session,
-            program_id
-        )
-        if not program:
-            
 ```
 
 ---
@@ -134,26 +132,26 @@ class ProgramService:
 
 ### Pattern Analysis
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:** Repository Pattern
 
-The `ProgramService` class in the provided code implements the **Repository Pattern**, which encapsulates data access logic and abstracts it from the business logic. This is evident through the use of `ProgramRepository`, `AssetRepository`, and `RewardTierRepository` to handle database operations.
+The `UserRepository` class implements the **Repository Pattern**, which encapsulates data access logic for a specific entity (`User`). This implementation provides methods to perform CRUD operations, ensuring that database interactions are abstracted away from the business logic.
 
-- **Implementation**: The service methods delegate data retrieval and manipulation tasks to repository methods, such as `create_program`, `get_program_by_slug`, and `list_public_programs`. For example, `create_program` checks for slug uniqueness using `ProgramRepository.slug_exists` and creates a new program with `ProgramRepository.create`.
+#### Implementation Details:
+- The `get_by_email`, `get_by_id`, `email_exists`, `create_user`, and `update_password` methods handle common database operations.
+- Each method is a class method (`@classmethod`) that takes an `AsyncSession` for database interaction, ensuring asynchronous operations are handled properly.
 
-- **Benefits**: 
-  - **Separation of Concerns**: The service layer focuses on business logic while the repository handles data access.
-  - **Testability**: Repository methods can be easily mocked or replaced, making unit testing more straightforward.
+#### Benefits:
+1. **Encapsulation:** The repository abstracts the database interactions, making the business logic cleaner and more testable.
+2. **Decoupling:** It decouples the application from the data access layer, allowing changes in the database schema or storage mechanism without affecting the business logic.
+3. **Consistency:** Ensures consistent behavior across different parts of the application.
 
-- **Deviations**:
-  - The pattern is slightly modified as the service class directly interacts with the session object. Typically, a dedicated repository class would handle sessions and transactions.
-  - Some business logic (e.g., checking if the user owns the program) is implemented in the service layer rather than the repository.
+#### Deviations:
+- The `BaseRepository` class is not shown but assumed to provide common functionality like session handling and model mapping.
+- Methods are implemented as class methods, which might be less flexible for unit testing compared to instance methods.
 
-- **Appropriateness**:
-  - This pattern is appropriate for applications where data access logic needs to be abstracted from business rules. It enhances maintainability and testability by clearly separating concerns.
-  - However, the direct session handling could be refactored into a more generic repository class that manages sessions internally.
-
-This analysis highlights how the Repository Pattern is effectively used in this code snippet while noting some potential improvements for better adherence to pattern standards.
+#### Appropriateness:
+This pattern is highly appropriate in this context where the application needs to interact with a database. It provides a clear separation of concerns between data access and business logic, making the codebase easier to maintain and extend. However, if the repository needs to be used across multiple entities or requires more complex interactions, additional refactoring might be necessary.
 
 ---
 
-*Generated by CodeWorm on 2026-02-19 15:39*
+*Generated by CodeWorm on 2026-02-19 20:38*
