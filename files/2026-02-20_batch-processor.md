@@ -1,0 +1,163 @@
+# batch_processor
+
+**Type:** File Overview
+**Repository:** vuemantics
+**File:** backend/workers/batch_processor.py
+**Language:** python
+**Lines:** 1-216
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+batch_processor.py
+
+- Sequential processing (one upload at a time, limited compute)
+- Database is source of truth (worker crash = resume from DB state)
+- Non-blocking failures (one bad upload doesn't stop the batch)
+- Retry once per upload (fails twice = permanent failure, continue batch)
+- WebSocket progress updates for real-time tracking
+- Extreme timeouts (can run for days)
+"""
+
+import asyncio
+import logging
+import threading
+from uuid import UUID
+
+import dramatiq
+
+import database
+from core.tasks import broker
+from core.redis import redis_pool
+from core.websocket import (
+    init_publisher,
+)
+from models.Upload import (
+    Upload,
+    ProcessingStatus,
+)
+from models.UploadBatch import (
+    UploadBatch,
+    BatchStatus,
+)
+from services.ai.service import LocalAIService
+
+from .batch_helpers import (
+    publish_batch_progress,
+    publish_file_progress,
+    process_upload_with_retry,
+)
+
+
+logger = logging.getLogger(__name__)
+
+# Thread-local storage for event loop and initialization state
+_thread_local = threading.local()
+
+
+def get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    Get or create event loop for current thread
+
+    Returns:
+        Event loop instance
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop
+
+
+async def ensure_worker_initialized() -> None:
+    """
+    Ensure worker thread is initialized (database, Redis, publisher)
+
+    Idempotent - safe to call multiple times, only initializes once per thread
+    """
+    if getattr(_thread_local, 'initialized', False):
+        return
+
+    # Initialize database connection
+    await database.db.connect()
+
+    # Initialize Redis connection pool
+    await redis_pool.connect()
+
+    # Initialize WebSocket publisher (for publishing to Redis only - no listener needed)
+    init_publisher()
+
+    _thread_local.initialized = True
+    logger.info("Worker thread initialized")
+
+
+@dramatiq.actor(
+    broker = broker,
+    max_retries = 0,  # Retries manually at the upload level
+    priority = 0,  # All batches equal priority (FIFO)
+    time_limit = 7 * 24 * 60 * 60 * 1000,  # 7 days
+)
+def process_batch(batch_id: str) -> None:
+    """
+    Process all uploads in a batch sequentially
+
+    Args:
+        batch_id: UUID of the batch to process
+
+    Design:
+    - Runs in background worker process
+    - Processes uploads one by one (sequential)
+    - Updates batch progress after each upload
+    - Broadcasts WebSocket updates
+    - If worker crashes, batch stays in 'processing' state
+      and can be resumed by restarting the worker
+    """
+    # String UUID back to UUID
+    batch_uuid = UUID(batch_id)
+
+    # Get or create event loop for this thread
+    loop = get_or_create_event_loop()
+
+    # Run async processing
+    loop.run_until_complete(_
+```
+
+---
+
+## File Overview
+
+batch_processor.py
+
+**Purpose and Responsibility:**
+This file is responsible for processing batches of uploads sequentially, ensuring that each upload is processed one at a time within a background worker process. It handles retries, maintains state using a database as the source of truth, and provides real-time progress updates via WebSockets.
+
+**Key Exports or Public Interface:**
+- `process_batch(batch_id: str)`: The main entry point for processing a batch of uploads.
+- `_process_batch_async(batch_id: UUID)`: Asynchronous implementation of batch processing logic.
+
+**How It Fits in the Project:**
+This file acts as a critical component within the worker processes, handling sequential upload processing. It integrates with other services like `dramatiq` for task management, `database` for state persistence, and `LocalAIService` for AI processing tasks. The WebSocket updates ensure real-time tracking of batch progress.
+
+**Notable Design Decisions:**
+- **Sequential Processing:** Ensures that each upload is processed one at a time to avoid overwhelming the system.
+- **Database as Source of Truth:** Allows resuming from where it left off if the worker crashes, ensuring data integrity.
+- **Non-blocking Failures and Retries:** Each upload can fail independently without stopping the entire batch processing. Retries are handled at the upload level.
+- **WebSocket Progress Updates:** Provides real-time feedback to users about the progress of each batch.
+- **Extreme Timeouts:** Allows long-running tasks that may take days to complete, suitable for large batches or complex AI processing.
+```
+
+This documentation provides a high-level overview of the file's role in the project, its key functions, and significant design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 13:21*
