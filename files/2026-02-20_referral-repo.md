@@ -1,0 +1,141 @@
+# referral_repo
+
+**Type:** File Overview
+**Repository:** stripe-referral
+**File:** src/stripe_referral/repositories/referral_repo.py
+**Language:** python
+**Lines:** 1-128
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025 | CertGames.com
+Referral code and tracking repositories
+"""
+
+from sqlalchemy import (
+    case,
+    func,
+    select,
+)
+from sqlalchemy.orm import Session
+
+from ..config.enums import ReferralTrackingStatus
+from ..models.ReferralCode import ReferralCode
+from ..models.ReferralTracking import ReferralTracking
+
+from .base import BaseRepository
+
+
+class ReferralCodeRepository(BaseRepository[ReferralCode]):
+    """
+    Repository for ReferralCode database operations
+    """
+    def __init__(self, db: Session) -> None:
+        """
+        Initialize with ReferralCode model
+        """
+        super().__init__(db, ReferralCode)
+
+    def get_by_code(self, code: str) -> ReferralCode | None:
+        """
+        Get referral code by code string
+        """
+        stmt = select(ReferralCode).where(ReferralCode.code == code)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_by_user(self,
+                    user_id: str,
+                    program_id: int | None = None) -> list[ReferralCode]:
+        """
+        Get all codes for a user optionally filtered by program
+        """
+        stmt = select(ReferralCode).where(ReferralCode.user_id == user_id)
+        if program_id:
+            stmt = stmt.where(ReferralCode.program_id == program_id)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def increment_uses(self, code_id: int) -> bool:
+        """
+        Atomically increment uses count
+        """
+        code = self.get_by_id(code_id)
+        if not code:
+            return False
+
+        code.uses_count += 1
+        self.db.commit()
+        return True
+
+
+class ReferralTrackingRepository(BaseRepository[ReferralTracking]):
+    """
+    Repository for ReferralTracking database operations
+    """
+    def __init__(self, db: Session) -> None:
+        """
+        Initialize with ReferralTracking model
+        """
+        super().__init__(db, ReferralTracking)
+
+    def get_by_referrer(self, user_id: str) -> list[ReferralTracking]:
+        """
+        Get all referral conversions for a referrer
+        """
+        stmt = select(ReferralTracking).where(
+            ReferralTracking.referrer_user_id == user_id
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_pending_payouts(self,
+                            program_id: int | None = None
+                            ) -> list[ReferralTracking]:
+        """
+        Get all tracking records with pending payouts
+        """
+        stmt = select(ReferralTracking).where(
+            ReferralTracking.payout_status ==
+            ReferralTrackingStatus.PENDING.value
+        )
+        if program_id:
+            stmt = stmt.where(ReferralTracking.program_id == program_id)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_user_earnings(self, user_id: str) -> dict[str, float]:
+        """
+        Calculate total earnings for a user
+        """
+        stmt = select(
+            func.sum(ReferralTracking.amount_earned
+```
+
+---
+
+## File Overview
+
+**Purpose & Responsibility**
+This Python source file defines repositories for managing referral codes and tracking conversions within a larger application. The `ReferralCodeRepository` handles operations related to generating, retrieving, and updating referral codes, while the `ReferralTrackingRepository` manages tracking of referrals and their associated payouts.
+
+**Key Exports & Public Interface**
+- **ReferralCodeRepository**: Provides methods for CRUD operations on `ReferralCode`, including fetching by code or user.
+- **increment_uses()**: Atomically increments the uses count of a referral code.
+- **ReferralTrackingRepository**: Manages tracking records, including retrieving pending payouts and calculating user earnings.
+
+**How it Fits in the Project**
+This file is part of the `stripe-referral` repository, which handles referral programs. The repositories interact with the database to manage referral codes and track conversions, ensuring that users can generate unique referral links and that referrers receive appropriate credits for successful referrals.
+
+**Notable Design Decisions**
+- **SQLAlchemy ORM**: Utilizes SQLAlchemy for database operations, providing a robust and type-safe interface.
+- **Type Hints & Enums**: Uses Python type hints and enums to ensure clarity and correctness in handling different statuses (e.g., `ReferralTrackingStatus`).
+- **Atomic Operations**: Ensures atomicity in updating the uses count of referral codes using transactions.
+```
+
+This documentation provides a high-level overview of the file's purpose, key exports, integration within the project, and significant design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 09:39*
