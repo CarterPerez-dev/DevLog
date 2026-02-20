@@ -112,23 +112,25 @@ export { UserRole }
 
 ## File Overview
 
-### Documenting `auth.store.ts`
+### auth.store.ts
 
 **Purpose and Responsibility:**
-This file is responsible for managing authentication state within the application using Zustand, a state management library. It handles user login, logout, and role-based checks, ensuring that the state persists across sessions via local storage.
+This file manages authentication state using Zustand, a state management library for React applications. It handles user login, logout, and role-based checks, ensuring consistent and persistent authentication across the application.
 
 **Key Exports and Public API:**
-- **`useAuthStore`:** The main store providing access to all auth-related states and actions.
-- **`useUser`, `useIsAuthenticated`, `useIsAuthLoading`, `useHasHydrated`:** Convenience hooks for accessing specific pieces of authentication state.
-- **`useHasRole` and `useIsAdmin`:** Custom hooks for role-based checks.
+- `useAuthStore`: The main store providing access to all auth-related states and actions.
+- `useUser`, `useIsAuthenticated`, `useIsAuthLoading`, `useHasHydrated`: Convenience hooks for accessing specific pieces of state.
+- `useHasRole` and `useIsAdmin`: Custom hooks for role-based checks.
 
-**How it Fits into the Project:**
-This store is a critical component in managing user sessions, integrating with API responses to update user data. It ensures that user authentication status is consistent across different parts of the application, enhancing usability and security.
+**How it Fits in the Project:**
+This store is a critical component that centralizes authentication logic. It integrates with Zustand's persistent storage to maintain user session data across page reloads, ensuring a seamless user experience.
 
 **Notable Design Decisions:**
-- **State Management:** Utilizing Zustand for state management, leveraging its middleware for persistence.
-- **Partial State Handling:** The `partialize` function in `persist` allows selective storage of state slices, optimizing storage usage.
-- **Role-Based Access Control:** Custom hooks like `useHasRole` and `useIsAdmin` simplify role-based access control logic throughout the application.
+- **State Management**: Using `create` from Zustand for state management and `persist` middleware for storing the state in local storage.
+- **Partial State Updates**: Implementing partial updates via `set` to avoid unnecessary re-renders.
+- **Role-Based Access Control**: Providing specific hooks like `useHasRole` and `useIsAdmin` to enable fine-grained access control based on user roles.
+
+This file ensures that authentication-related logic is encapsulated, making the application more maintainable and easier to extend with new features or changes in authentication requirements.
 
 ---
 
