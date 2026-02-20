@@ -1,0 +1,155 @@
+# PeriodLogSheet
+
+**Type:** File Overview
+**Repository:** ios-test
+**File:** red-recon/src/features/calendar/components/PeriodLogSheet.tsx
+**Language:** tsx
+**Lines:** 1-396
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+/**
+ * @AngelaMos | 2026
+ * PeriodLogSheet.tsx
+ */
+
+import {
+  useCreatePeriodLog,
+  useDeletePeriodLog,
+  useUpdatePeriodLog,
+} from '@/api/hooks'
+import {
+  FlowIntensity,
+  type CalendarDay,
+  type PeriodLogCreate,
+  type PeriodLogUpdate,
+} from '@/api/types'
+import { haptics } from '@/shared/utils'
+import { colors } from '@/theme/tokens'
+import { Check, Trash2, X } from 'lucide-react-native'
+import type React from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Modal, Pressable } from 'react-native'
+import { Stack, Text, TextArea, XStack, YStack } from 'tamagui'
+import { FlowIntensitySelector } from './FlowIntensitySelector'
+import { usePeriodForDate } from '../hooks/usePeriodForDate'
+
+export interface PeriodLogSheetProps {
+  visible: boolean
+  selectedDate: string
+  calendarDay: CalendarDay | null
+  onClose: () => void
+}
+
+function formatDisplayDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  }
+  return date.toLocaleDateString('en-US', options)
+}
+
+export function PeriodLogSheet({
+  visible,
+  selectedDate,
+  calendarDay,
+  onClose,
+}: PeriodLogSheetProps): React.ReactElement {
+  const { period, isInPeriod, isStartDate } = usePeriodForDate(selectedDate)
+  const createPeriod = useCreatePeriodLog()
+  const updatePeriod = useUpdatePeriodLog()
+  const deletePeriod = useDeletePeriodLog()
+
+  const [flowIntensity, setFlowIntensity] = useState<FlowIntensity | null>(null)
+  const [notes, setNotes] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  const isEditing = isInPeriod && period !== null
+  const isPredicted = calendarDay?.is_predicted_period ?? false
+
+  useEffect(() => {
+    if (visible && period) {
+      setFlowIntensity(period.flow_intensity)
+      setNotes(period.notes ?? '')
+    } else if (visible) {
+      setFlowIntensity(null)
+      setNotes('')
+    }
+    setShowDeleteConfirm(false)
+    setShowSuccess(false)
+  }, [visible, period])
+
+  useEffect(() => {
+    if (showSuccess) {
+      const timer = setTimeout(() => {
+        setShowSuccess(false)
+        onClose()
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [showSuccess, onClose])
+
+  const handleStartPeriod = useCallback(() => {
+    haptics.medium()
+
+    const data: PeriodLogCreate = {
+      start_date: selectedDate,
+      flow_intensity: flowIntensity,
+      notes: notes.trim() || null,
+    }
+
+    createPeriod.mutate(data, {
+      onSuccess: () => {
+        haptics.success()
+        setShowSuccess(true)
+      },
+    })
+  }, [createPeriod, flowIntensity, notes, selectedDate])
+
+  const handleUpdatePeriod = useCallback(() => {
+    if (!period) return
+    haptics.medium()
+
+    const data: PeriodLogUpdate = {
+      flow_intensity: flowIntensity,
+      notes: notes.trim() || null,
+    }
+
+    updatePeriod.mutate(
+      { id: period.id, dat
+```
+
+---
+
+## File Overview
+
+### PeriodLogSheet.tsx
+
+**Purpose and Responsibility:**
+This file defines a React component, `PeriodLogSheet`, which handles the creation, updating, and deletion of period logs for a specific date within a menstrual cycle tracking application. It integrates with backend APIs to manage period log data and provides user interaction through modal dialogs.
+
+**Key Exports or Public Interface:**
+- **`PeriodLogSheet`:** A React functional component that manages state for flow intensity, notes, and success messages. It handles creating, updating, and deleting period logs based on the current date and existing period data.
+  
+**How it Fits in the Project:**
+This component is a crucial part of the menstrual cycle tracking feature, allowing users to log their periods directly from a modal sheet. It interacts with other components like `FlowIntensitySelector` and hooks for fetching and mutating period log data.
+
+**Notable Design Decisions:**
+- **State Management:** Uses React state hooks (`useState`) to manage flow intensity, notes, and success messages.
+- **API Integration:** Utilizes custom hooks from `@/api/hooks` for creating, updating, and deleting period logs, ensuring smooth interaction with the backend.
+- **User Interaction:** Implements haptic feedback using `haptics` utility functions to provide user feedback during operations like starting or ending a period.
+- **Modal Dialogs:** Uses Tamagui's `Modal`, `Pressable`, and `Stack` components for a clean and responsive UI, enhancing user experience.
+```
+
+This documentation provides an overview of the file’s purpose, key exports, integration within the project, and notable design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 15:47*
