@@ -1,10 +1,10 @@
 # dependencies
 
 **Type:** File Overview
-**Repository:** fastapi-rc
-**File:** fastapi-rc/fastapi_rc/dependencies.py
+**Repository:** my-portfolio
+**File:** v1/backend/app/core/dependencies.py
 **Language:** python
-**Lines:** 1-52
+**Lines:** 1-159
 **Complexity:** 0.0
 
 ---
@@ -17,83 +17,159 @@
 dependencies.py
 """
 
+from __future__ import annotations
+
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import (
-    Depends, 
-    Request,
+import jwt
+from fastapi import Depends, Request
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import config
+from config import (
+    TokenType,
+    UserRole,
 )
-from redis.asyncio import Redis
+from .database import get_db_session
+from .exceptions import (
+    InactiveUser,
+    PermissionDenied,
+    TokenError,
+    TokenRevokedError,
+    UserNotFound,
+)
+from user.User import User
+from .security import decode_access_token
+from user.repository import UserRepository
 
-from fastapi_rc.client import cachemanager
-from fastapi_rc.service import CacheService
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl = f"{config.API_PREFIX}/auth/login",
+    auto_error = True,
+)
+
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl = f"{config.API_PREFIX}/auth/login",
+    auto_error = False,
+)
+
+DBSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 
-async def get_redis_client(request: Request) -> Redis:
+async def get_current_user(
+    token: Annotated[str,
+                     Depends(oauth2_scheme)],
+    db: DBSession,
+) -> User:
     """
-    FastAPI dependency for direct Redis client access
-
-    Usage:
-        @app.get("/example")
-        async def example(redis: RedisClient):
-            await redis.get("key")
+    Validate access token and return current user
     """
-    if not cachemanager.is_available:
-        raise RuntimeError("Redis is not available")
-    return cachemanager.client
+    try:
+        payload = decode_access_token(token)
+    except jwt.InvalidTokenError as e:
+        raise TokenError(message = str(e)) from e
+
+    if payload.get("type") != TokenType.ACCESS.value:
+        raise TokenError(message = "Invalid token type")
+
+    user_id = UUID(payload["sub"])
+    user = await UserRepository.get_by_id(db, user_id)
+
+    if user is None:
+        raise UserNotFound(identifier = str(user_id))
+
+    if payload.get("token_version") != user.token_version:
+        raise TokenRevokedError()
+
+    return user
 
 
-async def get_cache_service(
-    redis: Annotated[Redis, Depends(get_redis_client)]
-) -> CacheService:
+async def get_current_active_user(
+    user: Annotated[User,
+                    Depends(get_current_user)],
+) -> User:
     """
-    FastAPI dependency for generic CacheService
-
-    Usage:
-        @app.get("/users/{user_id}")
-        async def get_user(user_id: str, cache: CacheServiceDep):
-            return await cache.get_or_set(
-                user_id,
-                factory=lambda: fetch_user(user_id),
-                ttl=300
-            )
+    Ensure user is active
     """
-    return CacheService(redis, namespace = "default")
+    if not user.is_active:
+        raise InactiveUser()
+    return user
 
 
-RedisClient = Annotated[Redis, Depends(get_redis_client)]
-CacheServiceDep = Annotated[CacheService, Depends(get_cache_service)]
+async def get_optional_user(
+    token: Annotated[str | None,
+                     Depends(oauth2_scheme_optional)],
+    db: DBSession,
+) -> User | None:
+    """
+    Return current user if authenticated, None otherwise
+    """
+    if token is None:
+        return None
 
+    try:
+        payload = decode_access_token(token)
+        if payload.get("type") != TokenType.ACCESS.value:
+            return None
+        user_id = UUID(payload["sub"])
+        user = await UserRepository.get_by_id(db, user_id)
+        if user and user.token_version == payload.get("token_version"):
+            return user
+    except (jwt.InvalidTokenError, ValueError):
+        pass
+
+    return None
+
+
+class RequireRole:
+    """
+    Dependency class to check user role
+    """
+    def __init__(self, *allowed_roles: UserRole) -> None:
+        self.allowed_roles = allowed_roles
+
+    async def __call__(
+        self,
+        user: Annotated[User,
+                        Depends(get_current_active_user)],
+    ) -> User:
+        if user.role not in self.allowed_roles:
+            raise PermissionDenied(
+                message =
+   
 ```
 
 ---
 
 ## File Overview
 
-### Purpose and Responsibility
+### dependencies.py
 
-This file, `dependencies.py`, provides FastAPI dependencies for accessing a Redis cache client and a generic CacheService. It ensures that the application can interact with Redis seamlessly while maintaining a clean separation of concerns.
+**Purpose and Responsibility:**
+This file defines core dependency injection mechanisms for a FastAPI application, ensuring secure and role-based access control. It handles token validation, user retrieval, and role checks to enforce permissions.
 
-### Key Exports and Public Interface
+**Key Exports and Public Interface:**
+- `get_current_user`: Validates an access token and returns the current authenticated user.
+- `get_current_active_user`: Ensures the user is active before returning them.
+- `get_optional_user`: Returns the current user if authenticated or `None` otherwise.
+- `RequireRole`: A dependency class to enforce specific user roles.
+- `CurrentUser`, `OptionalUser`: Type annotations for dependencies.
+- `ClientIP`: Extracts client IP considering proxy headers.
+- `QueryLanguage`: Defines query language based on request parameters.
 
-- **`get_redis_client(Request)`**: A dependency function to get an instance of the Redis client.
-- **`get_cache_service(RedisClient)`**: A dependency function to get an instance of `CacheService`.
-- **`RedisClient`**: An annotated type hint for the Redis client.
-- **`CacheServiceDep`**: An annotated type hint for the CacheService.
+**How it Fits in the Project:**
+This file is central to the application's security and authorization logic. It integrates with FastAPI’s dependency injection system, ensuring that every endpoint can access a validated user object or `None` if unauthenticated. The `RequireRole` class allows for fine-grained role-based permissions.
 
-### How It Fits in the Project
-
-This file is crucial for managing dependencies related to caching. By defining these dependencies, it ensures that any part of the application needing cache access can do so through a standardized interface. This promotes reusability and maintainability across different modules within the project.
-
-### Notable Design Decisions
-
-- **Dependency Injection**: Uses FastAPI's `Depends` for managing dependencies, ensuring that components like Redis and CacheService are properly initialized.
-- **Type Hints with Annotated**: Utilizes Python’s `Annotated` to provide clear type hints and dependency annotations, enhancing code readability and maintainability.
-- **Error Handling**: Includes a runtime check in `get_redis_client` to ensure Redis is available before proceeding, preventing potential runtime errors.
+**Notable Design Decisions:**
+- **JWT Token Validation:** Uses `jwt` to decode and validate tokens.
+- **Dependency Injection:** Leverages FastAPI’s `Depends` to manage dependencies, promoting reusable and maintainable code.
+- **Role-Based Access Control (RBAC):** Implements role checks using the `RequireRole` class to enforce permissions based on user roles.
 ```
 
-This documentation provides an overview of the file's purpose, key exports, integration within the project, and notable design choices.
+This documentation provides a high-level overview of the file's purpose, key exports, integration within the project, and notable design decisions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 02:19*
+*Generated by CodeWorm on 2026-02-20 07:14*
