@@ -1,0 +1,149 @@
+# referral_service
+
+**Type:** File Overview
+**Repository:** stripe-referral
+**File:** src/stripe_referral/services/referral_service.py
+**Language:** python
+**Lines:** 1-220
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025 | CertGames.com
+Referral service with business logic
+"""
+
+from datetime import UTC, datetime
+from sqlalchemy.orm import Session
+
+from ..config.enums import ReferralCodeStatus
+from ..exceptions.errors import (
+    CodeExpiredError,
+    CodeInactiveError,
+    CodeMaxUsesReachedError,
+    CodeNotFoundError,
+    ProgramNotFoundError,
+    SelfReferralError,
+)
+from ..repositories.referral_repo import (
+    ReferralCodeRepository,
+    ReferralTrackingRepository,
+)
+from ..repositories.program_repo import (
+    ReferralProgramRepository,
+)
+from ..schemas.types import (
+    CodeValidation,
+    CreateCodeResult,
+    ReferralHistoryItem,
+    TrackReferralResult,
+    UserEarnings,
+)
+from ..utils.code_generator import generate_unique_code
+
+
+class ReferralService:
+    """
+    Service for referral business logic
+    """
+    @staticmethod
+    def create_code(
+        db: Session,
+        user_id: str,
+        program_key: str
+    ) -> CreateCodeResult:
+        """
+        Generate unique referral code for a user
+        """
+        program_repo = ReferralProgramRepository(db)
+        code_repo = ReferralCodeRepository(db)
+
+        program = program_repo.get_by_key(program_key)
+        if not program or not program.is_active:
+            raise ProgramNotFoundError(
+                f"Program '{program_key}' not found or inactive",
+                program_key = program_key,
+            )
+
+        def check_collision(code_string: str) -> bool:
+            """
+            Check if code already exists in database
+            """
+            existing = code_repo.get_by_code(code_string)
+            return existing is not None
+
+        unique_code = generate_unique_code(
+            user_id,
+            program_key,
+            check_collision
+        )
+
+        code = code_repo.create(
+            code = unique_code,
+            user_id = user_id,
+            program_id = program.id,
+            status = ReferralCodeStatus.ACTIVE.value,
+        )
+
+        return CreateCodeResult(
+            code = code.code,
+            program_id = code.program_id,
+            user_id = code.user_id,
+            created_at = code.created_at.isoformat(),
+        )
+
+    @staticmethod
+    def validate_code(db: Session, code: str) -> CodeValidation:
+        """
+        Validate if a code is active and usable
+        """
+        code_repo = ReferralCodeRepository(db)
+
+        code_obj = code_repo.get_by_code(code)
+        if not code_obj:
+            raise CodeNotFoundError(
+                f"Code '{code}' not found",
+                code = code
+            )
+
+        if code_obj.status != ReferralCodeStatus.ACTIVE.value:
+            raise CodeInactiveError(
+                f"Code '{code}' is inactive (status: {code_obj.status})",
+                code = code,
+                status = code_obj.status,
+            )
+
+        if code_obj.expires_at and code_obj.expires_at < datetime.now(UTC
+                                                                      ):
+        
+```
+
+---
+
+## File Overview
+
+### ReferralService Documentation
+
+**Purpose and Responsibility:**
+This file contains the `ReferralService` class, which handles business logic for generating, validating, and tracking referral codes within the `stripe-referral` application.
+
+**Key Exports or Public Interface:**
+- **`create_code(db: Session, user_id: str, program_key: str) -> CreateCodeResult:`** Generates a unique referral code.
+- **`validate_code(db: Session, code: str) -> CodeValidation:`** Validates if a given referral code is active and usable.
+- **`track_referral(db: Session, code: str, referred_user_id: str, transaction_id: str | None = None, transaction_amount: float | None = None) -> TrackReferralResult:`** Tracks successful referrals by recording them in the database.
+
+**How it Fits into the Project:**
+This service is a critical component of the referral system. It interacts with multiple repositories (`ReferralCodeRepository`, `ReferralTrackingRepository`, and `ReferralProgramRepository`) to manage referral codes, track conversions, and validate user inputs. The `ReferralService` ensures that all operations adhere to business rules such as code expiration, maximum uses, and self-referrals.
+
+**Notable Design Decisions:**
+- **Static Methods:** All methods are static to ensure they can be called without instantiating the class.
+- **Error Handling:** Comprehensive error handling is implemented using custom exceptions (`CodeExpiredError`, `CodeInactiveError`, etc.) to provide clear feedback on validation and tracking failures.
+- **Dependency Injection:** The service uses dependency injection for database sessions, allowing it to interact with various repositories as needed. This promotes loose coupling and testability.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 09:27*
