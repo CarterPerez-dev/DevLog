@@ -1,0 +1,126 @@
+# performance_service
+
+**Type:** File Overview
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/services/performance_service.rs
+**Language:** rust
+**Lines:** 1-309
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```rust
+/*
+ * Performance monitoring service providing comprehensive system metrics collection and analysis for real-time performance tracking.
+ * I'm implementing sophisticated performance monitoring that showcases system capabilities while providing valuable insights into computational efficiency.
+ */
+
+use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use sysinfo::{System, SystemExt, CpuExt, DiskExt, NetworkExt, NetworksExt, ComponentExt};
+use tokio::sync::RwLock;
+use tracing::{info, warn, debug};
+use std::sync::Arc;
+use std::collections::VecDeque;
+use uuid::Uuid;
+
+use crate::{
+    utils::error::{AppError, Result},
+    database::DatabasePool,
+};
+
+/// Comprehensive system performance metrics
+/// I'm capturing all essential performance indicators for thorough analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemMetrics {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub cpu_usage_percent: f64,
+    pub memory_usage_percent: f64,
+    pub memory_total_gb: f64,
+    pub memory_available_gb: f64,
+    pub disk_usage_percent: f64,
+    pub disk_total_gb: f64,
+    pub disk_available_gb: f64,
+    pub network_rx_bytes_per_sec: u64,
+    pub network_tx_bytes_per_sec: u64,
+    pub load_average_1m: f64,
+    pub load_average_5m: f64,
+    pub load_average_15m: f64,
+    pub cpu_cores: u32,
+    pub cpu_threads: u32,
+    pub cpu_model: String,
+    pub uptime_seconds: u64,
+    pub active_processes: u32,
+    pub system_temperature: Option<f64>,
+}
+
+/// Performance monitoring service with comprehensive metrics collection
+/// I'm implementing real-time performance tracking with historical analysis
+#[derive(Clone)]
+pub struct PerformanceService {
+    system: Arc<RwLock<System>>,
+    metrics_history: Arc<RwLock<VecDeque<SystemMetrics>>>,
+    db_pool: DatabasePool,
+}
+
+impl PerformanceService {
+    /// Create a new performance monitoring service
+    /// I'm setting up comprehensive performance tracking infrastructure
+    pub fn new(db_pool: DatabasePool) -> Self {
+        let mut system = System::new_all();
+        system.refresh_all();
+
+        Self {
+            system: Arc::new(RwLock::new(system)),
+            metrics_history: Arc::new(RwLock::new(VecDeque::with_capacity(1000))),
+            db_pool,
+        }
+    }
+
+    /// Get current system metrics with comprehensive data collection
+    /// I'm implementing real-time system monitoring with detailed analysis
+    pub async fn get_system_metrics(&self) -> Result<SystemMetrics> {
+        let mut system = self.system.write().await;
+        system.refresh_all();
+
+        // I'm collecting comprehensive CPU information
+        let cpu_usage = system.global_cpu_info().cpu_usage() as f64;
+        let cpu_cores = system.physical_core_count().unwrap_or(0) as u32;
+        let cpu_threads = system.cpus().len() as u32;
+        let cpu_model = system.global_cpu_info().brand().to_string();
+
+        // Memory information with detailed breakdown
+        let memory_total
+```
+
+---
+
+## File Overview
+
+# PerformanceService.rs Documentation
+
+**File Purpose and Responsibility:**
+This file defines a comprehensive performance monitoring service responsible for collecting, analyzing, and storing system metrics. It provides real-time insights into CPU usage, memory consumption, disk space, network traffic, load averages, and more.
+
+**Key Exports or Public Interface:**
+- `PerformanceService`: A struct that encapsulates the performance monitoring logic.
+  - `new(db_pool: DatabasePool) -> Self`: Constructor for initializing the service with a database connection pool.
+  - `get_system_metrics(&self) -> Result<SystemMetrics>`: Method to retrieve current system metrics.
+
+**How It Fits in the Project:**
+This file is part of the backend services layer, specifically designed for performance monitoring. It interacts with other modules like the database (via `DatabasePool`) to store historical data and provides real-time insights through its public API.
+
+**Notable Design Decisions:**
+- **Concurrency**: Utilizes `Arc<RwLock<System>>` for thread-safe access to system information.
+- **Historical Data Storage**: Implements a `VecDeque` to maintain a rolling history of metrics, ensuring efficient storage and retrieval.
+- **Error Handling**: Returns `Result` from public methods to handle potential errors gracefully.
+- **Dependencies**: Relies on external crates like `sysinfo`, `tokio`, `tracing`, and `uuid` for system monitoring, asynchronous operations, logging, and UUID generation.
+```
+
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and notable design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-19 23:09*
