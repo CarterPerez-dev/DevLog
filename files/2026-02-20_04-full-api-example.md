@@ -1,0 +1,196 @@
+# 04_full_api_example
+
+**Type:** File Overview
+**Repository:** fastapi-rc
+**File:** fastapi-rc/examples/04_full_api_example.py
+**Language:** python
+**Lines:** 1-406
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+04_full_api_example.py
+
+API example with multi domain caching strategy
+"""
+
+import uvicorn
+from typing import Annotated
+from datetime import datetime
+from contextlib import asynccontextmanager
+
+from fastapi import (
+    FastAPI,
+    Depends,
+    Query,
+    status,
+)
+from pydantic import BaseModel
+
+from fastapi_rc import (
+    cachemanager,
+    RedisClient,
+    CacheService,
+)
+
+
+class User(BaseModel):
+    """
+    User entity
+    """
+    id: str
+    email: str
+    name: str
+    created_at: datetime
+
+
+class Product(BaseModel):
+    """
+    Product entity
+    """
+    id: str
+    name: str
+    price: float
+    stock: int
+
+
+class Order(BaseModel):
+    """
+    Order entity with computed total
+    """
+    id: str
+    user_id: str
+    product_ids: list[str]
+    total: float
+    created_at: datetime
+
+
+class Stats(BaseModel):
+    """
+    Aggregated statistics
+    """
+    total_users: int
+    total_products: int
+    total_orders: int
+    revenue: float
+    cache_hit_rate: float
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan with Redis initialization
+    """
+    cachemanager.init(
+        redis_url = "redis://localhost:6379/0",
+        max_connections = 100,
+        socket_timeout = 5.0,
+        health_check_interval = 30,
+    )
+    yield
+    await cachemanager.close()
+
+
+app = FastAPI(
+    title = "E-Commerce API",
+    description = "Multi domain caching strategy example",
+    version = "1.0.0",
+    lifespan = lifespan,
+)
+
+
+async def get_user_cache(redis: RedisClient) -> CacheService[User]:
+    """
+    User cache: 10 minute TTL (frequently accessed)
+    """
+    return CacheService(
+        redis,
+        namespace = "users",
+        model = User,
+        default_ttl = 600,
+        use_jitter = True,
+        prefix = "ecommerce",
+        version = "v1",
+    )
+
+
+async def get_product_cache(redis: RedisClient) -> CacheService[Product]:
+    """
+    Product cache: 30 minute TTL (semi-static data)
+    """
+    return CacheService(
+        redis,
+        namespace = "products",
+        model = Product,
+        default_ttl = 1800,
+        use_jitter = True,
+        prefix = "ecommerce",
+        version = "v1",
+    )
+
+
+async def get_order_cache(redis: RedisClient) -> CacheService[Order]:
+    """
+    Order cache: 5 minute TTL (frequently changing)
+    """
+    return CacheService(
+        redis,
+        namespace = "orders",
+        model = Order,
+        default_ttl = 300,
+        use_jitter = True,
+        prefix = "ecommerce",
+        version = "v1",
+    )
+
+
+UserCache = Annotated[CacheService[User], Depends(get_user_cache)]
+ProductCache = Annotated[CacheService[Product], Depends(get_product_cache)]
+OrderCache = Annotated[CacheService[Order], Depends(get_order_cache)]
+
+
+async def fetch_user(user_id: str) -> User:
+    """
+    Simulate database query
+    """
+    return User(
+        id = user_id,
+        email = f"user{user_id}@example.com",
+        name = f"User {user_id}",
+        created_at = datetime.now
+```
+
+---
+
+## File Overview
+
+### 04_full_api_example.py
+
+**Purpose and Responsibility:**
+This file provides a comprehensive example of an E-commerce API using FastAPI with multi-domain caching strategies. It demonstrates how to integrate Redis for caching different entities (users, products, orders) with varying time-to-live (TTL) settings.
+
+**Key Exports or Public Interface:**
+- `FastAPI` application instance
+- Dependency injection for cache services (`UserCache`, `ProductCache`, `OrderCache`)
+- Endpoints for fetching users and products with caching
+- Endpoint for creating an order, coordinating multiple caches
+
+**How It Fits in the Project:**
+This file serves as a practical example within the `fastapi-rc` repository. It showcases how to leverage FastAPI's dependency injection capabilities along with custom cache services to manage different types of data efficiently.
+
+**Notable Design Decisions:**
+1. **Multi-domain Caching:** The application uses distinct cache namespaces for users, products, and orders, each with its own TTL settings.
+2. **Dependency Injection:** Cache services are injected via `Depends` to ensure proper lifecycle management and coordination between different endpoints.
+3. **Context Manager for Lifespan:** An async context manager initializes Redis connections at startup and closes them gracefully during shutdown.
+4. **Simulated Database Queries:** Functions like `fetch_user` and `fetch_product` simulate database interactions, ensuring realistic caching scenarios.
+
+This example highlights best practices in FastAPI development, including robust caching strategies and dependency management.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 01:35*
