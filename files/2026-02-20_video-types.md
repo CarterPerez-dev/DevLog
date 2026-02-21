@@ -1,0 +1,139 @@
+# video.types
+
+**Type:** File Overview
+**Repository:** social-media-notes
+**File:** frontend/src/api/types/video.types.ts
+**Language:** typescript
+**Lines:** 1-97
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+/**
+ * AngelaMos | 2025
+ * video.types.ts
+ */
+
+import { z } from 'zod'
+import { Platform } from '@/config'
+
+export const videoEntrySchema = z.object({
+  id: z.string().uuid(),
+  created_at: z.string(),
+  updated_at: z.string().nullable(),
+  platform: z.nativeEnum(Platform),
+  video_number: z.number(),
+  description: z.string(),
+  youtube_description: z.string().nullable(),
+  scheduled_time: z.string().nullable(),
+})
+
+export const videoCreateRequestSchema = z.object({
+  platform: z.nativeEnum(Platform),
+  video_number: z.number().min(1),
+  description: z.string().optional(),
+  youtube_description: z.string().optional(),
+  scheduled_time: z.string().datetime().optional(),
+})
+
+export const videoUpdateRequestSchema = z.object({
+  description: z.string().optional(),
+  youtube_description: z.string().optional(),
+  scheduled_time: z.string().datetime().optional(),
+})
+
+export const videoCopyRequestSchema = z.object({
+  target_platform: z.nativeEnum(Platform),
+  shorten_for_youtube: z.boolean().optional(),
+})
+
+export const videoListResponseSchema = z.object({
+  items: z.array(videoEntrySchema),
+  total: z.number(),
+  page: z.number(),
+  size: z.number(),
+})
+
+export type VideoEntry = z.infer<typeof videoEntrySchema>
+export type VideoCreateRequest = z.infer<typeof videoCreateRequestSchema>
+export type VideoUpdateRequest = z.infer<typeof videoUpdateRequestSchema>
+export type VideoCopyRequest = z.infer<typeof videoCopyRequestSchema>
+export type VideoListResponse = z.infer<typeof videoListResponseSchema>
+
+export const isValidVideoEntry = (data: unknown): data is VideoEntry => {
+  if (data === null || data === undefined) return false
+  if (typeof data !== 'object') return false
+
+  const result = videoEntrySchema.safeParse(data)
+  return result.success
+}
+
+export const isValidVideoListResponse = (
+  data: unknown
+): data is VideoListResponse => {
+  if (data === null || data === undefined) return false
+  if (typeof data !== 'object') return false
+
+  const result = videoListResponseSchema.safeParse(data)
+  return result.success
+}
+
+export class VideoResponseError extends Error {
+  readonly endpoint?: string
+
+  constructor(message: string, endpoint?: string) {
+    super(message)
+    this.name = 'VideoResponseError'
+    this.endpoint = endpoint
+    Object.setPrototypeOf(this, VideoResponseError.prototype)
+  }
+}
+
+export const VIDEO_ERROR_MESSAGES = {
+  INVALID_VIDEO_RESPONSE: 'Invalid video data from server',
+  INVALID_VIDEO_LIST_RESPONSE: 'Invalid video list from server',
+  VIDEO_NOT_FOUND: 'Video not found',
+  FAILED_TO_CREATE: 'Failed to create video',
+  FAILED_TO_UPDATE: 'Failed to update video',
+  FAILED_TO_DELETE: 'Failed to delete video',
+  FAILED_TO_COPY: 'Failed to copy video',
+} as const
+
+export const VIDEO_SUCCESS_MESSAGES = {
+  CREATED: 'Video created successfully',
+  UPDATED: 'Video saved successfully',
+  DELETED: 'Video deleted successfully',
+  COPIED: (platform: string) => `Video copied to ${platform}`,
+} as const
+
+```
+
+---
+
+## File Overview
+
+### Documentation for `video.types.ts`
+
+**Purpose and Responsibility:**
+This TypeScript source file defines schemas and utility functions for handling video data within the social-media-notes application. It ensures that all video-related operations adhere to a consistent structure, leveraging Zod for validation.
+
+**Key Exports or Public Interface:**
+- **Schemas:** Defines `videoEntrySchema`, `videoCreateRequestSchema`, `videoUpdateRequestSchema`, `videoCopyRequestSchema`, and `videoListResponseSchema` using Zod.
+- **Types:** Provides type definitions for `VideoEntry`, `VideoCreateRequest`, `VideoUpdateRequest`, `VideoCopyRequest`, and `VideoListResponse`.
+- **Validation Functions:** Includes `isValidVideoEntry` and `isValidVideoListResponse` to validate incoming data against the defined schemas.
+- **Error Handling:** Implements `VideoResponseError` class for handling API response errors, along with predefined error and success messages.
+
+**How it Fits in the Project:**
+This file serves as a central hub for video-related validation logic. It ensures that all operations involving videos (creation, updates, listing, etc.) are performed correctly and consistently across the application. By using Zod schemas, it enhances type safety and reduces runtime errors.
+
+**Notable Design Decisions:**
+- **Zod Schemas:** Utilizes Zod for robust schema validation to ensure data integrity.
+- **Type Definitions:** Provides strongly typed interfaces for video operations, making the code more maintainable and easier to understand.
+- **Error Handling:** Defines custom error classes and messages to handle API response errors gracefully, improving user experience and debugging.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 22:55*
