@@ -1,0 +1,165 @@
+# AudioRecorder
+
+**Type:** File Overview
+**Repository:** angelamos-3d
+**File:** frontend/src/lib/audio/AudioRecorder.ts
+**Language:** typescript
+**Lines:** 1-195
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+/**
+ * © AngelaMos | 2026
+ * Angela AI Assistant - Audio Recorder
+ * Records audio from microphone using MediaRecorder API.
+ * Outputs WAV format for Whisper compatibility.
+ */
+
+import { getAngelaConfig } from "../../config";
+import { logger } from "../debug";
+
+export class AudioRecorder {
+	private mediaRecorder: MediaRecorder | null = null;
+	private audioChunks: Blob[] = [];
+	private stream: MediaStream | null = null;
+	private audioContext: AudioContext | null = null;
+	private analyser: AnalyserNode | null = null;
+	private dataArray: Uint8Array<ArrayBuffer> | null = null;
+
+	public onAudioLevel?: (level: number) => void;
+	public onComplete?: (blob: Blob) => void;
+
+	private animationFrame: number | null = null;
+
+	async initialize(): Promise<void> {
+		const config = getAngelaConfig();
+
+		this.stream = await navigator.mediaDevices.getUserMedia({
+			audio: {
+				echoCancellation: true,
+				noiseSuppression: true,
+				sampleRate: config.audio.sampleRate,
+			},
+		});
+
+		this.audioContext = new AudioContext({
+			sampleRate: config.audio.sampleRate,
+		});
+		const source = this.audioContext.createMediaStreamSource(this.stream);
+		this.analyser = this.audioContext.createAnalyser();
+		this.analyser.fftSize = 256;
+		source.connect(this.analyser);
+		this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+		this.mediaRecorder = new MediaRecorder(this.stream, {
+			mimeType: this.getSupportedMimeType(),
+		});
+
+		this.mediaRecorder.ondataavailable = (event) => {
+			if (event.data.size > 0) {
+				this.audioChunks.push(event.data);
+			}
+		};
+
+		this.mediaRecorder.onstop = async () => {
+			const audioBlob = new Blob(this.audioChunks, { type: "audio/webm" });
+			const wavBlob = await this.convertToWav(audioBlob);
+			this.onComplete?.(wavBlob);
+			this.audioChunks = [];
+		};
+	}
+
+	private getSupportedMimeType(): string {
+		const types = [
+			"audio/webm;codecs=opus",
+			"audio/webm",
+			"audio/ogg",
+			"audio/mp4",
+		];
+		for (const type of types) {
+			if (MediaRecorder.isTypeSupported(type)) {
+				return type;
+			}
+		}
+		return "audio/webm";
+	}
+
+	start(): void {
+		if (!this.mediaRecorder) {
+			throw new Error("AudioRecorder not initialized");
+		}
+
+		if (this.mediaRecorder.state === "recording") {
+			logger.audio.log("Already recording, skipping start");
+			return;
+		}
+
+		this.audioChunks = [];
+		this.mediaRecorder.start(100);
+		this.startLevelMonitoring();
+	}
+
+	stop(): void {
+		if (this.mediaRecorder?.state === "recording") {
+			this.mediaRecorder.stop();
+		}
+		this.stopLevelMonitoring();
+	}
+
+	getAudioLevel(): number {
+		if (!this.analyser || !this.dataArray) return 0;
+
+		this.analyser.getByteFrequencyData(this.dataArray);
+		let sum = 0;
+		for (let i = 0; i < this.dataArray.length; i++) {
+			sum += this.dataArray[i];
+		}
+		return sum / (this.dataArray.length * 255);
+	}
+
+	private startLevelMonitoring(): void {
+		const monitor = () => {
+			const level = this.getAudioLevel();
+			this.onAudioLevel?.(level);
+			this.animationFrame = requestAnimationFrame(monitor
+```
+
+---
+
+## File Overview
+
+### AudioRecorder.ts
+
+**Purpose and Responsibility:**
+This file implements an `AudioRecorder` class responsible for recording audio from the microphone using the MediaRecorder API, converting the recorded data to WAV format compatible with Whisper, and providing real-time audio level monitoring.
+
+**Key Exports and Public Interface:**
+- **Class:** `AudioRecorder`
+  - **Methods:**
+    - `initialize()`: Initializes the recorder with user media permissions.
+    - `start()`: Begins recording audio.
+    - `stop()`: Stops recording.
+    - `getAudioLevel()`: Returns the current audio level.
+    - `dispose()`: Cleans up resources when done.
+
+- **Properties:**
+  - `onAudioLevel?: (level: number) => void`: Callback for real-time audio level updates.
+  - `onComplete?: (blob: Blob) => void`: Callback for completed recording.
+
+**How it Fits in the Project:**
+This class is part of the frontend module responsible for handling audio interactions. It integrates with other modules like configuration management and logging to ensure seamless operation within the application. The recorded WAV files are then processed further, possibly for analysis or transmission.
+
+**Notable Design Decisions:**
+- **Real-Time Monitoring:** Uses `requestAnimationFrame` for real-time audio level updates.
+- **WAV Conversion:** Implements a custom conversion function from WebM to WAV format using `AudioContext`.
+- **Error Handling:** Ensures proper cleanup and error handling, especially when stopping recording or disposing of resources.
+
+This class is crucial for enabling the Angela AI Assistant to record and process audio inputs accurately.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 23:27*
