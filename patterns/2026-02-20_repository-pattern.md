@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/backend/app/core/dependencies.py
+**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/user/service.py
 **Language:** python
-**Lines:** 1-147
+**Lines:** 1-95
 **Complexity:** 0.0
 
 ---
@@ -14,131 +14,99 @@
 ```python
 """
 ⒸAngelaMos | 2025
-dependencies.py
+service.py
 """
 
-from __future__ import annotations
-
-from typing import Annotated
 from uuid import UUID
-
-import jwt
-from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from config import (
-    API_PREFIX,
-    TokenType,
-    UserRole,
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
 )
-from .database import get_db_session
-from .exceptions import (
-    InactiveUser,
-    PermissionDenied,
-    TokenError,
-    TokenRevokedError,
+
+from core.exceptions import (
+    EmailAlreadyExists,
+    InvalidCredentials,
     UserNotFound,
 )
-from user.User import User
-from .security import decode_access_token
-from user.repository import UserRepository
-
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl = f"{API_PREFIX}/auth/login",
-    auto_error = True,
+from core.security import (
+    hash_password,
+    verify_password,
 )
-
-oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl = f"{API_PREFIX}/auth/login",
-    auto_error = False,
+from .schemas import (
+    UserCreate,
+    UserResponse,
 )
+from .User import User
+from .repository import UserRepository
 
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
 
-
-async def get_current_user(
-    token: Annotated[str,
-                     Depends(oauth2_scheme)],
-    db: DBSession,
-) -> User:
+class UserService:
     """
-    Validate access token and return current user
+    Business logic for user operations
     """
-    try:
-        payload = decode_access_token(token)
-    except jwt.InvalidTokenError as e:
-        raise TokenError(message = str(e)) from e
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    if payload.get("type") != TokenType.ACCESS.value:
-        raise TokenError(message = "Invalid token type")
-
-    user_id = UUID(payload["sub"])
-    user = await UserRepository.get_by_id(db, user_id)
-
-    if user is None:
-        raise UserNotFound(identifier = str(user_id))
-
-    if payload.get("token_version") != user.token_version:
-        raise TokenRevokedError()
-
-    return user
-
-
-async def get_current_active_user(
-    user: Annotated[User,
-                    Depends(get_current_user)],
-) -> User:
-    """
-    Ensure user is active
-    """
-    if not user.is_active:
-        raise InactiveUser()
-    return user
-
-
-async def get_optional_user(
-    token: Annotated[str | None,
-                     Depends(oauth2_scheme_optional)],
-    db: DBSession,
-) -> User | None:
-    """
-    Return current user if authenticated, None otherwise
-    """
-    if token is None:
-        return None
-
-    try:
-        payload = decode_access_token(token)
-        if payload.get("type") != TokenType.ACCESS.value:
-            return None
-        user_id = UUID(payload["sub"])
-        user = await UserRepository.get_by_id(db, user_id)
-        if user and user.token_version == payload.get("token_version"):
-            return user
-    except (jwt.InvalidTokenError, ValueError):
-        pass
-
-    return None
-
-
-class RequireRole:
-    """
-    Dependency class to check user role
-    """
-    def __init__(self, *allowed_roles: UserRole) -> None:
-        self.allowed_roles = allowed_roles
-
-    async def __call__(
+    async def create_user(
         self,
-        user: Annotated[User,
-                        Depends(get_current_active_user)],
-    ) -> User:
-        if user.role not in self.allowed_roles:
-            raise PermissionDenied(
-                message =
-               
+        user_data: UserCreate,
+    ) -> UserResponse:
+        """
+        Register a new user
+        """
+        if await UserRepository.email_exists(self.session,
+                                             user_data.email):
+            raise EmailAlreadyExists(user_data.email)
+
+        hashed = await hash_password(user_data.password)
+        user = await UserRepository.create_user(
+            self.session,
+            email = user_data.email,
+            hashed_password = hashed,
+        )
+        return UserResponse.model_validate(user)
+
+    async def get_user_by_id(
+        self,
+        user_id: UUID,
+    ) -> UserResponse:
+        """
+        Get user by ID
+        """
+        user = await UserRepository.get_by_id(self.session, user_id)
+        if not user:
+            raise UserNotFound(str(user_id))
+        return UserResponse.model_validate(user)
+
+    async def change_password(
+        self,
+        user: User,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """
+        Change user password
+        """
+        is_valid, _ = await verify_password(current_password, user.hashed_password)
+        if not is_valid:
+            raise InvalidCredentials()
+
+        hashed = await hash_password(new_password)
+        await UserRepository.update_password(self.session, user, hashed)
+
+    async def deactivate_user(
+        self,
+        user: User,
+    ) -> UserResponse:
+        """
+        Deactivate user account
+        """
+        updated = await UserRepository.update(
+            self.session,
+            user,
+            is_active = False
+        )
+        return UserResponse.model_validate(updated)
+
 ```
 
 ---
@@ -147,26 +115,23 @@ class RequireRole:
 
 ### Pattern Analysis
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:** Repository Pattern
 
-The `dependencies.py` file implements the **Repository Pattern**, which abstracts data access operations behind a well-defined interface. This pattern is used in the `UserRepository` class, although it's not explicitly defined as such.
+**Implementation:**
+The `UserService` class encapsulates business logic for user operations, delegating data access to the `UserRepository`. Methods like `create_user`, `get_user_by_id`, and `deactivate_user` interact with the repository through asynchronous methods. For example, `create_user` checks if an email already exists using `email_exists` from `UserRepository`.
 
-- **Implementation**: The `UserRepository.get_by_id()` method is called within the `get_current_user` and `get_optional_user` dependencies to fetch user data from the database.
-  
-- **Benefits**:
-  - **Encapsulation**: Data access logic is encapsulated in the `UserRepository`, making it easier to change or replace the underlying storage mechanism without affecting other parts of the application.
-  - **Testability**: The repository can be easily mocked during unit tests, allowing for more isolated testing.
+**Benefits:**
+- **Separation of Concerns:** The business logic is separated from data access concerns.
+- **Testability:** Repository methods can be easily mocked or replaced for unit testing.
+- **Flexibility:** Easier to switch between different database implementations.
 
-- **Deviations**:
-  - The pattern is not strictly adhered to as there's no explicit `UserRepository` class. Instead, the method calls are directly within dependency functions.
-  - Dependency injection is used effectively with `Depends`, but the repository interface is implicit rather than explicit.
+**Deviations:**
+- The `UserRepository` is not explicitly defined as a separate class; instead, its methods are called directly within the `UserService`.
+- There's no explicit transaction management, which might be necessary in more complex scenarios involving multiple repository operations.
 
-- **Appropriateness**: This pattern is highly appropriate in this context because it abstracts database operations and enhances maintainability. However, for a more robust implementation, defining an explicit `UserRepository` class would be beneficial.
-
-### When to Use
-
-This pattern is suitable when you need to manage data access across multiple parts of your application, ensuring that changes to the data layer do not affect other components. It's particularly useful in large applications where database interactions are frequent and complex.
+**Appropriateness:**
+This pattern is appropriate for this context where the business logic and data access responsibilities are clearly separated. It provides a good balance between simplicity and maintainability, making it easier to manage and test user-related operations. However, if the application grows or requires more complex transactional behavior, additional patterns like Unit of Work might be considered.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 00:20*
+*Generated by CodeWorm on 2026-02-20 21:24*
