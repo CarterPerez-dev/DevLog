@@ -1,0 +1,142 @@
+# useWebSocket
+
+**Type:** File Overview
+**Repository:** CodeWorm
+**File:** dashboard/frontend/src/api/hooks/useWebSocket.ts
+**Language:** typescript
+**Lines:** 1-198
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+// ©AngelaMos | 2026
+// useWebSocket.ts
+
+import { useCallback, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  isValidDaemonEvent,
+  isValidWsMessage,
+  type LogEntry,
+} from '@/api/types'
+import { QUERY_KEYS, WS_CONFIG } from '@/config'
+import { useDashboardStore } from '@/core/lib'
+
+const FINGERPRINT_CLEAR_MS = 30_000
+const FINGERPRINT_MAX = 200
+
+function logFingerprint(entry: Record<string, unknown>): string {
+  return `${entry.event ?? ''}:${entry.timestamp ?? ''}:${entry.component ?? ''}`
+}
+
+function parseLogEntry(logData: Record<string, unknown>): LogEntry {
+  return {
+    id: crypto.randomUUID(),
+    timestamp: (logData.timestamp as string) ?? new Date().toISOString(),
+    level: (logData.log_level as string) ?? 'info',
+    component: logData.component as string | undefined,
+    event: logData.event as string | undefined,
+    ...logData,
+  }
+}
+
+export function useWebSocket(): void {
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const recentFingerprints = useRef<Set<string>>(new Set())
+  const cleanupTimerRef = useRef<ReturnType<typeof setInterval>>(undefined)
+  const {
+    setConnected,
+    addLog,
+    addLogs,
+    setActivity,
+    setNextCycleTime,
+    setLastEvent,
+  } = useDashboardStore()
+  const queryClient = useQueryClient()
+
+  const isDuplicate = useCallback((fp: string): boolean => {
+    if (recentFingerprints.current.has(fp)) return true
+    recentFingerprints.current.add(fp)
+    if (recentFingerprints.current.size > FINGERPRINT_MAX) {
+      const entries = [...recentFingerprints.current]
+      recentFingerprints.current = new Set(entries.slice(-FINGERPRINT_MAX / 2))
+    }
+    return false
+  }, [])
+
+  const connect = useCallback(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`
+
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setConnected(true)
+    }
+
+    ws.onclose = () => {
+      setConnected(false)
+      wsRef.current = null
+
+      reconnectTimerRef.current = setTimeout(() => {
+        connect()
+      }, WS_CONFIG.RECONNECT_INTERVAL)
+    }
+
+    ws.onerror = () => {
+      ws.close()
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const parsed: unknown = JSON.parse(event.data as string)
+
+        if (!isValidWsMessage(parsed)) return
+
+        const { channel, data } = parsed
+
+        if (channel === 'codeworm:history') {
+          const messages = data as Array<{ channel: string; data: unknown }>
+          if (!Array.isArray(messages)) return
+
+          const entries: LogEntry[] = []
+          let lastNextCycle: string | null = null
+
+          for (const msg of messages) {
+            if (msg.channel === 'codeworm:logs') {
+              const logData = msg.data as Record<string, unknown>
+              const fp = logFingerprint(logData)
+    
+```
+
+---
+
+## File Overview
+
+# useWebSocket.ts
+
+## Purpose and Responsibility
+This TypeScript file manages WebSocket communication for real-time log and event updates from a daemon service. It handles connection management, message parsing, and updating state within the dashboard application.
+
+## Key Exports and Public Interface
+- **useWebSocket**: A hook that initializes and maintains a WebSocket connection to receive logs and events. It updates various store states based on incoming messages.
+
+## How it Fits into the Project
+`useWebSocket` is part of the `@/api/hooks` module, which provides essential data fetching and manipulation hooks for the frontend application. This hook integrates with the `@/core/lib` store to update UI state in real-time, ensuring that the dashboard reflects current daemon activity.
+
+## Notable Design Decisions
+- **WebSocket Management**: The hook uses a combination of `useCallback`, `useEffect`, and `useRef` to manage WebSocket connections and ensure efficient reconnection logic.
+- **Duplicate Fingerprint Handling**: To prevent redundant log entries, fingerprints are tracked using a set with a maximum size limit. This ensures that only unique logs are added to the state.
+- **Event Parsing and State Updates**: Messages from the WebSocket are parsed based on their channel type (`codeworm:logs`, `codeworm:events`). Depending on the event type, different store actions update the UI or query client states.
+```
+
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and notable design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 08:03*
