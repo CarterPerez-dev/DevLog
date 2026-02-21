@@ -43,46 +43,45 @@ async def create(
 
 ## Security Review
 
-### Security Review
+### Security Review for `UserFactory.create`
 
-**Vulnerabilities Found:**
+#### Vulnerabilities Found:
 
-1. **Hardcoded Secrets or Credentials (Low):**
-   - The `password` parameter is hardcoded to `"TestPass123"` in the `create` method.
-   
-2. **Input Validation Gaps (Medium):**
-   - The `email`, `full_name`, and `role` parameters are not validated for length, format, or potential injection attacks.
+1. **Hardcoded Secrets or Credentials**:
+   - **Severity**: Low
+   - **Line 5**: The password is hardcoded as `"TestPass123"`. This should be dynamic and securely managed.
+   - **Fix**: Use environment variables, secrets management tools like Hashicorp Vault, or a secure vault service.
 
-**Attack Vectors:**
+2. **Input Validation Gaps**:
+   - **Severity**: Medium
+   - **Lines 4-5**: `email` is optional but not validated for format or existence. Ensure all inputs are properly sanitized and validated.
+   - **Fix**: Implement validation checks using libraries like `pydantic`.
 
-- An attacker could exploit hardcoded credentials to test unauthorized access.
-- Malformed inputs in `email`, `full_name`, or `role` could potentially lead to unexpected behavior or injection vulnerabilities if not properly sanitized.
+3. **Error Handling that Leaks Information**:
+   - **Severity**: Low
+   - **Lines 10-12**: Error handling is minimal, which could leak information about the database state or session issues.
+   - **Fix**: Add proper error handling to catch and log exceptions without exposing sensitive details.
 
-**Recommended Fixes:**
+#### Attack Vectors:
 
-1. **Remove Hardcoded Password:**
+- An attacker could exploit hardcoded credentials for unauthorized access.
+- Invalid input could lead to unexpected behavior or injection attacks if not properly sanitized.
+
+#### Recommended Fixes:
+
+1. Replace hardcoded password with a secure method:
    ```python
-   password: str = "TestPass123"
+   from os import environ
+
+   password = environ.get('USER_PASSWORD', 'TestPass123')
    ```
-   Replace with a dynamic password generation or parameterization.
-   
-2. **Input Validation:**
-   - Validate `email` and `full_name` for format and length:
-     ```python
-     import re
 
-     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-         raise ValueError("Invalid email")
-     if len(full_name) > 255:
-         raise ValueError("Full name too long")
-     ```
+2. Validate and sanitize inputs using `pydantic` or similar libraries.
+3. Implement robust error handling to avoid information leakage.
 
-3. **Use Type Hints and Decorators:**
-   - Ensure all parameters are properly typed and validated.
+#### Overall Security Posture:
 
-**Overall Security Posture:**
-
-The current code has some security risks, particularly with hardcoded credentials and lack of input validation. Addressing these issues will improve the overall security posture by reducing the attack surface and ensuring robust data handling.
+The code has some security concerns, particularly with hardcoded credentials and input validation. Addressing these issues will significantly improve the overall security posture of the application.
 
 ---
 
