@@ -1,0 +1,134 @@
+# useVoicePipeline
+
+**Type:** File Overview
+**Repository:** angelamos-3d
+**File:** frontend/src/hooks/useVoicePipeline.ts
+**Language:** typescript
+**Lines:** 1-286
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+// ===================
+// © AngelaMos | 2026
+// useVoicePipeline.ts
+// ===================
+
+import { useCallback, useRef } from "react";
+import { streamChat } from "../api/ollama.client";
+import { synthesizeSpeech } from "../api/tts.client";
+import { transcribeAudio } from "../api/whisper.client";
+import { getAngelaConfig } from "../config";
+import type { AnimationController, AnimationManager } from "../lib/animation";
+import { type AudioRecorder, SilenceDetector } from "../lib/audio";
+import { logger } from "../lib/debug";
+import type { AngelaStatus, OllamaMessage } from "../types";
+
+type WakeWordEngine = {
+	start: () => Promise<void>;
+	stop: () => void | Promise<void>;
+	dispose: () => Promise<void>;
+	onWakeWord?: (() => void) | null;
+};
+
+interface UseVoicePipelineProps {
+	animControllerRef: React.MutableRefObject<AnimationController | null>;
+	animManagerRef: React.MutableRefObject<AnimationManager | null>;
+	analyserRef: React.MutableRefObject<AnalyserNode | null>;
+	dataArrayRef: React.MutableRefObject<Uint8Array<ArrayBuffer> | null>;
+	isPlayingRef: React.MutableRefObject<boolean>;
+	wakeWordRef: React.MutableRefObject<WakeWordEngine | null>;
+	recorderRef: React.MutableRefObject<AudioRecorder | null>;
+	onStatusChange: (status: AngelaStatus) => void;
+	onTranscriptChange: (transcript: string) => void;
+	onResponseChange: (response: string) => void;
+	onError: (error: string) => void;
+}
+
+export function useVoicePipeline({
+	animControllerRef,
+	animManagerRef,
+	analyserRef,
+	dataArrayRef,
+	isPlayingRef,
+	wakeWordRef,
+	recorderRef,
+	onStatusChange,
+	onTranscriptChange,
+	onResponseChange,
+	onError,
+}: UseVoicePipelineProps) {
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+	const messagesRef = useRef<OllamaMessage[]>([]);
+	const statusRef = useRef<AngelaStatus>("initializing");
+	const abortControllerRef = useRef<AbortController | null>(null);
+
+	const updateStatus = useCallback(
+		(newStatus: AngelaStatus) => {
+			statusRef.current = newStatus;
+			onStatusChange(newStatus);
+
+			const state = newStatus === "processing" ? "thinking" : newStatus;
+
+			if (animControllerRef.current) {
+				animControllerRef.current.setState(
+					state as "idle" | "listening" | "thinking" | "speaking" | "error",
+				);
+			}
+
+			if (animManagerRef.current) {
+				animManagerRef.current.setState(
+					state as "idle" | "listening" | "thinking" | "speaking" | "error",
+				);
+			}
+		},
+		[animControllerRef, animManagerRef, onStatusChange],
+	);
+
+	const playAudioWithLipSync = useCallback(
+		async (audioBuffer: ArrayBuffer): Promise<void> => {
+			audioContextRef.current = new AudioContext();
+			analyserRef.current = audioContextRef.current.createAnalyser();
+			analyserRef.current.fftSize = 256;
+			dataArrayRef.current = new Uint8Array(
+				analyserRef.current.frequencyBinCount,
+			);
+
+			const decoded = await audioContextRef.current.decodeAudioData(
+				audioBuffer.slice(0),
+			);
+
+			sourceRef.current = audioCon
+```
+
+---
+
+## File Overview
+
+# useVoicePipeline.ts Documentation
+
+## Purpose and Responsibility
+This file is responsible for managing the voice pipeline, including audio processing, transcription, and interaction with the language model (LLM). It handles user input through speech recognition, processes the transcriptions, and generates responses from the LLM.
+
+## Key Exports or Public Interface
+- **useVoicePipeline**: The main hook that sets up and manages the voice pipeline. It takes several props like `animControllerRef`, `analyserRef`, etc., and provides callbacks for status changes, transcript updates, response handling, and error logging.
+
+## How it Fits in the Project
+`useVoicePipeline.ts` is a crucial component of the frontend application, integrating with various services such as speech synthesis (`tts.client`), audio recording (`audio` library), and language model interaction (`ollama.client`). It interacts with other hooks and components to provide a seamless user experience for voice commands.
+
+## Notable Design Decisions
+- **State Management**: Uses `useState`, `useRef`, and custom state updates to manage the pipeline's status, including "initializing", "processing", "thinking", etc.
+- **Error Handling**: Implements error handling with `AbortController` to gracefully handle LLM generation interruptions.
+- **Logging**: Utilizes a logger for detailed logging of pipeline operations, aiding in debugging and monitoring.
+- **Async/Await Patterns**: Employs async/await for asynchronous operations like transcription and streaming responses from the LLM.
+```
+
+This documentation provides an overview of the file's purpose, key exports, integration within the project, and design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 23:28*
