@@ -1,0 +1,168 @@
+# complexity
+
+**Type:** File Overview
+**Repository:** CodeWorm
+**File:** codeworm/analysis/complexity.py
+**Language:** python
+**Lines:** 1-249
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+analysis/complexity.py
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import lizard
+
+from codeworm.core import get_logger
+from codeworm.models import Language
+
+
+logger = get_logger("complexity")
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+
+LANGUAGE_MAP: dict[Language,
+                   str] = {
+                       Language.PYTHON: "python",
+                       Language.TYPESCRIPT: "javascript",
+                       Language.TSX: "javascript",
+                       Language.JAVASCRIPT: "javascript",
+                       Language.GO: "go",
+                       Language.RUST: "rust",
+                   }
+
+
+@dataclass
+class ComplexityMetrics:
+    """
+    Complexity metrics for a function or method
+    """
+    name: str
+    cyclomatic_complexity: int
+    nloc: int
+    token_count: int
+    parameter_count: int
+    start_line: int
+    end_line: int
+    max_nesting_depth: int = 0
+    fan_in: int = 0
+    fan_out: int = 0
+
+    @property
+    def line_count(self) -> int:
+        """
+        Total lines including whitespace and comments
+        """
+        return self.end_line - self.start_line + 1
+
+    @property
+    def is_complex(self) -> bool:
+        """
+        Check if function exceeds complexity thresholds
+        """
+        return self.cyclomatic_complexity > 10 or self.nloc > 50
+
+    @property
+    def complexity_rating(self) -> str:
+        """
+        Human readable complexity rating
+        """
+        cc = self.cyclomatic_complexity
+        if cc <= 5:
+            return "simple"
+        if cc <= 10:
+            return "moderate"
+        if cc <= 20:
+            return "complex"
+        return "very_complex"
+
+
+@dataclass
+class FileComplexity:
+    """
+    Aggregated complexity metrics for a file
+    """
+    file_path: Path
+    functions: list[ComplexityMetrics]
+    average_complexity: float
+    total_nloc: int
+    max_complexity: int
+    num_functions: int
+
+    @property
+    def has_complex_functions(self) -> bool:
+        """
+        Check if file contains any complex functions
+        """
+        return any(f.is_complex for f in self.functions)
+
+
+class ComplexityAnalyzer:
+    """
+    Analyzes code complexity using Lizard
+    """
+    def __init__(self, language: Language | None = None) -> None:
+        """
+        Initialize analyzer optionally filtered to a language
+        """
+        self.language = language
+        self._extensions = self._get_extensions()
+
+    def _get_extensions(self) -> list[str]:
+        """
+        Get file extensions for the configured language
+        """
+        ext_map = {
+            Language.PYTHON: [".py"],
+            Language.TYPESCRIPT: [".ts"],
+            Language.TSX: [".tsx"],
+            Language.JAVASCRIPT: [".js",
+                                  ".jsx"],
+            Language.GO: [".go"],
+            Language.RUST: [".rs"],
+        }
+        if self.language:
+       
+```
+
+---
+
+## File Overview
+
+### complexity.py
+
+**Purpose and Responsibility:**
+This Python source file is responsible for analyzing code complexity using Lizard, a tool for extracting software metric data from source code. It provides metrics such as cyclomatic complexity, lines of code (LOC), and function parameters to assess the complexity of functions and files.
+
+**Key Exports or Public Interface:**
+- **ComplexityMetrics:** A dataclass representing complexity metrics for individual functions.
+- **FileComplexity:** A dataclass aggregating complexity metrics for a file.
+- **ComplexityAnalyzer:** A class that analyzes code complexity, supporting multiple programming languages through configurable extensions.
+
+**How it Fits in the Project:**
+This file is part of the `codeworm` project's analysis module. It integrates with other components to provide detailed insights into code quality and maintainability. The `ComplexityAnalyzer` class interacts with Lizard to parse source code, compute complexity metrics, and aggregate them for files and directories.
+
+**Notable Design Decisions:**
+- **Language Support:** Uses a mapping of languages to file extensions, allowing easy extension to support additional programming languages.
+- **Error Handling:** Catches exceptions during file analysis to ensure robustness without interrupting the overall process.
+- **Type Hints:** Extensive use of type hints for clear and maintainable code, especially in function signatures and class attributes.
+```
+
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 07:09*
