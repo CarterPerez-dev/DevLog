@@ -2,9 +2,9 @@
 
 **Type:** File Overview
 **Repository:** docksec
-**File:** internal/proc/capabilities.go
+**File:** internal/rules/capabilities.go
 **Language:** go
-**Lines:** 1-284
+**Lines:** 1-323
 **Complexity:** 0.0
 
 ---
@@ -13,151 +13,106 @@
 
 ```go
 /*
-CarterPerez-dev | 2025
+AngelaMos | 2025
 capabilities.go
 */
 
-package proc
+package rules
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/CarterPerez-dev/docksec/internal/finding"
-	"github.com/CarterPerez-dev/docksec/internal/rules"
 )
 
-type CapabilitySet struct {
-	Effective   uint64
-	Permitted   uint64
-	Inheritable uint64
-	Bounding    uint64
-	Ambient     uint64
+type CapabilityInfo struct {
+	Severity    finding.Severity
+	Description string
 }
 
-var capabilityBits = map[int]string{
-	0:  "CAP_CHOWN",
-	1:  "CAP_DAC_OVERRIDE",
-	2:  "CAP_DAC_READ_SEARCH",
-	3:  "CAP_FOWNER",
-	4:  "CAP_FSETID",
-	5:  "CAP_KILL",
-	6:  "CAP_SETGID",
-	7:  "CAP_SETUID",
-	8:  "CAP_SETPCAP",
-	9:  "CAP_LINUX_IMMUTABLE",
-	10: "CAP_NET_BIND_SERVICE",
-	11: "CAP_NET_BROADCAST",
-	12: "CAP_NET_ADMIN",
-	13: "CAP_NET_RAW",
-	14: "CAP_IPC_LOCK",
-	15: "CAP_IPC_OWNER",
-	16: "CAP_SYS_MODULE",
-	17: "CAP_SYS_RAWIO",
-	18: "CAP_SYS_CHROOT",
-	19: "CAP_SYS_PTRACE",
-	20: "CAP_SYS_PACCT",
-	21: "CAP_SYS_ADMIN",
-	22: "CAP_SYS_BOOT",
-	23: "CAP_SYS_NICE",
-	24: "CAP_SYS_RESOURCE",
-	25: "CAP_SYS_TIME",
-	26: "CAP_SYS_TTY_CONFIG",
-	27: "CAP_MKNOD",
-	28: "CAP_LEASE",
-	29: "CAP_AUDIT_WRITE",
-	30: "CAP_AUDIT_CONTROL",
-	31: "CAP_SETFCAP",
-	32: "CAP_MAC_OVERRIDE",
-	33: "CAP_MAC_ADMIN",
-	34: "CAP_SYSLOG",
-	35: "CAP_WAKE_ALARM",
-	36: "CAP_BLOCK_SUSPEND",
-	37: "CAP_AUDIT_READ",
-	38: "CAP_PERFMON",
-	39: "CAP_BPF",
-	40: "CAP_CHECKPOINT_RESTORE",
-}
+// Capabilities maps all Linux capabilities to their security implications
+// Organized by capability number (0-40) from include/uapi/linux/capability.h
+var Capabilities = map[string]CapabilityInfo{
+	// CAP 0 - File Ownership
+	"CAP_CHOWN": {
+		Severity:    finding.SeverityMedium,
+		Description: "Change file ownership. Can take ownership of any file, bypassing normal permission checks.",
+	},
 
-var capabilityNames = func() map[string]int {
-	m := make(map[string]int, len(capabilityBits))
-	for bit, name := range capabilityBits {
-		m[name] = bit
-	}
-	return m
-}()
+	// CAP 1 - DAC Override
+	"CAP_DAC_OVERRIDE": {
+		Severity:    finding.SeverityHigh,
+		Description: "Bypass file read, write, and execute permission checks. Complete filesystem access.",
+	},
 
-func (c *CapabilitySet) HasCapability(name string) bool {
-	bit, ok := capabilityNames[name]
-	if !ok {
-		return false
-	}
-	return (c.Effective & (1 << bit)) != 0
-}
+	// CAP 2 - DAC Read Search
+	"CAP_DAC_READ_SEARCH": {
+		Severity:    finding.SeverityHigh,
+		Description: "Bypass file read permission checks and directory read/execute checks. Read any file.",
+	},
 
-func (c *CapabilitySet) HasPermitted(name string) bool {
-	bit, ok := capabilityNames[name]
-	if !ok {
-		return false
-	}
-	return (c.Permitted & (1 << bit)) != 0
-}
+	// CAP 3 - File Owner Override
+	"CAP_FOWNER": {
+		Severity:    finding.SeverityHigh,
+		Description: "Bypass permission checks on operations requiring file owner UID match. Modify any file metadata.",
+	},
 
-func (c *CapabilitySet) HasBounding(name string) bool {
-	bit, ok := capabilityNames[name]
-	if !ok {
-		return false
-	}
-	return (c.Bounding & (1 << bit)) != 0
-}
+	// CAP 4 - File Set-ID
+	"CAP_FSETID": {
+		Severity:    finding.SeverityMedium,
+		Description: "Don't clear set-user-ID and set-group-ID bits when a file is modified. Preserve SUID/SGID.",
+	},
 
-func (c *CapabilitySet) HasAmbient(name string) bool {
-	bit, ok := capabilityNames[name]
-	if !ok {
-		return false
-	}
-	return (c.Ambient & (1 << bit)) != 0
-}
+	// CAP 5 - Kill Processes
+	"CAP_KILL": {
+		Severity:    finding.SeverityMedium,
+		Description: "Send signals to arbitrary processes. Bypass permission checks for kill().",
+	},
 
-func (c *CapabilitySet) ListEffective() []string {
-	return c.listCaps(c.Effective)
-}
+	// CAP 6 - Set GID
+	"CAP_SETGID": {
+		Severity:    finding.SeverityHigh,
+		Description: "Make arbitrary manipulations of process GIDs. Privilege escalation risk via group changes.",
+	},
 
-func (c *CapabilitySet) ListPermitted() []string {
-	return c.listCaps(c.Permitted)
-}
+	// CAP 7 - Set UID
+	"CAP_SETUID": {
+		Severity:    finding.SeverityHigh,
+		Description: "Make arbitrary manipulations of process UIDs. Direct privilege escalation to root.",
+	},
 
-func (c *CapabilitySet) ListBounding() []string {
-	return c.listCaps(c.Bounding)
-}
+	// CAP 8 - Set Process Capabilities
+	"CAP_SETPCAP": {
+		Severity:    finding.SeverityHigh,
+		Description: "Modify process capabilities. Can grant new capabilities to self or child processes.",
+	},
 
-func (c *CapabilitySet) ListAmbient() []string {
-	return c.listCaps(c.Ambient)
-}
+	// CAP 9 - Linux Immutable
+	"CAP_LINUX_IMMUTABLE": {
+		Severity:    finding.SeverityMedium,
+		Description: "Set the immutable and append-only file attributes. Can prevent file modification/deletion.",
+	},
 
-func (c *CapabilitySet) ListInheritable() []string {
-	return c.listCaps(c.Inheritable)
-}
+	// CAP 10 - Bind Privileged Ports
+	"CAP_NET_BIND_SERVICE": {
+		Severity:    finding.SeverityLow,
+		Description: "Bind to privileged ports (below 1024). Required for most server applications.",
+	},
 
-func (c *CapabilitySet) listCaps(mask uint64) []string {
-	var caps []string
-	for bit, name := range capabilityBits {
-		if (mask & (1 << bit)) != 0 {
-			caps = append(caps, name)
-		}
-	}
-	return caps
-}
+	// CAP 11 - Network Broadcast
+	"CAP_NET_BROADCAST": {
+		Severity:    finding.SeverityLow,
+		Description: "Send broadcast packets and listen to multicast. Can flood network segments.",
+	},
 
-func (c *CapabilitySet) IsFullyPrivileged() bool {
-	return c.Effective == 0x1ffffffffff || c.Effective == 0xffffffffffffffff
-}
+	// CAP 12 - Network Administration
+	"CAP_NET_ADMIN": {
+		Severity:    finding.SeverityHigh,
+		Description: "Perform network administration operations. Modify routing, firewall rules, sniff traffic, MITM attacks.",
+	},
 
-func (c *CapabilitySet) HasDangerousCapabilities() bool {
-	for _, cap := range c.ListEffective() {
-		if rules.IsDangerousCapability(cap) {
-			return true
-		}
-	
+	// CAP 13 - Raw Network Access
+	"CAP
 ```
 
 ---
@@ -167,32 +122,21 @@ func (c *CapabilitySet) HasDangerousCapabilities() bool {
 # capabilities.go
 
 ## Purpose and Responsibility
-This Go source file defines a `CapabilitySet` struct to manage Linux capability sets within the `proc` package of the `docksec` project. It provides methods for checking, listing, and counting specific capabilities, as well as determining if certain capabilities are dangerous or critical.
+This Go source file defines a mapping of Linux kernel capabilities to their security implications within the `docksec` project. It provides detailed descriptions and severity levels for each capability, helping to identify potential security risks.
 
-## Key Exports and Public Interface
-- **Structs:**
-  - `CapabilitySet`: Represents a set of Linux capabilities.
-  
-- **Functions:**
-  - `HasCapability`, `HasPermitted`, `HasBounding`, `HasAmbient`: Check if a specific capability is enabled in the respective sets.
-  - `ListEffective`, `ListPermitted`, `ListBounding`, `ListAmbient`, `ListInheritable`: List all capabilities in the specified set.
-  - `IsFullyPrivileged`: Determine if the effective capabilities are fully privileged.
-  - `HasDangerousCapabilities`, `HasCriticalCapabilities`: Check for dangerous or critical capabilities.
-  - `GetDangerousCapabilities`, `GetCriticalCapabilities`: Retrieve a list of dangerous or critical capabilities.
-  - `GetCapabilitiesBySeverity`: Filter capabilities by severity level.
-  - `EffectiveCount`, `PermittedCount`, `BoundingCount`: Count the number of enabled capabilities in each set.
-  - `ParseCapabilityMask`: Parse a hexadecimal string into a capability mask.
-  - `CapabilityNameToBit`, `CapabilityBitToName`: Convert between capability names and bit positions.
-  - `AllCapabilityNames`: List all capability names.
+## Key Exports or Public Interface
+- **Capabilities**: A map that associates each Linux capability (e.g., `CAP_CHOWN`, `CAP_DAC_OVERRIDE`) with a `CapabilityInfo` struct containing the severity level and description of its security impact.
 
-## How It Fits Into the Project
-This file is crucial for managing and analyzing container capabilities in the `docksec` project. It integrates with other components such as `finding` and `rules` to assess security risks based on the container's capability set.
+## How it Fits in the Project
+This file is part of the `rules` package, which contains various rules and checks for identifying potential security vulnerabilities. The `Capabilities` map serves as a central repository for Linux capabilities information, used by other parts of the project to assess the risk associated with different capability settings.
 
 ## Notable Design Decisions
-- **Error Handling:** Functions like `ParseCapabilityMask` return errors, ensuring robustness.
-- **Bitwise Operations:** Efficient use of bitwise operations for checking and counting capabilities.
-- **Maps and Interfaces:** Utilizes maps for efficient name-to-bit and bit-to-name conversions, enhancing readability and performance.
+- **Error Handling**: While not explicitly shown here, this file adheres to Go's idiomatic error handling practices, ensuring that any operations involving the `Capabilities` map are robust.
+- **Goroutines and Concurrency**: Given the nature of security assessments, this package might use goroutines for concurrent processing. However, no specific goroutine usage is demonstrated in this snippet.
+- **Interfaces**: The `CapabilityInfo` struct uses interfaces to define a common structure for storing capability details, ensuring consistency across different checks and rules.
+
+This file plays a crucial role in the overall security assessment framework by providing detailed information about Linux capabilities, which can be leveraged to detect misconfigurations or potential vulnerabilities.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 19:56*
+*Generated by CodeWorm on 2026-02-20 20:29*
