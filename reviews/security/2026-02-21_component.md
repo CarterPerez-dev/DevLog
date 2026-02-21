@@ -2,10 +2,10 @@
 
 **Type:** Security Review
 **Repository:** vuemantics
-**File:** frontend/src/routes/upload/index.tsx
+**File:** frontend/src/routes/landing/index.tsx
 **Language:** tsx
-**Lines:** 32-251
-**Complexity:** 19.0
+**Lines:** 14-97
+**Complexity:** 7.0
 
 ---
 
@@ -13,141 +13,131 @@
 
 ```tsx
 function Component(): React.ReactElement {
-  const {
-    fileQueue,
-    addFiles,
-    removeFile,
-    clearQueue,
-    setDragActive,
-    dragActive,
-    setCurrentBatchId,
-  } = useBulkUploadUIStore()
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>Vuemantic</h1>
+        <p className={styles.subtitle}>Smart Multimodal Search</p>
+        <a
+          href="https://github.com/CarterPerez-dev/vuemantics"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.github}
+          aria-label="View source on GitHub"
+        >
+          <FiGithub />
+        </a>
+      </header>
 
-  const { data: clientConfig } = useClientConfig()
-  const maxFileSizeBytes = (clientConfig?.max_upload_size_mb ?? 100) * 1024 * 1024
+      <div className={styles.content}>
+        <div className={styles.sections}>
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <GiMagnifyingGlass />
+            </div>
+            <h2 className={styles.sectionTitle}>Semantic Search</h2>
+            <p className={styles.sectionText}>
+              Natural language queries like "red car" or "funny meme". Vision
+              models analyze image/video content with vector embeddings for
+              semantic similarity using pgvector.
+            </p>
+          </section>
 
-  const createBulkUpload = useCreateBulkUpload()
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <ImImages />
+            </div>
+            <h2 className={styles.sectionTitle}>Media Management</h2>
+            <p className={styles.sectionText}>
+              AI Analysis: Upload images and videos. Vision models extract
+              features, generate descriptions, and create vector embeddings for
+              semantic search.
+            </p>
+          </section>
 
-  const { batchProgress, setBatchProgress, setCurrentFile } =
-    useGlobalBatchProgress()
-  const { currentFile, handleFileProgress } = useFileProgress()
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <SiOllama />
+            </div>
+            <h2 className={styles.sectionTitle}>Technology Stack</h2>
+            <p className={styles.sectionText}>
+              Qwen2.5-VL for vision analysis, bge-m3 for embeddings. PostgreSQL +
+              pgvector for vector search. Ollama for local model inference. React
+              + TypeScript frontend.
+            </p>
+          </section>
 
-  useSocket({
-    enabled: true,
-    onBatchProgress: (data) => {
-      setBatchProgress(data.payload.batch_id, {
-        status: data.payload.status,
-        total: data.payload.total,
-        processed: data.payload.processed,
-        successful: data.payload.successful,
-        failed: data.payload.failed,
-        progressPercentage: data.payload.progress_percentage,
-      })
-    },
-    onFileProgress: (data) => {
-      handleFileProgress(data)
-      // Also update global store for header indicator
-      if (data.payload.status === 'processing') {
-        setCurrentFile({
-          uploadId: data.payload.upload_id,
-          fileName: data.payload.file_name,
-          fileSize: data.payload.file_size,
-          progress: data.payload.progress_percentage,
-          status: data.payload.status,
-        })
-      } else {
-        setCurrentFile(null)
-      }
-    },
-  })
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <SiClaude />
+            </div>
+            <h2 className={styles.sectionTitle}>Coming Soon</h2>
+            <p className={styles.sectionText}>
+              MCP Server: Model Context Protocol integration. Let AI assistants
+              query your media collection through standardized tool interfaces.
+            </p>
+          </section>
+        </div>
 
-  const validateFile = (file: File): { valid: boolean; error?: string } => {
-    const maxSizeMB = clientConfig?.max_upload_size_mb ?? 100
-    if (file.size > maxFileSizeBytes) {
-      return { valid: false, error: `Too large (max ${maxSizeMB}MB)` }
-    }
-
-    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
-      return { valid: false, error: 'Unsupported file type' }
-    }
-
-    return { valid: true }
-  }
-
-  const handleDrag = (e: React.DragEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDragActive(false)
-    }
-  }
-
-  const processFiles = (files: FileList | File[]): void => {
-    const fileArray = Array.from(files)
-    const newQueuedFiles: QueuedFile[] = []
-
-    // Check for duplicates in existing queue
-    const existingNames = new Set(fileQueue.map((f) => f.file.name))
-
-    fileArray.forEach((file) => {
-      const validation = validateFile(file)
-      const isDuplicate = existingNames.has(file.name)
-
-      const queuedFile: QueuedFile = {
-        id: `${Date.now()}-${Math.random()}`,
-        file,
-        status: isDuplicate
-          ? 'duplicate'
-          : validation.valid
-            ? 'valid'
-            : validation.error?.includes('large')
-              ? 'too-large'
-              : 'unsupported',
-        error: isDuplicate ? 'Already in queue' : validation.error,
-      }
-
-      // Generate preview for images
-      if (file.type.startsWith('image/') && validation.valid) {
-       
+        <div className={styles.actions}>
+          <Link to={ROUTES.LOGIN} className={styles.button}>
+            Open Demo
+          </Link>
+          <a
+            href="/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.buttonOutline}
+          >
+            API Documentation
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
 ```
 
 ---
 
 ## Security Review
 
-### Security Review for `Component` in `/home/yoshi/dev/CURRENT/vuemantics/frontend/src/routes/upload/index.tsx`
+### Security Review for `Component` Function
 
-#### Vulnerabilities and Severity:
+#### Vulnerabilities Found:
 
-1. **Input Validation Gaps (Medium)**
-   - **Line 89-107**: The `validateFile` function does not validate file names or content, which could allow for malicious files to bypass validation.
+1. **Info - No Injection or Deserialization Issues**: The code does not contain any SQL, command, or deserialization vulnerabilities.
    
-2. **Hardcoded Secrets or Credentials (Info)**
-   - No hardcoded secrets found in the provided code snippet.
+2. **Info - No Input Validation Gaps**: There are no input fields or dynamic content generation that could lead to injection attacks.
 
-3. **Error Handling that Leaks Information (Low)**
-   - **Line 147**: The `toast.error` and `toast.success` calls could leak information about the state of the application, but this is mitigated by using toast notifications which are generally safe for user-facing errors.
+3. **Info - No Hardcoded Secrets**: There are no hardcoded secrets or credentials in the provided code snippet.
+
+4. **Info - Error Handling**: The error handling is minimal and does not leak sensitive information.
+
+5. **Info - Authentication and Authorization Issues**: The component itself does not handle authentication or authorization, but it could be part of a larger application where such issues exist.
+
+6. **Info - No Race Conditions or TOCTOU Bugs**: There are no race conditions or time-of-check to time-of-use (TOCTOU) bugs in the provided code.
 
 #### Attack Vectors:
 
-- An attacker could upload files with malicious content that bypasses validation.
-- Error messages from `toast` could provide insights into the system's internal state.
+- **XSS**: While not present, if this component were to include user-generated content without proper sanitization, it could be vulnerable to XSS attacks.
+  
+- **Information Leakage**: Minimal error handling does not expose sensitive information.
 
 #### Recommended Fixes:
 
-1. **Enhance Input Validation (Line 89-107)**
-   - Validate file names to prevent directory traversal attacks.
-   - Implement a content scanning mechanism for files, especially if they are of types that can contain executable code or other malicious payloads.
+1. **Sanitize User Input**: If the component includes any dynamic content from external sources (e.g., API responses), ensure that all input is properly sanitized and validated.
 
-2. **Refine Error Handling (Line 147)**
-   - Ensure error messages do not leak sensitive information about the application's internal state.
+2. **Error Handling**: Implement robust error handling to avoid leaking sensitive information through error messages.
+
+3. **Secure Propagation**: Ensure that any props or state passed down are secure, especially if they come from untrusted sources.
+
+4. **Code Review Integration**: Integrate regular code reviews and security scans into your development process to catch such issues early.
 
 #### Overall Security Posture:
 
-The component has some vulnerabilities related to input validation and error handling, but these can be mitigated with proper validation and secure error messaging practices. The overall security posture is moderate; addressing the identified issues will significantly improve the robustness of the upload functionality.
+The current component is relatively secure but should be part of a broader security strategy that includes proper input validation, error handling, and secure coding practices throughout the application.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 12:57*
+*Generated by CodeWorm on 2026-02-21 14:14*
