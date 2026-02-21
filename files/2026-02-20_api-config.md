@@ -1,10 +1,10 @@
 # api.config
 
 **Type:** File Overview
-**Repository:** ios-test
-**File:** red-recon/src/core/api/api.config.ts
+**Repository:** social-media-notes
+**File:** frontend/src/core/api/api.config.ts
 **Language:** typescript
-**Lines:** 1-205
+**Lines:** 1-158
 **Complexity:** 0.0
 
 ---
@@ -12,18 +12,19 @@
 ## Source Code
 
 ```typescript
-// ===================
-// © AngelaMos | 2026
-// api.config.ts
-// ===================
+/**
+ * AngelaMos | 2025
+ * api.config.ts
+ */
 
-import { API_ENDPOINTS, HTTP_STATUS } from '@/core/config'
-import { SECURE_KEYS, secureStorage } from '@/core/storage'
 import axios, {
   type AxiosError,
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from 'axios'
+import { router } from 'expo-router'
+import { API_BASE_URL, API_ENDPOINTS, HTTP_STATUS } from '@/config'
+import { useAuthStore } from '@/core/lib'
 import { ApiError, ApiErrorCode, transformAxiosError } from './errors'
 
 interface RequestConfig extends InternalAxiosRequestConfig {
@@ -35,40 +36,15 @@ interface RefreshSubscriber {
   reject: (error: Error) => void
 }
 
-interface RefreshResponse {
-  access_token: string
-  refresh_token: string
-}
-
-const YOUR_DEV_IP = '192.168.1.167'
-const YOUR_DEV_PORT = '8501'
-const YOUR_PROD_API_URL = 'https://api.carterperez-dev.com'
-
-
-const getBaseURL = (): string => {
-  if (__DEV__) {
-    return `http://${YOUR_DEV_IP}:${YOUR_DEV_PORT}`
-  }
-  return YOUR_PROD_API_URL
-}
-
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 })
 
 let isRefreshing = false
 let refreshSubscribers: RefreshSubscriber[] = []
-let accessToken: string | null = null
-
-export const setAccessToken = (token: string | null): void => {
-  accessToken = token
-}
-
-export const getAccessToken = (): string | null => {
-  return accessToken
-}
 
 const processRefreshQueue = (error: Error | null, token: string | null): void => {
   refreshSubscribers.forEach((subscriber) => {
@@ -88,20 +64,9 @@ const addRefreshSubscriber = (
   refreshSubscribers.push({ resolve, reject })
 }
 
-const handleTokenRefresh = async (): Promise<RefreshResponse> => {
-  const refreshToken = await secureStorage.getItem(SECURE_KEYS.REFRESH_TOKEN)
-
-  if (!refreshToken) {
-    throw new ApiError(
-      'No refresh token',
-      ApiErrorCode.AUTHENTICATION_ERROR,
-      HTTP_STATUS.UNAUTHORIZED
-    )
-  }
-
-  const response = await apiClient.post<RefreshResponse>(
-    API_ENDPOINTS.AUTH.REFRESH_MOBILE,
-    { refresh_token: refreshToken }
+const handleTokenRefresh = async (): Promise<string> => {
+  const response = await apiClient.post<{ access_token: string }>(
+    API_ENDPOINTS.AUTH.REFRESH
   )
 
   if (
@@ -116,9 +81,8 @@ const handleTokenRefresh = async (): Promise<RefreshResponse> => {
     )
   }
 
-  const { access_token, refresh_token: newRefreshToken } = response.data
-
-  if (typeof access_token !== 'string' || access_token.length === 0) {
+  const accessToken = response.data.access_token
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
     throw new ApiError(
       'Invalid access token',
       ApiErrorCode.AUTHENTICATION_ERROR,
@@ -126,44 +90,66 @@ const handleTokenRefresh = async (): Promise<RefreshResponse> => {
     )
   }
 
-  await secureStorage.setItem(SECURE_KEYS.REFRESH_TOKEN, newRefreshToken)
-
-  return response.data
+  return accessToken
 }
 
-let onAuthFailure: (() => void) | null = null
+const handleAuthFailure = (): void => {
+  useAuthStore.getState().logout()
+  router.replace('/login')
+}
 
-export const setAuthFailureHandler = (handler: () => void): void => {
-  onA
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+    const token = useAuthStore.getState().accessToken
+    if (token !== null && token.length > 0) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error: unknown): Promise<never> => {
+    return Promise.reject(error)
+  }
+)
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError): Promise<unknown> => {
+    const originalRequest = error.config as RequestConfig | undefined
+
+    if (originalRequest === undefined) {
+      return Promise.reject(transformAxiosError(error))
+    }
+
+    const isUnauthorized = error.response?.status === HTTP_STATUS.UNAUTHORIZED
+    const isNotRetried = originalRequest._retry !== true
+    const isNotRefreshEndpoint =
+      originalRequest.url?.includes(API_ENDPOINTS.AUTH.REFRESH) !== true
+
+    if (isUnauthorized && isNo
 ```
 
 ---
 
 ## File Overview
 
-# api.config.ts
+### Documenting `api.config.ts`
 
-## Purpose and Responsibility
-This TypeScript file configures and manages the Axios instance for API requests, handling authentication, token refreshing, and error management.
+**Purpose and Responsibility:**
+This file configures and manages Axios instances for API requests, handling authentication tokens, token refreshes, and error management within a TypeScript application.
 
-## Key Exports and Public Interface
-- **`apiClient: AxiosInstance`**: The configured Axios instance used throughout the application.
-- **`setAccessToken(token: string | null): void`**: Sets the access token.
-- **`getAccessToken(): string | null`**: Retrieves the current access token.
-- **`handleTokenRefresh(): Promise<RefreshResponse>`**: Handles refreshing the access token.
-- **`setAuthFailureHandler(handler: () => void): void`**: Sets a handler for authentication failures.
+**Key Exports or Public Interface:**
+- **`apiClient`:** An Axios instance configured with base URL, headers, and timeout.
+- **`handleTokenRefresh()`:** A function to handle token refreshing on unauthorized access.
+- **Interceptors:** Request and response interceptors for adding authentication tokens, handling errors, and managing token refreshes.
 
-## How it Fits in the Project
-This file is central to API interactions, ensuring consistent and secure communication with the backend. It integrates with other core modules like storage and error handling, making it a crucial component of the application's network layer.
+**How it Fits in the Project:**
+This file is crucial for maintaining a consistent API client across the application. It integrates with the `useAuthStore` to manage user authentication states and redirects users to the login page upon unauthorized access. The Axios instance is used throughout the project for making HTTP requests, ensuring that all API calls are properly authenticated.
 
-## Notable Design Decisions
-- **Token Refresh Queue**: A queue for refreshing tokens ensures that multiple requests during token refresh are handled gracefully.
-- **Interceptors**: Request and response interceptors manage headers and errors, enhancing maintainability and reducing boilerplate code.
-- **Conditional Retry Mechanism**: The retry mechanism only triggers on unauthorized responses from non-auth endpoints, optimizing performance and user experience.
-```
-
-This documentation provides a high-level overview of the file's role in the project, its key exports, and notable design choices.
+**Notable Design Decisions:**
+- **Token Refresh Queue:** A queue system ensures that multiple refresh attempts do not overlap.
+- **Error Handling:** Custom error handling and transformation to provide meaningful errors using `ApiError`.
+- **Interceptors:** Utilizing Axios interceptors for request and response management, ensuring consistent behavior across all API calls.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 14:56*
+*Generated by CodeWorm on 2026-02-20 21:52*
