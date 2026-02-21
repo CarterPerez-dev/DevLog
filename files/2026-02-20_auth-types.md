@@ -1,10 +1,10 @@
 # auth.types
 
 **Type:** File Overview
-**Repository:** ios-test
-**File:** red-recon/src/api/types/auth.types.ts
+**Repository:** social-media-notes
+**File:** frontend/src/api/types/auth.types.ts
 **Language:** typescript
-**Lines:** 1-158
+**Lines:** 1-141
 **Complexity:** 0.0
 
 ---
@@ -13,12 +13,12 @@
 
 ```typescript
 /**
- * @AngelaMos | 2026
+ * AngelaMos | 2025
  * auth.types.ts
  */
 
-import { PASSWORD_CONSTRAINTS } from '@/core/config'
 import { z } from 'zod'
+import { PASSWORD_CONSTRAINTS } from '@/config'
 
 export const UserRole = {
   UNKNOWN: 'unknown',
@@ -44,20 +44,7 @@ export const tokenResponseSchema = z.object({
   token_type: z.string(),
 })
 
-export const tokenWithRefreshResponseSchema = z.object({
-  access_token: z.string(),
-  refresh_token: z.string(),
-  token_type: z.string(),
-})
-
 export const tokenWithUserResponseSchema = tokenResponseSchema.extend({
-  user: userResponseSchema,
-})
-
-export const mobileLoginResponseSchema = z.object({
-  access_token: z.string(),
-  refresh_token: z.string().optional(),
-  token_type: z.string(),
   user: userResponseSchema,
 })
 
@@ -92,11 +79,7 @@ export const logoutAllResponseSchema = z.object({
 
 export type UserResponse = z.infer<typeof userResponseSchema>
 export type TokenResponse = z.infer<typeof tokenResponseSchema>
-export type TokenWithRefreshResponse = z.infer<
-  typeof tokenWithRefreshResponseSchema
->
 export type TokenWithUserResponse = z.infer<typeof tokenWithUserResponseSchema>
-export type MobileLoginResponse = z.infer<typeof mobileLoginResponseSchema>
 export type LoginRequest = z.infer<typeof loginRequestSchema>
 export type RegisterRequest = z.infer<typeof registerRequestSchema>
 export type PasswordChangeRequest = z.infer<typeof passwordChangeRequestSchema>
@@ -115,35 +98,50 @@ export const isValidTokenResponse = (data: unknown): data is TokenResponse => {
   if (typeof data !== 'object') return false
 
   const result = tokenResponseSchema.safeParse(data)
- 
+  return result.success
+}
+
+export const isValidTokenWithUserResponse = (
+  data: unknown
+): data is TokenWithUserResponse => {
+  if (data === null || data === undefined) return false
+  if (typeof data !== 'object') return false
+
+  const result = tokenWithUserResponseSchema.safeParse(data)
+  return result.success
+}
+
+export const isValidLogoutAllResponse = (
+  data: unknown
+): data is LogoutAllResponse => {
+  if (data === null || data === undefined) return false
+  if (typeof data !== 'object'
 ```
 
 ---
 
 ## File Overview
 
-### Purpose and Responsibility
+### Documenting `auth.types.ts`
 
-This TypeScript source file, `auth.types.ts`, defines schemas and utility functions for handling authentication-related data structures and validation rules within a web application. It ensures that incoming data from server responses is correctly formatted and validated against predefined schemas.
+**Purpose & Responsibility:**
+This TypeScript file defines validation schemas and utility functions for authentication-related responses and requests, ensuring consistent data handling across the application.
 
-### Key Exports and Public Interface
+**Key Exports & Public Interface:**
+- **Validation Schemas:** Defines schemas for user response, token response, token with user response, login request, register request, password change request, and logout all response.
+- **Type Definitions:** Provides type definitions for validated responses and requests.
+- **Error Handling:** Includes `AuthResponseError` class for handling authentication-related errors and predefined error messages.
 
-- **UserRoles**: Enumerates user roles (`UNKNOWN`, `USER`, `ADMIN`).
-- **Schemas**: Schemas for various authentication-related responses, including `userResponseSchema`, `tokenResponseSchema`, `mobileLoginResponseSchema`, etc.
-- **Validation Functions**: Functions like `isValidUserResponse`, `isValidTokenResponse`, and `AuthResponseError` to validate server response data.
-- **Messages**: Constants for error messages (`AUTH_ERROR_MESSAGES`) and success messages (`AUTH_SUCCESS_MESSAGES`).
+**How It Fits in the Project:**
+This file is crucial for maintaining data integrity and consistency. It ensures that all API responses are correctly parsed and validated, which is essential for user sessions, login, registration, password changes, and logout operations. The schemas and types are used throughout the application to handle these operations safely.
 
-### How It Fits into the Project
+**Notable Design Decisions:**
+- **Zod Validation:** Utilizes Zod for robust schema validation, ensuring that data conforms to expected formats.
+- **Error Handling:** Implements a custom `AuthResponseError` class with predefined error messages, enhancing readability and maintainability of error handling logic.
+- **Type Safety:** Extensive use of TypeScript types ensures type safety and reduces runtime errors.
 
-This file is crucial for maintaining consistency in handling authentication-related data throughout the application. By defining robust schemas and validation functions, it ensures that all parts of the application can safely interact with server responses without worrying about data format issues.
-
-### Notable Design Decisions
-
-- **Zod Schemas**: Utilizes Zod for schema validation to ensure type safety and robustness.
-- **Error Handling**: Implements custom `AuthResponseError` class for consistent error handling across the project.
-- **Enum Usage**: Uses enums for role definitions to maintain clarity and prevent typos.
-- **Type Inference**: Extensively uses TypeScript's type inference capabilities to define strongly typed interfaces, enhancing code reliability and readability.
+This file acts as a central hub for authentication-related validation and error handling, making the codebase more robust and easier to understand.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 16:22*
+*Generated by CodeWorm on 2026-02-20 22:28*
