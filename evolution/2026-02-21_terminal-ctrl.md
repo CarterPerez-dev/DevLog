@@ -1,0 +1,152 @@
+# terminal_ctrl
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** backend/api/domains/games/controllers/terminal/terminal_ctrl.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: fe44f45e
+Message: dev v2.0.4 (#169)
+
+* chore(deps): update uv.lock with latest dependency versions
+
+* feat:
+- add terminal takedown game
+- add back buttons to landing page pages (learn, play, features)
+- add back buttons to ai tools and games
+- add 10 tests (1000 pratice questions) for the CompTIA SecAI+ v1 exam/certification
+- update some deps
+- bump to v2.0.4 of CertGames
+
+* error there but not here wtf
+
+* error there but not here wtf
+Author: Carter Perez
+File: backend/api/domains/games/controllers/terminal/terminal_ctrl.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,146 @@
++"""
++©AngelaMos | 2026
++terminal_ctrl.py
++"""
++
++from flask import g
++from typing import Any
++
++from settings import Business
++from api.domains.account.models.User import User
++from api.domains.progression.services.progression_ops import (
++    ProgressionService,
++)
++from api.domains.progression.services.unlock_engine import (
++    process_achievements_for_user,
++)
++
++from ...models.Terminal import (
++    TerminalChallenge,
++    TerminalGameHistory,
++)
++from ...services.terminal.terminal_ops import TerminalService
++from ._default import generate_default_challenges
++
++
++def _ensure_defaults_exist() -> bool:
++    if TerminalChallenge.objects(source = "default").count() > 0:
++        return False
++    defaults = generate_default_challenges()
++    for challenge_data in defaults:
++        challenge_data["source"] = "default"
++        TerminalService.upsert_default_challenge(challenge_data)
++    return True
++
++
++def get_terminal_challenges_and_shuffle() -> list[dict[str, Any]]:
++    seeded = _ensure_defaults_exist()
++
++    game_history: list[TerminalGameHistory] = g.terminal_game_history
++    limit: int = g.validated.get('limit', 30)
++    mode: str = g.validated.get('mode', 'quick_fire')
++
++    if seeded or not g.terminal_challenges:
++        challenges = list(
++            TerminalService.get_challenges_by_mode(
++                mode,
++                g.validated.get('difficulty')
++            )
++        )
++    else:
++        challenges = list(g.terminal_challenges)
++
++    challenges_list = [challenge.to_dict() for challenge in challenges]
++
++    if mode == 'mission_step':
++        return challenges_list
++
++    return list(
++        TerminalService.smart_shuffle_challenges(
++            game_history,
++            challenges_list,
++            limit
++        )
++    )
++
++
++def evaluate_terminal_command() -> dict[str, Any]:
++    challenge_id: str = g.validated.get('challengeId')
++    command: str = g.validated.get('command')
++
++    challenge = TerminalService.get_challenge_by_id(challenge_id)
++    if not challenge:
++        return {
++            "correct": False,
++            "partialCredit": False,
++            "output": None,
++            "explanation": "Challenge not found.",
++            "pointsEarned": 0,
++        }
++
++    return TerminalService.evaluate_command(challenge, command)
++
++
++def submit_terminal_score() -> dict[str, Any]:
++    user: User = g.user
++    score: in
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+A new file `terminal_ctrl.py` was added to the backend API, introducing several functions related to a terminal takedown game. These include:
+- `_ensure_defaults_exist()`: Ensures default challenges exist.
+- `get_terminal_challenges_and_shuffle()`: Fetches and shuffles terminal challenges based on user input.
+- `evaluate_terminal_command()`: Evaluates user commands in the terminal game.
+- `submit_terminal_score()`: Submits scores, updates XP and coins, and processes achievements.
+- `get_terminal_leaderboard()`: Retrieves the leaderboard for the terminal game.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance CertGames by adding a new interactive terminal takedown game. The addition of back buttons on various pages suggests an effort to improve user navigation. The inclusion of 10 tests and practice questions aligns with educational goals, possibly targeting certification preparation for the CompTIA SecAI+ v1 exam.
+
+**Impact on Behavior:**
+The introduction of these functions significantly expands the game's functionality, allowing users to engage in a terminal-based challenge that tracks their progress, awards XP and coins, and unlocks achievements. This will likely improve user engagement and provide more comprehensive learning experiences.
+
+**Risks or Concerns:**
+- **Complexity**: The addition of new features increases code complexity, which could introduce bugs.
+- **Performance**: Shuffling challenges dynamically might impact performance if not optimized.
+- **Security**: Evaluating commands in a terminal game requires careful handling to prevent security vulnerabilities.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 08:29*
