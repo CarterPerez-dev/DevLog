@@ -1,0 +1,127 @@
+# run_benchmark
+
+**Type:** Security Review
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/routes/performance.rs
+**Language:** rust
+**Lines:** 183-300
+**Complexity:** 6.0
+
+---
+
+## Source Code
+
+```rust
+pub async fn run_benchmark(
+    State(_app_state): State<AppState>,
+) -> Result<JsonResponse<serde_json::Value>> {
+    info!("Starting comprehensive performance benchmark");
+    let benchmark_start = std::time::Instant::now();
+
+    // CPU benchmark: prime number calculation
+    let cpu_benchmark = tokio::task::spawn_blocking(|| {
+        let start = std::time::Instant::now();
+        let mut primes = Vec::new();
+
+        for i in 2..10000 {
+            if is_prime(i) {
+                primes.push(i);
+            }
+        }
+
+        let single_thread_time = start.elapsed();
+        let single_thread_primes = primes.len();
+
+        // Multi-threaded benchmark
+        let start = std::time::Instant::now();
+        let multi_thread_primes = (2..50000u32)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter(|&i| is_prime(i))
+            .count();
+        let multi_thread_time = start.elapsed();
+
+        serde_json::json!({
+            "single_thread": {
+                "primes_found": single_thread_primes,
+                "duration_ms": single_thread_time.as_secs_f64() * 1000.0,
+                "duration_us": single_thread_time.as_micros(),
+                "primes_per_second": single_thread_primes as f64 / single_thread_time.as_secs_f64()
+            },
+            "multi_thread": {
+                "primes_found": multi_thread_primes,
+                "duration_ms": multi_thread_time.as_secs_f64() * 1000.0,
+                "duration_us": multi_thread_time.as_micros(),
+                "primes_per_second": multi_thread_primes as f64 / multi_thread_time.as_secs_f64()
+            },
+            "parallel_efficiency": (multi_thread_primes as f64 / multi_thread_time.as_secs_f64()) /
+                                  (single_thread_primes as f64 / single_thread_time.as_secs_f64())
+        })
+    }).await.unwrap();
+
+    // Memory benchmark: array operations
+    let memory_benchmark = tokio::task::spawn_blocking(|| {
+        let start = std::time::Instant::now();
+        let data_size = 10_000_000;
+        let data: Vec<u64> = (0..data_size as u64).collect();
+        let allocation_time = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let sum: u64 = data.iter().sum();
+        let read_time = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let mut write_data = vec![0u64; data_size as usize];
+        for i in 0..data_size as usize {
+            write_data[i] = i as u64;
+        }
+        let write_time = start.elapsed();
+
+        serde_json::json!({
+            "allocation": {
+                "duration_ms": allocation_time.as_secs_f64() * 1000.0,
+                "duration_us": allocation_time.as_micros(),
+                "mb_allocated": (data_size * 8) as f64 / (1024.0 * 1024.0),
+                "mb_per_second": (data_size * 8) as f64 / (1024.0 * 1024.0) / allocation_time.as_secs_f64()
+            },
+            "sequential_read": {
+                "duration_ms": read_time.as_secs_f64() 
+```
+
+---
+
+## Security Review
+
+### Security Review for `run_benchmark` Function
+
+#### Vulnerabilities Found:
+
+1. **Info - No Injection or Deserialization Issues**: The code does not involve SQL, command execution, or deserialization from untrusted sources.
+2. **Info - Input Validation Gaps**: There is no input validation on the function parameters. However, since the function uses `State` and `async/await`, it's assumed that these are controlled by the framework.
+3. **Info - Error Handling**: The code handles errors by unwrapping futures with `.await.unwrap()`. This can hide potential runtime errors. Consider using `Result` to handle errors gracefully.
+
+#### Attack Vectors:
+
+- If this function is exposed without proper authentication, an attacker could potentially abuse it for resource-intensive operations.
+- Lack of error handling might expose internal system details through unhandled panics.
+
+#### Recommended Fixes:
+
+1. **Error Handling**: Use `Result` instead of `.await.unwrap()` to handle errors properly:
+   ```rust
+   let cpu_benchmark = tokio::task::spawn_blocking(|| {
+       // ...
+   }).await.map_err(|e| e.into());
+   ```
+
+2. **Logging**: Ensure that sensitive information is not logged in error messages.
+
+3. **Rate Limiting**: Implement rate limiting to prevent abuse of this endpoint, especially if it's exposed publicly.
+
+#### Overall Security Posture:
+
+The current implementation has no critical or high-severity issues but could benefit from improved error handling and input validation. The function should be secured against potential misuse by implementing proper authentication and rate limiting.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 10:51*
