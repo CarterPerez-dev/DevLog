@@ -1,10 +1,10 @@
 # repository
 
 **Type:** File Overview
-**Repository:** my-portfolio
-**File:** v1/backend/app/certification/repository.py
+**Repository:** social-media-notes
+**File:** backend/app/video/repository.py
 **Language:** python
-**Lines:** 1-95
+**Lines:** 1-124
 **Complexity:** 0.0
 
 ---
@@ -17,95 +17,114 @@
 repository.py
 """
 
+from uuid import UUID
 from collections.abc import Sequence
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import config
+from config import Platform
 from core.base_repository import BaseRepository
-from .Certification import Certification
+from .VideoEntry import VideoEntry
 
 
-class CertificationRepository(BaseRepository[Certification]):
+class VideoEntryRepository(BaseRepository[VideoEntry]):
     """
-    Repository for Certification model database operations.
+    Repository for VideoEntry model database operations
     """
-    model = Certification
+    model = VideoEntry
 
     @classmethod
-    async def get_visible_by_language(
+    async def get_by_user(
         cls,
         session: AsyncSession,
-        language: config.Language,
-        skip: int = config.PAGINATION_DEFAULT_SKIP,
-        limit: int = config.PAGINATION_DEFAULT_LIMIT,
-    ) -> Sequence[Certification]:
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
         """
-        Get all visible certifications for a language.
-        Ordered by display_order for consistent listing.
+        Get all video entries for a user
         """
         result = await session.execute(
-            select(Certification).where(
-                Certification.language == language
-            ).where(Certification.is_visible == True).order_by(
-                Certification.display_order
-            ).offset(skip).limit(limit)
+            select(VideoEntry)
+            .where(VideoEntry.user_id == user_id)
+            .order_by(VideoEntry.created_at.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return result.scalars().all()
 
     @classmethod
-    async def get_active_by_language(
+    async def get_by_user_and_platform(
         cls,
         session: AsyncSession,
-        language: config.Language,
-    ) -> Sequence[Certification]:
+        user_id: UUID,
+        platform: Platform,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
         """
-        Get non-expired certifications for a language.
+        Get video entries for a user filtered by platform
         """
         result = await session.execute(
-            select(Certification).where(
-                Certification.language == language
-            ).where(Certification.is_visible == True).where(
-                Certification.is_expired == False
-            ).order_by(Certification.display_order)
+            select(VideoEntry)
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+            .order_by(VideoEntry.video_number.asc())
+            .offset(skip)
+            .limit(limit)
         )
         return result.scalars().all()
 
     @classmethod
-    async def get_by_category_and_language(
+    async def count_by_user(
         cls,
         session: AsyncSession,
-        category: config.CertificationCategory,
-        language: config.Language,
-    ) -> Sequence[Certification]:
-        """
-        Get certifications by category and language.
-        """
-        result = await session.execute(
-            select(Certification).where(
-                Certification.language == language
-            ).where(Certification.category == category).where(
-                Certification.is_visible == True
-            ).order_by(Certification.display_order)
-        )
-        return result.scalars().all()
-
-    @classmethod
-    async def count_visible_by_language(
-        cls,
-        session: AsyncSession,
-        language: config.Language,
+        user_id: UUID,
+        platform: Platform | None = None,
     ) -> int:
         """
-        Count visible certifications for pagination.
+        Count video entries for a user, optionally filtered by platform
         """
-        result = await session.execute(
-            select(func.count()).select_from(Certification).where(
-                Certification.language == language
-            ).where(Certification.is_visible == True)
+        from sqlalchemy import func
+        query = select(func.count()).select_from(VideoEntry).where(
+            VideoEntry.user_id == user_id
         )
+        if platform:
+            query = query.where(VideoEntry.platform == platform)
+        result = await session.execute(query)
         return result.scalar_one()
+
+    @classmethod
+    async def get_next_video_number(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform,
+    ) -> int:
+        """
+        Get the next available video number for a platform
+        """
+        from sqlalchemy import func
+        result = await session.execute(
+            select(func.max(VideoEntry.video_number))
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+        )
+        max_num = result.scalar_one_or_none()
+        return (max_num or 0) + 1
+
+    @classmethod
+    async def get_by_id_and_user(
+        cls,
+        session: AsyncSession,
+        entry_id: UUID,
+        user_id: UUID,
+    ) -> VideoEntry | None:
 
 ```
 
@@ -115,30 +134,28 @@ class CertificationRepository(BaseRepository[Certification]):
 
 ### Purpose and Responsibility
 
-This file, `repository.py`, is part of the Certification module within the my-portfolio application. It provides an asynchronous repository for managing operations related to the `Certification` model, including fetching visible certifications by language, category, or language alone, as well as counting such certifications.
+This file, `repository.py`, is responsible for defining a repository class to manage database operations related to `VideoEntry` objects. It provides methods to retrieve video entries based on user IDs and platforms, count entries, determine the next available video number, and ensure that retrieved entries belong to specific users.
 
 ### Key Exports and Public Interface
 
-The primary public interface includes:
-- `get_visible_by_language`: Fetches visible certifications for a given language.
-- `get_active_by_language`: Retrieves non-expired certifications for a given language.
-- `get_by_category_and_language`: Finds certifications by category and language.
-- `count_visible_by_language`: Counts visible certifications for pagination.
+- **Class: VideoEntryRepository**
+  - **Methods**:
+    - `get_by_user`: Fetches all video entries for a given user.
+    - `get_by_user_and_platform`: Filters video entries by both user ID and platform.
+    - `count_by_user`: Counts the number of video entries for a user, optionally filtered by platform.
+    - `get_next_video_number`: Determines the next available video number for a specific platform.
+    - `get_by_id_and_user`: Retrieves a video entry by its ID, ensuring it belongs to the specified user.
 
-### How It Fits in the Project
+### How It Fits into the Project
 
-This repository is a critical component of the data access layer, ensuring that operations on the `Certification` model are consistent and efficient. It leverages SQLAlchemy for database interactions and follows a base repository pattern to maintain uniformity across different models.
+This repository class is part of the broader data access layer in the `social-media-notes` project. It interacts with the database through SQLAlchemy and provides a clean interface for other parts of the application to perform common CRUD operations on video entries. By centralizing these operations, it ensures consistency and encapsulates database logic.
 
 ### Notable Design Decisions
 
-- **Asynchronous Operations**: All methods are designed to be asynchronous, utilizing `AsyncSession` from SQLAlchemy.
-- **Pagination Support**: Methods like `get_visible_by_language` support pagination through `skip` and `limit` parameters.
-- **SQLAlchemy ORM**: Utilizes SQLAlchemy's ORM for querying the database, ensuring type safety and ease of use.
-- **Type Hints and Annotations**: Comprehensive use of type hints and annotations to ensure clarity and maintainability.
-```
-
-This documentation provides a high-level overview of the file's purpose, its public interface, integration within the project, and key design decisions.
+- **Use of SQLAlchemy**: The repository leverages SQLAlchemy's `AsyncSession` for asynchronous database interactions, ensuring non-blocking operations.
+- **Type Hints and Annotations**: Type hints are used extensively to improve code readability and maintainability. For example, method parameters like `user_id: UUID` and return types like `Sequence[VideoEntry]` provide clear expectations about the data being handled.
+- **Platform Enum**: The use of an enumeration (`Platform`) for filtering video entries ensures that platform values are consistent and easily manageable within the codebase.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 09:17*
+*Generated by CodeWorm on 2026-02-20 22:15*
