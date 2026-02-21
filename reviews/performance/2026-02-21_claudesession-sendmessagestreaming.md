@@ -1,0 +1,152 @@
+# ClaudeSession.sendMessageStreaming
+
+**Type:** Performance Analysis
+**Repository:** angelamos-operations
+**File:** CarterBot-Telegram/src/session.ts
+**Language:** typescript
+**Lines:** 107-302
+**Complexity:** 32.0
+
+---
+
+## Source Code
+
+```typescript
+async sendMessageStreaming(
+    message: string,
+    username: string,
+    userId: number,
+    statusCallback: StatusCallback,
+    chatId?: number,
+    ctx?: Context
+  ): Promise<string> {
+    if (chatId) {
+      process.env.TELEGRAM_CHAT_ID = String(chatId);
+    }
+
+    const isNewSession = !this.isActive;
+    const thinkingTokens = getThinkingLevel(message);
+    const thinkingLabel =
+      { 0: "off", 10000: "normal", 50000: "deep" }[thinkingTokens] ||
+      String(thinkingTokens);
+
+    let messageToSend = message;
+    if (isNewSession) {
+      const now = new Date();
+      const datePrefix = `[Current date/time: ${now.toLocaleDateString(
+        "en-US",
+        {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }
+      )}]\n\n`;
+      messageToSend = datePrefix + message;
+    }
+
+    const options: Options = {
+      model: "claude-sonnet-4-5",
+      cwd: WORKING_DIR,
+      settingSources: ["user", "project"],
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      systemPrompt: SYSTEM_PROMPT,
+      mcpServers: MCP_SERVERS,
+      maxThinkingTokens: thinkingTokens,
+      resume: this.sessionId || undefined,
+    };
+
+    if (process.env.CLAUDE_CODE_PATH) {
+      options.pathToClaudeCodeExecutable = process.env.CLAUDE_CODE_PATH;
+    }
+
+    if (this.sessionId && !isNewSession) {
+      console.log(
+        `RESUMING session ${this.sessionId.slice(0, 8)}... (thinking=${thinkingLabel})`
+      );
+    } else {
+      console.log(`STARTING new Claude session (thinking=${thinkingLabel})`);
+      this.sessionId = null;
+    }
+
+    if (this.stopRequested) {
+      console.log("Query cancelled before starting");
+      this.stopRequested = false;
+      throw new Error("Query cancelled");
+    }
+
+    this.abortController = new AbortController();
+    this.isQueryRunning = true;
+    this.stopRequested = false;
+    this.queryStarted = new Date();
+    this.currentTool = null;
+
+    const responseParts: string[] = [];
+    let currentSegmentId = 0;
+    let currentSegmentText = "";
+    let lastTextUpdate = 0;
+    let queryCompleted = false;
+
+    try {
+      const queryInstance = query({
+        prompt: messageToSend,
+        options: {
+          ...options,
+          abortController: this.abortController,
+        },
+      });
+
+      for await (const event of queryInstance) {
+        if (this.stopRequested) {
+          console.log("Query aborted by user");
+          break;
+        }
+
+        if (!this.sessionId && event.session_id) {
+          this.sessionId = event.session_id;
+          console.log(`GOT session_id: ${this.sessionId!.slice(0, 8)}...`);
+          this.saveSession();
+        }
+
+        if (event.type === "assistant") {
+          for (const block of event.message.content) {
+            if (block.type === "thinking") {
+              const thinkingText = block.thinking;
+     
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The function has a time complexity dominated by the `for await` loop, which iterates over each event from the `queryInstance`. The overall complexity is O(n), where n is the number of events returned by the query.
+
+#### Space Complexity and Memory Allocation
+- **Memory Leaks**: Ensure that `this.abortController`, `this.isQueryRunning`, `this.sessionId`, and other variables are properly managed to avoid memory leaks.
+- **Event Storage**: The `responseParts` array accumulates text, which could grow large if the response is extensive.
+
+#### Bottlenecks or Inefficiencies
+1. **Redundant Operations**: The `console.log` statements and `statusCallback` calls can be expensive, especially in high-throughput scenarios.
+2. **Unnecessary Iterations**: The nested loop over `event.message.content` could be optimized by processing events more efficiently.
+
+#### Optimization Opportunities
+1. **Reduce Logging**: Use a logging level (e.g., `debug`) for non-critical logs to reduce performance overhead.
+2. **Batched Callbacks**: Instead of calling `statusCallback` on every text segment, batch them to reduce the number of calls.
+3. **Efficient Data Structures**: Consider using more efficient data structures like a queue for `responseParts`.
+
+#### Resource Usage Concerns
+- **File Handles and Connections**: Ensure all file handles and network connections are properly closed after use.
+- **Environment Variables**: Avoid frequent access to environment variables, as they can be costly.
+
+By addressing these points, you can significantly improve the performance and efficiency of your function.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 15:44*
