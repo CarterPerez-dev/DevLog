@@ -77,83 +77,49 @@ function SettingsRow({
 
 ### Security Review for `SettingsRow` Component
 
-#### Vulnerabilities Found:
+#### Vulnerabilities and Severity:
 
-1. **Info - Input Validation Gaps**: The component does not validate or sanitize any user inputs (`label`, `subtitle`). While this is an info-level issue in the context of this component, it could be a concern if these props are derived from untrusted sources.
+1. **Info: Input Validation Gaps**
+   - **Line 7**: The `onPress` prop is not validated, which could allow malicious users to inject event handlers.
+   - **Severity: Info**
 
-2. **Info - Error Handling**: There's no explicit error handling for potential issues like missing `onPress` function or undefined `rightElement`. This could lead to unexpected behavior but does not pose a direct security risk.
+2. **Info: Hardcoded Colors**
+   - **Lines 9-10 and 38**: Hardcoded color values are used without dynamic checks or validation.
+   - **Severity: Info**
 
 #### Attack Vectors:
 
-- If the component is used with user-provided props, an attacker could inject malicious content into `label` or `subtitle`, though this would require further context.
+- **XSS via `onPress` Prop**:
+  An attacker could inject malicious JavaScript into the `onPress` prop, leading to potential XSS attacks.
 
 #### Recommended Fixes:
 
-1. **Input Validation**: Ensure that any dynamic text passed to `label` and `subtitle` is sanitized and validated before rendering.
-2. **Error Handling**: Add a basic error handling mechanism, such as logging errors or displaying a fallback message when `onPress` is undefined.
+1. **Input Validation for `onPress` Prop**:
+   ```tsx
+   onPress={typeof onPress === 'function' ? onPress : undefined}
+   ```
 
-```tsx
-function SettingsRow({
-  icon,
-  label,
-  subtitle,
-  onPress,
-  rightElement,
-  isDestructive,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  subtitle?: string;
-  onPress?: () => void;
-  rightElement?: React.ReactNode;
-  isDestructive?: boolean;
-}): React.ReactElement {
-  return (
-    <Stack
-      flexDirection="row"
-      alignItems="center"
-      justifyContent="space-between"
-      paddingVertical="$4"
-      paddingHorizontal="$4"
-      pressStyle={onPress ? { backgroundColor: '$bgSurface75' } : undefined}
-      onPress={onPress}
-    >
-      <XStack alignItems="center" gap="$3" flex={1}>
-        <Stack
-          width={36}
-          height={36}
-          borderRadius="$2"
-          backgroundColor={isDestructive ? 'rgba(220, 38, 38, 0.12)' : '$bgSurface200'}
-          alignItems="center"
-          justifyContent="center"
-        >
-          {icon}
-        </Stack>
-        <YStack flex={1}>
-          <Text
-            fontSize={15}
-            fontWeight="500"
-            color={isDestructive ? '$errorDefault' : '$textDefault'}
-            fontFamily="$body"
-          >
-            {label} {/* Ensure label is safe */}
-          </Text>
-          {subtitle && (
-            <Text fontSize={12} color="$textMuted" fontFamily="$body" marginTop="$1">
-              {subtitle} {/* Ensure subtitle is safe */}
-            </Text>
-          )}
-        </YStack>
-      </XStack>
-      {rightElement ?? (onPress ? <ChevronRight size={18} color={colors.textMuted.val} /> : null)}
-    </Stack>
-  );
-}
-```
+2. **Dynamic Color Values**:
+   Use dynamic color values based on state or props instead of hardcoded colors.
+   ```tsx
+   const destructiveColor = isDestructive ? '$errorDefault' : '$textMuted';
+   <Text fontSize={15} fontWeight="500" color={destructiveColor} fontFamily="$body">
+     {label}
+   </Text>
+   ```
 
 #### Overall Security Posture:
 
-The component itself is secure, but it's crucial to ensure that the props passed to this function are sanitized and validated. This review focuses on the immediate security posture of the `SettingsRow` component.
+The current implementation lacks robust input validation and uses hardcoded values. By implementing the suggested fixes, you can mitigate potential XSS risks and improve the overall security posture of your component.
+
+**Severity Ratings:**
+- **Critical**: None
+- **High**: None
+- **Medium**: 1 (XSS via `onPress` prop)
+- **Low**: 1 (Hardcoded colors)
+- **Info**: 2
+
+By addressing these issues, you can enhance the security of your application.
 
 ---
 
