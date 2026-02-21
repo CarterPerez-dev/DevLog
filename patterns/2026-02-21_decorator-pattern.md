@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/auth/auth_optional.py
+**File:** backend/api/core/decorators/schema.py
 **Language:** python
-**Lines:** 1-56
+**Lines:** 1-98
 **Complexity:** 0.0
 
 ---
@@ -13,61 +13,92 @@
 
 ```python
 """
-Optional authentication decorator: FUTURE USE
-/api/core/auth/auth_optional.py
+Schema Validation Decorator
+/api/middleware/decorators/schema.py
 """
 
+import json
+import logging
+import contextlib
 from typing import Any
 from functools import wraps
+from flask import request, g
 from collections.abc import Callable
-from flask import g, request, session
-from flask_jwt_extended import (
-    get_jwt_identity,
-    verify_jwt_in_request,
+from pydantic import BaseModel, ValidationError
+from werkzeug.exceptions import (
+    UnsupportedMediaType,
+    BadRequest,
 )
-from api.domains.account.models.User import User
 
 
-def auth_optional(fn: Callable[..., Any]) -> Callable[..., Any]:
+logger = logging.getLogger(__name__)
+
+
+def schema(
+    model: type[BaseModel]
+) -> Callable[[Callable[...,
+                        Any]],
+              Callable[...,
+                       Any]]:
     """
-    Decorator that allows optional authentication.
+    Pydantic schema validation decorator.
     """
-    @wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-
-        user_id: str | None = None
-        try:
-            verify_jwt_in_request(optional = True)
-            user_id = get_jwt_identity()
-            if user_id:
-                pass
-            else:
-                user_id = None
-        except Exception:
-            user_id = None
-
-        if not user_id:
-            user_id = session.get("userId")
-
-        if not user_id:
-            user_id = request.headers.get("X-User-Id")
-
-        g.user_id = None
-        g.user = None
-
-        if user_id:
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
-                user: User | None = User.objects(id = user_id).first()
-                if user:
-                    g.user_id = user_id
-                    g.user = user
-            except Exception:
-                pass  # nosec B110
+                data = None
+                content_type = request.content_type or ""
 
-        return fn(*args, **kwargs)
+                if content_type.startswith('application/json'):
+                    data = request.get_json()
+                elif content_type.startswith(
+                    ('application/x-www-form-urlencoded',
+                     'multipart/form-data')):
+                    data = {}
+                    for key, value in request.form.items():
+                        try:
+                            data[key] = json.loads(value
+                                                   ) if value.startswith(
+                                                       ('{',
+                                                        '[')
+                                                   ) else value
+                        except (json.JSONDecodeError, ValueError):
+                            data[key] = value
+                else:
+                    with contextlib.suppress(UnsupportedMediaType):
+                        data = request.get_json(silent = True)
 
-    return wrapper
+                    if not data and request.form:
+                        data = dict(request.form)
+                    elif not data:
+                        data = dict(request.args)
 
+                if data is None:
+                    data = {}
+
+                validated_data: BaseModel = model(**data)
+
+                g.validated = validated_data.model_dump()
+                g.validated_model = validated_data
+
+            except ValidationError as e:
+                errors: dict[str, str] = {}
+                for error in e.errors():
+                    field: str = ".".join(str(x) for x in error["loc"])
+                    errors[field] = error["msg"]
+
+                return {"error": "Validation failed", "errors": errors}, 400
+            except Exception as e:
+                if isinstance(e, UnsupportedMediaType):
+                    return {
+                        "error": "Invalid content type",
+                        "message": "Content-Type must be application/json"
+                    }, 400
+                if isinstance(e, BadRequest):
+                    return {"error": "Invalid JSON", "message": "Request body must be valid JSON"}, 400
+
+    
 ```
 
 ---
@@ -78,28 +109,20 @@ def auth_optional(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 **Pattern Used:** Decorator Pattern
 
-The `auth_optional` decorator is implemented to optionally authenticate users based on JWT or session headers. Here’s a breakdown:
+The `schema` decorator function in the provided code implements the **Decorator Pattern** to validate incoming request data using Pydantic models. The core implementation involves a higher-order function that takes a model class as an argument and returns another function (decorator) which wraps the original function (`f`). This wrapper function handles JSON parsing, form data processing, and validation against the provided Pydantic model.
 
-1. **Implementation:**
-   - The function `auth_optional` takes a callable `fn` and returns another callable.
-   - It uses the `verify_jwt_in_request` method from Flask-JWT-Extended with the `optional=True` parameter to allow for optional authentication.
-   - If no JWT is present, it checks session data or headers for a user ID.
+**Benefits:**
+- **Modularity:** Decorators allow for clean separation of concerns by encapsulating cross-cutting concerns like validation.
+- **Reusability:** The `schema` decorator can be applied to multiple functions without duplicating code.
+- **Flexibility:** Easily switch or extend the validation logic by modifying the decorator.
 
-2. **Benefits:**
-   - Flexibility in handling authenticated and unauthenticated requests.
-   - Centralized authentication logic that can be easily applied to any function requiring optional authentication.
-   - Improved code readability by abstracting the authentication process.
+**Deviations:**
+- The implementation includes custom error handling for specific HTTP errors (`UnsupportedMediaType`, `BadRequest`), which is not a strict deviation but adds context-specific behavior.
+- The use of `contextlib.suppress` to handle `UnsupportedMediaType` exceptions without raising them immediately, allowing the validation process to continue.
 
-3. **Deviations from Standard Pattern:**
-   - The decorator does not modify or wrap the original function's behavior directly but rather sets up global context (`g.user_id` and `g.user`) which can be used within the decorated function.
-   - It handles exceptions by setting `user_id` to `None`, which is a deviation from typical pattern where such errors might raise an exception.
-
-4. **Appropriateness:**
-   - This pattern is appropriate when you need to handle both authenticated and unauthenticated requests in a consistent manner, especially in APIs that support JWT tokens but also allow for other authentication methods.
-   - It’s useful in scenarios where the presence of a user ID is not mandatory for all operations.
-
-This decorator ensures that the code remains clean and focused on its primary logic while abstracting away the complexities of handling different authentication mechanisms.
+**Appropriateness:**
+This pattern is highly appropriate for web APIs where request data needs to be validated before processing. It ensures that all endpoints adhere to a consistent validation mechanism, improving code maintainability and reducing boilerplate code. However, it might not be suitable for scenarios requiring complex or dynamic validation logic that cannot be encapsulated in a simple decorator.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 14:25*
+*Generated by CodeWorm on 2026-02-21 16:18*
