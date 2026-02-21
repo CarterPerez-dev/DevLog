@@ -1,0 +1,133 @@
+# ServiceRegistry.health_check
+
+**Type:** Performance Analysis
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/services/mod.rs
+**Language:** rust
+**Lines:** 74-175
+**Complexity:** 9.0
+
+---
+
+## Source Code
+
+```rust
+pub async fn health_check(&self) -> Result<serde_json::Value> {
+        let mut health_results = serde_json::Map::new();
+
+        // Check cache service health
+        match self.cache_service.health_check().await {
+            Ok(cache_health) => {
+                health_results.insert("cache".to_string(), cache_health);
+            }
+            Err(e) => {
+                health_results.insert("cache".to_string(), serde_json::json!({
+                    "status": "unhealthy",
+                    "error": e.to_string()
+                }));
+            }
+        }
+
+        // Check GitHub service health (rate limit status)
+        match self.github_service.get_rate_limit_status().await {
+            Ok(rate_limit) => {
+                health_results.insert("github".to_string(), serde_json::json!({
+                    "status": if rate_limit.remaining > 100 { "healthy" } else { "degraded" },
+                    "rate_limit_remaining": rate_limit.remaining,
+                    "rate_limit_total": rate_limit.limit
+                }));
+            }
+            Err(e) => {
+                health_results.insert("github".to_string(), serde_json::json!({
+                    "status": "unhealthy",
+                    "error": e.to_string()
+                }));
+            }
+        }
+
+        // Check fractal service health (simple computation test)
+        let fractal_health = tokio::task::spawn_blocking({
+            let fractal_service = Arc::clone(&self.fractal_service);
+            move || {
+                use crate::services::fractal_service::{FractalRequest, FractalType};
+
+                let test_request = FractalRequest {
+                    width: 32,
+                    height: 32,
+                    center_x: -0.5,
+                    center_y: 0.0,
+                    zoom: 1.0,
+                    max_iterations: 50,
+                    fractal_type: FractalType::Mandelbrot,
+                };
+
+                fractal_service.generate_mandelbrot(test_request)
+            }
+        }).await;
+
+        match fractal_health {
+            Ok(result) => {
+                health_results.insert("fractals".to_string(), serde_json::json!({
+                    "status": "healthy",
+                    "test_computation_time_ms": result.computation_time_ms
+                }));
+            }
+            Err(e) => {
+                health_results.insert("fractals".to_string(), serde_json::json!({
+                    "status": "unhealthy",
+                    "error": e.to_string()
+                }));
+            }
+        }
+
+        // Check performance service health
+        match self.performance_service.get_system_info().await {
+            Ok(_) => {
+                health_results.insert("performance".to_string(), serde_json::json!({
+                    "status": "healthy"
+                }));
+            }
+            Err(e) => {
+                health_results.insert("performance".to_string(), serde_json::json!({
+                    "status": "un
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity**: The function has a time complexity of \(O(n)\), where \(n\) is the number of services checked (in this case, 4). Each service check involves an asynchronous call and potentially blocking computation.
+
+**Space Complexity**: The primary space concern is the `health_results` map, which can grow with more services. However, it remains bounded by the number of services checked.
+
+**Bottlenecks or Inefficiencies**:
+1. **Blocking Calls in Async Contexts**: The `fractal_service.generate_mandelbrot` call is wrapped in a blocking task, which could block the event loop and impact performance.
+2. **Redundant Iterations**: The `overall_status` determination involves iterating over all service statuses twice: once to check for "healthy" and another for "unhealthy".
+
+**Optimization Opportunities**:
+1. **Avoid Blocking Calls**: Use a non-blocking approach for the fractal computation, such as leveraging async equivalents or parallel processing.
+2. **Reduce Redundant Iterations**: Combine the two iterations into one by checking for both conditions simultaneously.
+
+```rust
+let overall_status = if health_results.values().all(|v| {
+    v.get("status").and_then(|s| s.as_str()) == Some("healthy")
+}) || !health_results.values().any(|v| {
+    v.get("status").and_then(|s| s.as_str()) == Some("unhealthy")
+}) {
+    "healthy"
+} else {
+    "degraded"
+};
+```
+
+**Resource Usage Concerns**:
+- Ensure proper handling of `Result` and `Option` to avoid panics.
+- Use `Arc` or `Rc` for shared references if necessary, but ensure they are properly managed.
+
+By addressing these points, the function can be made more efficient and responsive.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 18:50*
