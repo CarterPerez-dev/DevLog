@@ -1,0 +1,140 @@
+# UploadProgressPublisher._listen_redis
+
+**Type:** Security Review
+**Repository:** vuemantics
+**File:** backend/core/websocket/publisher.py
+**Language:** python
+**Lines:** 107-198
+**Complexity:** 21.0
+
+---
+
+## Source Code
+
+```python
+async def _listen_redis(self) -> None:
+        """
+        Background task that listens to Redis pub/sub
+
+        Receives messages from Redis and
+        forwards to local WebSocket connections
+        """
+        pubsub = None
+        try:
+            pubsub = await redis_pool.psubscribe("upload:*", "user:*")
+
+            logger.info("Redis listener started (patterns: upload:*, user:*)")
+
+            while self._running:
+                try:
+                    message = await pubsub.get_message(
+                        ignore_subscribe_messages = True,
+                        timeout = 0.1
+                    )
+
+                    if message is None:
+                        continue
+
+                    if message["type"] != "pmessage":
+                        continue
+
+                    # Note: decode_responses=True means these are already strings
+                    channel = message["channel"]
+                    if isinstance(channel, bytes):
+                        channel = channel.decode("utf-8")
+
+                    payload = message["data"]
+                    if isinstance(payload, bytes):
+                        payload = payload.decode("utf-8")
+
+                    manager = get_manager()
+
+                    user_ids: list[str]
+                    if channel.startswith("upload:"):
+                        upload_id = channel.split(":", 1)[1]
+                        user_ids = list(manager.get_upload_subscriber_ids(upload_id))
+                    elif channel.startswith("user:"):
+                        user_id = channel.split(":", 1)[1]
+                        user_ids = [user_id]
+                    else:
+                        continue
+
+                    for user_id in user_ids:
+                        connections = list(
+                            manager.user_connections.get(user_id,
+                                                         set())
+                        )
+                        dead_connections: set[WebSocket] = set()
+
+                        for ws in connections:
+                            try:
+                                await ws.send_text(payload)
+                            except Exception as e:
+                                logger.debug(
+                                    f"Failed to forward message to user {user_id}: {e}"
+                                )
+                                dead_connections.add(ws)
+
+                        # Garbage c
+                        for ws in dead_connections:
+                            await manager.disconnect(user_id, ws)
+
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in Redis listener: {e}")
+                    if self._running:
+                        await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            logger.info("Redis listener cancelled")
+        except Exception as e:
+            logger.error(f"Redis listener err
+```
+
+---
+
+## Security Review
+
+### Security Review for `UploadProgressPublisher._listen_redis`
+
+**Vulnerabilities Found:**
+
+1. **Error Handling and Logging (Info):**
+   - The error handling in the `try-except` blocks logs exceptions, which can leak information about the application's internal state.
+   - **Severity:** Info
+
+2. **Resource Cleanup (Low):**
+   - The code attempts to close the pubsub connection but uses a timeout, which might not always be effective.
+   - **Severity:** Low
+   - **Fix:** Ensure `pubsub.unsubscribe()` and `pubsub.close()` are called without timeouts or handle them more robustly.
+
+3. **Security Posture:**
+   - The code does not appear to have direct injection points (SQL, command, XSS).
+   - Input validation is handled via type checks.
+   - No hardcoded secrets or credentials are visible.
+
+### Recommended Fixes:
+
+1. **Error Handling and Logging:**
+   - Use structured logging with placeholders for sensitive information.
+     ```python
+     logger.error(f"Error in Redis listener: {str(e)}")
+     ```
+
+2. **Resource Cleanup:**
+   - Remove timeouts from `asyncio.wait_for` to ensure proper cleanup.
+     ```python
+     await pubsub.unsubscribe()
+     await pubsub.close()
+     ```
+
+3. **Overall Security Posture:**
+   - Ensure that all connections are properly closed and resources are managed in a context manager if possible.
+
+### Summary:
+The code is relatively secure but could benefit from improved error handling to avoid information leakage and more robust resource management. The overall security posture is good, with no critical or high-severity issues identified.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 13:08*
