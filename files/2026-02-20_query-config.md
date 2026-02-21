@@ -1,10 +1,10 @@
 # query.config
 
 **Type:** File Overview
-**Repository:** ios-test
-**File:** red-recon/src/core/api/query.config.ts
+**Repository:** social-media-notes
+**File:** frontend/src/core/api/query.config.ts
 **Language:** typescript
-**Lines:** 1-129
+**Lines:** 1-105
 **Complexity:** 0.0
 
 ---
@@ -12,15 +12,14 @@
 ## Source Code
 
 ```typescript
-// ===================
-// © AngelaMos | 2026
-// query.config.ts
-// ===================
+/**
+ * AngelaMos | 2025
+ * query.config.ts
+ */
 
-import { QUERY_CONFIG } from '@/core/config'
-import { queryClientStorage } from '@/core/storage'
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+import { Alert } from 'react-native'
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
+import { QUERY_CONFIG } from '@/config'
 import { ApiError, ApiErrorCode } from './errors'
 
 const NO_RETRY_ERROR_CODES: readonly ApiErrorCode[] = [
@@ -45,12 +44,6 @@ const calculateRetryDelay = (attemptIndex: number): number => {
   return Math.min(baseDelay * 2 ** attemptIndex, maxDelay)
 }
 
-let showToast: ((message: string) => void) | null = null
-
-export const setToastHandler = (handler: (message: string) => void): void => {
-  showToast = handler
-}
-
 const handleQueryCacheError = (
   error: Error,
   query: { state: { data: unknown } }
@@ -60,7 +53,7 @@ const handleQueryCacheError = (
       error instanceof ApiError
         ? error.getUserMessage()
         : 'Background update failed'
-    showToast?.(message)
+    Alert.alert('Error', message)
   }
 }
 
@@ -73,7 +66,7 @@ const handleMutationCacheError = (
   if (mutation.options.onError === undefined) {
     const message =
       error instanceof ApiError ? error.getUserMessage() : 'Operation failed'
-    showToast?.(message)
+    Alert.alert('Error', message)
   }
 }
 
@@ -98,18 +91,6 @@ export const QUERY_STRATEGIES = {
     gcTime: QUERY_CONFIG.GC_TIME.DEFAULT,
     retry: QUERY_CONFIG.RETRY.NONE,
   },
-  partner: {
-    staleTime: QUERY_CONFIG.STALE_TIME.PARTNER,
-    gcTime: QUERY_CONFIG.GC_TIME.LONG,
-  },
-  cycle: {
-    staleTime: QUERY_CONFIG.STALE_TIME.CYCLE,
-    gcTime: QUERY_CONFIG.GC_TIME.DEFAULT,
-  },
-  calendar: {
-    staleTime: QUERY_CONFIG.STALE_TIME.CALENDAR,
-    gcTime: QUERY_CONFIG.GC_TIME.LONG,
-  },
 } as const
 
 export type QueryStrategy = keyof typeof QUERY_STRATEGIES
@@ -119,31 +100,48 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: QUERY_CONFIG.STALE_TIME.USER,
       gcTime: QUERY_CONFIG.GC_TIME.DEFAULT,
-      retry: shouldRetry
+      retry: shouldRetryQuery,
+      retryDelay: calculateRetryDelay,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: QUERY_CONFIG.RETRY.NONE,
+    },
+  },
+  queryCache: new QueryCache({
+    onError: handleQueryCacheError,
+  }),
+  mutationCache: new MutationCache({
+    onError: handleMutationCacheError,
+  }),
+})
+
 ```
 
 ---
 
 ## File Overview
 
-# query.config.ts
+### Documenting `query.config.ts`
 
-**Purpose & Responsibility:**
-This TypeScript source file configures and initializes the `QueryClient` for managing API queries using React Query, ensuring consistent behavior across different types of queries while handling errors and caching strategies appropriately.
+**Purpose:**
+This TypeScript source file configures and manages query strategies for a React Native application using `@tanstack/react-query`. It sets up retry mechanisms, cache management, and error handling to ensure robust data fetching.
 
-**Key Exports & Public Interface:**
-- **QUERY_STRATEGIES**: A configuration object defining various query strategies with specific stale times, garbage collection intervals, and retry policies.
-- **queryClient**: The main `QueryClient` instance configured with default options for both queries and mutations.
-- **queryClientPersister**: An asynchronous storage persister to persist the query cache.
+**Key Exports:**
+- **QueryStrategy:** An enum defining different query strategies.
+- **queryClient:** A configured instance of `QueryClient` with custom options for queries and mutations.
 
-**How It Fits in the Project:**
-This file is crucial for setting up the query management system, which is integral to handling API requests across the application. It ensures that all API calls are managed consistently with appropriate caching and error handling mechanisms.
+**Project Integration:**
+This file is crucial for the application's data layer. It provides a centralized configuration point that can be referenced throughout the project to ensure consistent behavior across all API calls. The `queryClient` instance is used by other components to fetch data, making it easier to manage caching, retries, and error handling.
 
-**Notable Design Decisions:**
-- **Custom Retry Logic**: Implements a dynamic retry strategy based on failure count and specific error codes.
-- **Stale Time & GC Time Configurations**: Defines different strategies for stale times, garbage collection intervals, and refetch intervals to optimize query performance.
-- **Error Handling**: Utilizes custom handlers to display user-friendly messages when errors occur during queries or mutations.
+**Design Decisions:**
+- **Retry Mechanism:** Implements conditional retry logic based on error codes and failure count.
+- **Cache Management:** Configures different stale times and garbage collection intervals for various query strategies.
+- **Error Handling:** Provides custom alert messages for both `QueryCache` and `MutationCache` errors, enhancing user experience by providing meaningful feedback.
+
+This file ensures that the application can handle network failures gracefully and maintain a good user experience even under poor network conditions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 16:50*
+*Generated by CodeWorm on 2026-02-20 22:45*
