@@ -1,0 +1,126 @@
+# useGlobalSocketListeners
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/core/lib/hooks/useGlobalSocketListeners.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 93bdad8f
+Message: fix possible leaking (#170)
+Author: Carter Perez
+File: frontend/user-app/src/core/lib/hooks/useGlobalSocketListeners.ts
+Change type: modified
+
+Diff:
+@@ -1,9 +1,9 @@
+ // ===========================
+ // Global Socket Listeners Hook
+-// ©AngelaMos | 2025
++// ©AngelaMos | 2026
+ // ===========================
+ 
+-import { useEffect } from 'react';
++import { useEffect, useRef } from 'react';
+ import { useNavigate, useLocation } from 'react-router-dom';
+ import { useQueryClient } from '@tanstack/react-query';
+ import { toast } from 'sonner';
+@@ -28,6 +28,20 @@ export const useGlobalSocketListeners = ({
+   const { incrementBadgeCount, addUnreadThread, setLastSeenTimestamp } =
+     useSupportUIStore();
+ 
++  const navigateRef = useRef(navigate);
++  const locationRef = useRef(location);
++  const queryClientRef = useRef(queryClient);
++  const incrementBadgeCountRef = useRef(incrementBadgeCount);
++  const addUnreadThreadRef = useRef(addUnreadThread);
++  const setLastSeenTimestampRef = useRef(setLastSeenTimestamp);
++
++  navigateRef.current = navigate;
++  locationRef.current = location;
++  queryClientRef.current = queryClient;
++  incrementBadgeCountRef.current = incrementBadgeCount;
++  addUnreadThreadRef.current = addUnreadThread;
++  setLastSeenTimestampRef.current = setLastSeenTimestamp;
++
+   useEffect(() => {
+     if (userId === null || userId === undefined) return;
+ 
+@@ -37,7 +51,7 @@ export const useGlobalSocketListeners = ({
+       data: SupportNotificationData,
+     ): void => {
+       if (
+-        location.pathname === '/support' &&
++        locationRef.current.pathname === '/support' &&
+         data.threadId === useSupportUIStore.getState().selectedThreadId
+       ) {
+         return;
+@@ -48,24 +62,24 @@ export const useGlobalSocketListeners = ({
+         action: {
+           label: 'View',
+           onClick: (): void => {
+-            void navigate(`/support?thread=${data.threadId}`);
++            void navigateRef.current(`/support?thread=${data.threadId}`);
+           },
+         },
+       });
+ 
+-      if (!location.pathname.startsWith('/support')) {
+-        incrementBadgeCount();
++      if (!locationRef.current.pathname.startsWith('/support')) {
++        incrementBadgeCountRef.current();
+       }
+ 
+-      addUnreadThread(data.threadId);
++      addUnreadThreadRef.current(data.threadId);
+ 
+-      void queryClient.invalidateQueries({
++      void queryClientRef.current.invalidateQueries({
+         queryKey: supportQueryKeys.threads(),
+       });
+     };
+ 
+     const handleThreadClosed = (_data: ThreadClosedData): void => {
+-      void queryClient.invalidateQueries({
++      void queryClientRef.current.invalidateQueries({
+         queryKey: supportQueryKeys.threads(),
+       });
+     };
+@@ -81,7 +95,7 @@ export const useGlobalSocketListeners = ({
+             description: 'Checking for new messages...',
+           });
+ 
+-          void queryClient.invalidateQueries({
++          void queryClientRef.current.invalidateQueries({
+  
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code introduced the use of `useRef` to store references to the `navigate`, `location`, `queryClient`, and state functions (`incrementBadgeCount`, `addUnreadThread`, `setLastSeenTimestamp`). These references are then used within the `useEffect` hook instead of directly accessing the variables. Additionally, the dependency array in the `useEffect` was simplified by removing unused dependencies.
+
+**Why it was Likely Changed:**
+This change is likely aimed at preventing memory leaks and ensuring that the functions and objects being passed to event handlers remain valid throughout their lifecycle. By using `useRef`, these references are preserved across re-renders, which can be crucial for maintaining stateful behavior in React components.
+
+**Impact on Behavior:**
+The impact of this change is minimal; it ensures that the correct functions are called when handling socket events and navigating routes. The behavior of updating badges, threads, and timestamps remains unchanged but now uses more robust references to avoid potential issues with stale closures or re-renders.
+
+**Risks or Concerns:**
+While this change addresses memory leaks, there is a risk if these references are not updated correctly in other parts of the codebase. For instance, if `navigate`, `queryClient`, etc., are reassigned elsewhere without updating their respective `useRef` instances, it could lead to unexpected behavior. Ensuring all relevant parts of the code update these references appropriately is crucial.
+
+Overall, this change improves the robustness and reliability of the component's state management.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 10:36*
