@@ -1,0 +1,153 @@
+# VideoEntryCard
+
+**Type:** File Overview
+**Repository:** social-media-notes
+**File:** frontend/src/components/VideoEntryCard.tsx
+**Language:** tsx
+**Lines:** 1-289
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+import { useState, useEffect } from 'react'
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Platform as RNPlatform,
+} from 'react-native'
+import DateTimePicker from '@react-native-community/datetimepicker'
+import { Ionicons } from '@expo/vector-icons'
+import type { Platform } from '@/config'
+import type { VideoEntry } from '@/api/types'
+import { useUpdateVideo, useDeleteVideo, useCopyVideo } from '@/api/hooks'
+import { useDraftStore } from '@/core/lib'
+
+interface Props {
+  video: VideoEntry
+  platform: Platform
+}
+
+export function VideoEntryCard({ video, platform }: Props) {
+  const draft = useDraftStore((s) => s.getDraft(video.id))
+  const updateDraft = useDraftStore((s) => s.updateDraft)
+  const clearDraft = useDraftStore((s) => s.clearDraft)
+
+  const [description, setDescription] = useState(
+    draft?.description ?? video.description
+  )
+  const [youtubeDesc, setYoutubeDesc] = useState(
+    draft?.youtube_description ?? video.youtube_description ?? ''
+  )
+  const [scheduledTime, setScheduledTime] = useState<Date | null>(
+    video.scheduled_time ? new Date(video.scheduled_time) : null
+  )
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showTimePicker, setShowTimePicker] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const updateVideo = useUpdateVideo()
+  const deleteVideo = useDeleteVideo()
+  const copyVideo = useCopyVideo()
+
+  useEffect(() => {
+    if (
+      description !== video.description ||
+      youtubeDesc !== video.youtube_description
+    ) {
+      updateDraft(video.id, {
+        description,
+        youtube_description: youtubeDesc,
+      })
+    }
+  }, [description, youtubeDesc])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await updateVideo.mutateAsync({
+        id: video.id,
+        data: {
+          description,
+          youtube_description: youtubeDesc || undefined,
+          scheduled_time: scheduledTime?.toISOString(),
+        },
+      })
+      clearDraft(video.id)
+    } catch {
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDelete = () => {
+    Alert.alert('Delete', 'Delete this video?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteVideo.mutate(video.id),
+      },
+    ])
+  }
+
+  const handleCopy = (target: Platform) => {
+    copyVideo.mutate({
+      id: video.id,
+      data: {
+        target_platform: target,
+        shorten_for_youtube: target === 'youtube',
+      },
+    })
+  }
+
+  const handleDateChange = (_: any, date?: Date) => {
+    setShowDatePicker(false)
+    if (date) {
+      const newDate = scheduledTime ? new Date(scheduledTime) : new Date()
+      newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate())
+      setScheduledTime(newDate)
+      if (RNPlatform.OS === 'android') {
+        setShowTimePicker(true)
+      }
+    }
+  }
+
+  const handleTimeChange = (_: any, time?: Date) => {
+    set
+```
+
+---
+
+## File Overview
+
+### VideoEntryCard.tsx
+
+**Purpose and Responsibility:**
+This React Native component is responsible for rendering a card that displays and allows editing of video entries. It handles updating, deleting, and copying videos across different platforms.
+
+**Key Exports or Public Interface:**
+- **Props:** `VideoEntryCard` accepts a `video` object (containing video details) and a `platform` string as props.
+- **Functions:** The component provides functionality to update the video description, handle date/time selection, delete the video, and copy it to another platform.
+
+**How It Fits in the Project:**
+This component is part of the frontend application for managing social media content. It integrates with various hooks from the `@/api/hooks` module for CRUD operations on videos and uses state management from the `@/core/lib` store to manage drafts. The card fits into a larger system where multiple video entries are displayed and managed.
+
+**Notable Design Decisions:**
+- **State Management:** Uses React's `useState` and `useEffect` hooks to manage local state, including draft descriptions and scheduled times.
+- **Platform-Specific UI:** Conditionally renders input fields for YouTube-specific descriptions based on the platform.
+- **Date/Time Picker Integration:** Utilizes `@react-native-community/datetimepicker` for handling date and time selection.
+- **Error Handling:** Implements basic error handling by catching mutations during video updates without showing specific error messages to users.
+```
+
+This documentation provides a high-level overview of the component's role, its key features, how it integrates with other parts of the project, and some design choices made.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 22:08*
