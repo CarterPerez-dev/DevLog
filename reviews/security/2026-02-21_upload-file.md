@@ -1,0 +1,152 @@
+# upload_file
+
+**Type:** Security Review
+**Repository:** vuemantics
+**File:** backend/routers/v1/upload.py
+**Language:** python
+**Lines:** 133-205
+**Complexity:** 7.0
+
+---
+
+## Source Code
+
+```python
+async def upload_file(
+    request: Request,
+    file: Annotated[UploadFile,
+                    File(description = "File to upload")],
+    current_user: Annotated[User,
+                            Depends(get_current_user)],
+) -> UploadResponse:
+    """
+    Upload a new file
+
+    File is saved immediately and processing happens in background
+    Returns upload details with 'pending' status
+    """
+    # Generate upload ID early
+    upload_id = uuid4()
+
+    try:
+        file_content = await file.read()
+        file_size = len(file_content)
+
+        # Reset file position for saving
+        await file.seek(0)
+
+        file_type, extension = await storage_service.validate_file(
+            filename=file.filename or "unknown",
+            mime_type=file.content_type or "application/octet-stream",
+            file_size=file_size,
+        )
+
+        file_path = await storage_service.save_upload(
+            file_content = file.file,
+            user_id = current_user.id,
+            upload_id = upload_id,
+            extension = extension,
+        )
+
+        upload = await Upload.create(
+            user_id = current_user.id,
+            filename = file.filename or f"upload.{extension}",
+            file_path = file_path,
+            file_type = file_type,
+            file_size = file_size,
+            mime_type = file.content_type or "application/octet-stream",
+            metadata = {
+                "original_filename": file.filename,
+                "upload_source": "web",
+            },
+            upload_id = upload_id,
+        )
+
+        # Queue background processing (fire and forget)
+        task = asyncio.create_task(
+            process_upload_background(
+                upload_id = upload_id,
+                user_id = current_user.id,
+                file_type = file_type,
+                extension = extension,
+            )
+        )
+        # Store reference to prevent task from being garbage collected
+        task.add_done_callback(lambda t: t.exception())
+
+        logger.info(f"User {current_user.id} uploaded file {upload.id}")
+        return UploadResponse.model_validate(upload)
+
+    except StorageError as e:
+        logger.error(f"Storage error during upload: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during upload: {e}")
+        with contextlib.suppress(Exception):
+            await storage_service.delete_upload(current_user.id, upload_id)
+        raise
+```
+
+---
+
+## Security Review
+
+### Security Review for `upload_file` Function
+
+#### Vulnerabilities Found:
+
+1. **Error Handling (Critical):**
+   - The exception handling in the `except Exception as e:` block could leak sensitive information through error messages.
+   - **Severity:** Critical
+   - **Attack Vector:** An attacker could exploit this to gain insights into internal system operations and potentially craft malicious inputs.
+
+2. **Logging of Sensitive Information (High):**
+   - The log message includes the `current_user.id`, which might expose user IDs in logs, violating data privacy.
+   - **Severity:** High
+   - **Attack Vector:** An attacker could use this to correlate actions with specific users.
+
+3. **Hardcoded Secrets or Credentials (Low):**
+   - No hardcoded secrets are found in the snippet provided.
+
+4. **Input Validation Gaps (Medium):**
+   - The `file` object is not validated for malicious content before processing.
+   - **Severity:** Medium
+   - **Attack Vector:** An attacker could upload files with malicious payloads, leading to potential code execution or data corruption.
+
+#### Recommended Fixes:
+
+1. **Error Handling:**
+   - Use specific exception types instead of a generic `Exception` to avoid leaking sensitive information.
+   ```python
+   except StorageError as e:
+       logger.error(f"Storage error during upload: {e}")
+       raise
+   except asyncio.CancelledError:
+       pass  # Handle task cancellation if necessary
+   ```
+
+2. **Logging:**
+   - Avoid logging sensitive user data in logs.
+   ```python
+   logger.info(f"User uploaded file {upload.id}")
+   ```
+
+3. **Input Validation:**
+   - Validate and sanitize the `file` content before processing.
+   ```python
+   # Example validation function
+   def validate_file_content(file):
+       # Add your validation logic here
+       pass
+
+   if not validate_file_content(file):
+       raise ValueError("Invalid file content")
+   ```
+
+#### Overall Security Posture:
+
+The code has several critical and high-severity issues that could be exploited. Addressing these vulnerabilities will significantly improve the security posture of the application, ensuring that sensitive information is protected and potential attack vectors are mitigated.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 13:40*
