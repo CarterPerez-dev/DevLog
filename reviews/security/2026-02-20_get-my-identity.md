@@ -1,0 +1,149 @@
+# get_my_identity
+
+**Type:** Security Review
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/core/integrations/mcp/server.py
+**Language:** python
+**Lines:** 425-504
+**Complexity:** 10.0
+
+---
+
+## Source Code
+
+```python
+async def get_my_identity() -> dict:
+    """
+    Get Carter's full identity profile including:
+    - Basic info (name, age, background, role, goals)
+    - Skills with proficiency levels
+    - Interests and passion levels
+    - Strengths and weaknesses
+    - Brand voice and content preferences
+    - Platform goals
+
+    Use this to understand context about Carter when helping.
+    """
+    async with sessionmanager.session() as session:
+        identity = await IdentityRepository.get_identity(session)
+
+        return {
+            "name": identity.name,
+            "age": identity.age,
+            "background": identity.background,
+            "current_role": identity.current_role,
+            "primary_goal": identity.primary_goal,
+            "target_audience": identity.target_audience,
+            "skills": [
+                {
+                    "skill": s.skill,
+                    "proficiency": s.proficiency.value,
+                    "years_experience": s.years_experience,
+                    "context": s.context,
+                }
+                for s in identity.skills
+            ],
+            "interests": [
+                {
+                    "topic": i.topic,
+                    "passion_level": i.passion_level.value,
+                    "why": i.why,
+                }
+                for i in identity.interests
+            ],
+            "strengths": [
+                {
+                    "strength": s.strength,
+                    "source": s.source.value,
+                    "evidence": s.evidence,
+                }
+                for s in identity.strengths
+            ],
+            "weaknesses": [
+                {
+                    "weakness": w.weakness,
+                    "impact": w.impact,
+                    "workaround": w.workaround,
+                }
+                for w in identity.weaknesses
+            ],
+            "brand_voice": {
+                "tone": identity.brand_voice.tone if identity.brand_voice else None,
+                "sentence_structure": (
+                    identity.brand_voice.sentence_structure
+                    if identity.brand_voice
+                    else None
+                ),
+                "uses_analogies": (
+                    identity.brand_voice.uses_analogies
+                    if identity.brand_voice
+                    else None
+                ),
+            }
+            if identity.brand_voice
+            else None,
+            "platform_goals": [
+                {
+                    "platform": g.platform.value,
+                    "current_followers": g.current_followers,
+                    "goal_followers": g.goal_followers,
+                    "strategy": g.strategy,
+                }
+                for g in identity.platform_goals
+            ],
+        }
+```
+
+---
+
+## Security Review
+
+### Security Review for `get_my_identity`
+
+#### Vulnerabilities and Severity:
+
+1. **Information Exposure** - **Medium**
+   - The function returns detailed personal information, which could be sensitive.
+   - Ensure that only necessary data is exposed.
+
+2. **None Found** - No injection vulnerabilities (SQL, command), hardcoded secrets, race conditions, TOCTOU bugs, input validation gaps, or insecure deserialization issues were found in the provided code snippet.
+
+#### Attack Vectors:
+
+- An attacker could exploit information exposure to gain insights into Carter's profile.
+- Ensure data minimization and only return essential fields.
+
+#### Recommended Fixes:
+
+1. **Data Minimization** - Review and limit the returned data to only necessary fields.
+2. **Documentation Update** - Clearly document which fields are required for different use cases.
+
+```python
+async def get_my_identity(required_fields: List[str]) -> dict:
+    """
+    Get Carter's identity profile with specified fields.
+    """
+    async with sessionmanager.session() as session:
+        identity = await IdentityRepository.get_identity(session)
+
+        # Filter based on required fields
+        filtered_data = {
+            "name": identity.name,
+            "age": identity.age,
+            "background": identity.background,
+            "current_role": identity.current_role,
+            "primary_goal": identity.primary_goal,
+            "target_audience": identity.target_audience,
+            # Add other fields as needed
+        }
+
+        return filtered_data
+```
+
+#### Overall Security Posture:
+
+The current code is secure but can be improved by implementing data minimization and clear documentation. Ensure that all sensitive information is handled securely, especially when exposed to external interfaces.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 22:56*
