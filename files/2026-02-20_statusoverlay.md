@@ -1,0 +1,169 @@
+# StatusOverlay
+
+**Type:** File Overview
+**Repository:** angelamos-3d
+**File:** frontend/src/components/StatusOverlay/StatusOverlay.tsx
+**Language:** tsx
+**Lines:** 1-157
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+// ===================
+// © AngelaMos | 2026
+// StatusOverlay.tsx
+// ===================
+
+import { useState } from "react";
+import type { AngelaStatus } from "../../types";
+import styles from "./StatusOverlay.module.scss";
+
+interface StatusOverlayProps {
+	status: AngelaStatus;
+	transcript: string;
+	response: string;
+	error: string;
+	onTrigger: () => void;
+	onStop: () => void;
+	onMute: () => void;
+}
+
+const STATUS_LABELS: Record<AngelaStatus, string> = {
+	initializing: "Starting...",
+	idle: "Ready",
+	listening: "Listening",
+	processing: "Processing",
+	thinking: "Thinking",
+	speaking: "Speaking",
+	error: "Error",
+};
+
+export function StatusOverlay({
+	status,
+	transcript,
+	response,
+	error,
+	onTrigger,
+	onStop,
+	onMute,
+}: StatusOverlayProps) {
+	const [minimized, setMinimized] = useState(false);
+	const [hidden, setHidden] = useState(false);
+
+	if (hidden) {
+		return (
+			<button
+				type="button"
+				className={styles.showButton}
+				onClick={() => setHidden(false)}
+				title="Show Angela status"
+			>
+				<span className={styles.showDot} />
+			</button>
+		);
+	}
+
+	const isActive =
+		status === "listening" ||
+		status === "processing" ||
+		status === "thinking" ||
+		status === "speaking";
+	const canTrigger = status === "idle";
+
+	return (
+		<div className={`${styles.overlay} ${minimized ? styles.minimized : ""}`}>
+			<div className={styles.header}>
+				<button
+					type="button"
+					className={`${styles.statusButton} ${canTrigger ? styles.clickable : ""}`}
+					onClick={canTrigger ? onTrigger : undefined}
+					disabled={!canTrigger}
+					title={canTrigger ? "Click to activate" : undefined}
+				>
+					<span
+						className={`${styles.statusDot} ${styles[status]} ${isActive ? styles.pulse : ""}`}
+					/>
+					<span className={styles.statusLabel}>{STATUS_LABELS[status]}</span>
+				</button>
+
+				<div className={styles.controls}>
+					{status === "speaking" && (
+						<button
+							type="button"
+							className={`${styles.controlButton} ${styles.muteButton}`}
+							onClick={onMute}
+							title="Mute (skip audio)"
+						>
+							🔇
+						</button>
+					)}
+					{isActive && (
+						<button
+							type="button"
+							className={`${styles.controlButton} ${styles.stopButton}`}
+							onClick={onStop}
+							title="Stop everything"
+						>
+							■
+						</button>
+					)}
+					<button
+						type="button"
+						className={styles.controlButton}
+						onClick={() => setMinimized(!minimized)}
+						title={minimized ? "Expand" : "Minimize"}
+					>
+						{minimized ? "+" : "−"}
+					</button>
+					<button
+						type="button"
+						className={styles.controlButton}
+						onClick={() => setHidden(true)}
+						title="Hide"
+					>
+						×
+					</button>
+				</div>
+			</div>
+
+			{!minimized && (
+				<div className={styles.content}>
+					{error && <div className={styles.error}>{error}</div>}
+
+					{transcript && (
+						<div className={styles.message}>
+							<span className={styles.messageLabel}>You</span>
+							<p className={styles.messageText}>{transcript}</p>
+						</
+```
+
+---
+
+## File Overview
+
+# StatusOverlay.tsx Documentation
+
+## Purpose and Responsibility
+This file defines a React component, `StatusOverlay`, which displays the current status of AngelaMos, an AI assistant application. It dynamically updates based on the status and provides controls for interaction.
+
+## Key Exports or Public Interface
+- **`StatusOverlay`**: The main functional component that renders the status overlay with interactive elements.
+  - Props: `status`, `transcript`, `response`, `error`, `onTrigger`, `onStop`, `onMute`.
+
+## How it Fits in the Project
+The `StatusOverlay` component is a crucial part of the user interface, providing real-time feedback on AngelaMos's state. It integrates with other components and services to display relevant information and controls, enhancing the user experience.
+
+## Notable Design Decisions
+- **Conditional Rendering**: The component conditionally renders different UI elements based on the current status (`status`, `transcript`, `response`, etc.), ensuring that only pertinent information is displayed.
+- **State Management**: Utilizes React's `useState` hook to manage the visibility and minimization state of the overlay, providing a responsive user interface.
+- **Accessibility**: The component includes accessibility attributes like `title` for tooltips, enhancing usability.
+- **Modularity**: The use of CSS modules (`StatusOverlay.module.scss`) ensures that styles are scoped locally, promoting clean separation between presentation and logic.
+
+This design allows for flexible integration into the larger application while maintaining a clear and intuitive user interface.
+
+---
+
+*Generated by CodeWorm on 2026-02-20 23:54*
