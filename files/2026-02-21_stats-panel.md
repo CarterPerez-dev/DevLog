@@ -1,0 +1,156 @@
+# stats-panel
+
+**Type:** File Overview
+**Repository:** CodeWorm
+**File:** dashboard/frontend/src/components/stats-panel/stats-panel.tsx
+**Language:** tsx
+**Lines:** 1-184
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+// ©AngelaMos | 2026
+// stats-panel.tsx
+
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { useLanguages, useStats } from '@/api/hooks'
+import styles from './stats-panel.module.scss'
+
+const LANG_COLORS = [
+  '#c15f3c',
+  '#a855f7',
+  '#4ade80',
+  '#facc15',
+  '#ef4444',
+  '#f97316',
+  '#ec4899',
+  '#6366f1',
+]
+
+interface TooltipProps {
+  active?: boolean
+  payload?: Array<{ name: string; value: number; payload: { language?: string; name?: string }; color?: string }>
+}
+
+function PieTooltip({ active, payload }: TooltipProps): React.ReactElement | null {
+  if (!active || !payload?.length) return null
+  const item = payload[0]
+  return (
+    <div className={styles.tooltip}>
+      <div className={styles.tooltipRow}>
+        <span className={styles.tooltipDot} style={{ background: item.color }} />
+        <span className={styles.tooltipLabel}>{item.payload.language}</span>
+      </div>
+      <div className={styles.tooltipValue}>{item.value.toLocaleString()} docs</div>
+    </div>
+  )
+}
+
+function BarTooltip({ active, payload }: TooltipProps): React.ReactElement | null {
+  if (!active || !payload?.length) return null
+  const item = payload[0]
+  return (
+    <div className={styles.tooltip}>
+      <div className={styles.tooltipLabel}>{item.payload.name}</div>
+      <div className={styles.tooltipValue}>{item.value.toLocaleString()} docs</div>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  highlight,
+}: {
+  label: string
+  value: number
+  highlight?: boolean
+}): React.ReactElement {
+  return (
+    <div className={styles.statCard}>
+      <div className={`${styles.statValue} ${highlight ? styles.highlight : ''}`}>
+        {value.toLocaleString()}
+      </div>
+      <div className={styles.statLabel}>{label}</div>
+    </div>
+  )
+}
+
+export function StatsPanel(): React.ReactElement {
+  const { data: stats } = useStats()
+  const { data: languages } = useLanguages()
+
+  const repoData = stats
+    ? Object.entries(stats.by_repo)
+        .map(([name, count]) => ({ name: name.split('/').pop() ?? name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+    : []
+
+  return (
+    <div>
+      <div className={styles.grid}>
+        <StatCard
+          label="Total Documented"
+          value={stats?.total_documented ?? 0}
+          highlight
+        />
+        <StatCard label="Today" value={stats?.today ?? 0} />
+        <StatCard label="Last 7 Days" value={stats?.last_7_days ?? 0} />
+        <StatCard label="Last 30 Days" value={stats?.last_30_days ?? 0} />
+      </div>
+
+      <div className={styles.charts}>
+        <div className={styles.chartCard}>
+          <div className={styles.chartTitle}>Languages</div>
+          {languages && languages.length > 0 ? (
+            <>
+              <div className={styles.chartWrap}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      dat
+```
+
+---
+
+## File Overview
+
+# stats-panel.tsx Documentation
+
+## Purpose and Responsibility
+This file is responsible for rendering a dashboard component that displays key statistics about code documentation, including total documented files, daily counts, and breakdowns by repository and programming language.
+
+## Key Exports or Public Interface
+- **StatCard**: A reusable card component to display statistical data.
+- **PieTooltip** and **BarTooltip**: Custom tooltips for pie and bar charts respectively.
+- **StatsPanel**: The main component that composes various chart elements and statistics cards.
+
+## How It Fits in the Project
+This file is part of the frontend dashboard module, which provides visual insights into project documentation metrics. `useLanguages` and `useStats` hooks fetch data from backend APIs, while `recharts` components render interactive charts and tooltips. The component integrates with other UI elements to provide a cohesive user experience.
+
+## Notable Design Decisions
+- **Custom Tooltips**: Custom tooltips are implemented for better user interaction and clarity.
+- **Responsive Charts**: Use of `ResponsiveContainer` ensures that the charts adapt well to different screen sizes.
+- **Color Coding**: A predefined color palette (`LANG_COLORS`) is used to visually differentiate languages in the pie chart.
+- **Conditional Rendering**: The component conditionally renders based on available data, displaying "No data yet" messages when necessary.
+```
+
+This documentation provides a high-level overview of the file's purpose, key components, integration within the project, and notable design choices.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 08:05*
