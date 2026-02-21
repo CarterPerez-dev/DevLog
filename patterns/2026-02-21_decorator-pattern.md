@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/auth/auth_required.py
+**File:** backend/api/core/auth/auth_optional.py
 **Language:** python
-**Lines:** 1-106
+**Lines:** 1-56
 **Complexity:** 0.0
 
 ---
@@ -13,8 +13,8 @@
 
 ```python
 """
-Unified authentication decorator supporting both User and AdminUser access.
-/api/core/auth/auth_required.py
+Optional authentication decorator: FUTURE USE
+/api/core/auth/auth_optional.py
 """
 
 from typing import Any
@@ -24,49 +24,25 @@ from flask import g, request, session
 from flask_jwt_extended import (
     get_jwt_identity,
     verify_jwt_in_request,
-    get_jwt,
 )
 from api.domains.account.models.User import User
-from api.admin.models.users.AdminUser import AdminUser
-from .unified_auth import UnifiedAuthService
-from .user_cache import get_cached_user, cache_user
 
 
-def auth_required(fn: Callable[..., Any]) -> Callable[..., Any]:
+def auth_optional(fn: Callable[..., Any]) -> Callable[..., Any]:
     """
-    Unified decorator supporting authentication
+    Decorator that allows optional authentication.
     """
     @wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any | tuple[dict, int]:
-        user_id: str | None = None
-        user: User | None = None
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
 
+        user_id: str | None = None
         try:
             verify_jwt_in_request(optional = True)
-            jwt_identity = get_jwt_identity()
-
-            if jwt_identity:
-                jwt_claims = get_jwt()
-                is_admin_token = jwt_claims.get("is_admin", False)
-
-                if is_admin_token:
-                    admin_user = AdminUser.objects(id = jwt_identity
-                                                   ).first()
-                    if admin_user:
-                        user = UnifiedAuthService.get_user_for_admin(
-                            admin_user
-                        )
-                        if user:
-                            user_id = str(user.id)
-                        else:
-                            return {
-                                "error": "Admin account not linked to user account",
-                                "status": "unauthenticated",
-                                "hint": "Contact administrator to link your admin account"
-                            }, 401
-                else:
-                    user_id = jwt_identity
-
+            user_id = get_jwt_identity()
+            if user_id:
+                pass
+            else:
+                user_id = None
         except Exception:
             user_id = None
 
@@ -76,36 +52,22 @@ def auth_required(fn: Callable[..., Any]) -> Callable[..., Any]:
         if not user_id:
             user_id = request.headers.get("X-User-Id")
 
-        if not user_id:
-            return {
-                "error": "Authentication required",
-                "status": "unauthenticated",
-            }, 401
+        g.user_id = None
+        g.user = None
 
-        if not user:
+        if user_id:
             try:
-                user = get_cached_user(user_id)
-
-                if not user:
-                    user = User.objects(id = user_id).first()
-                    if user:
-                        cache_user(user)
-                    else:
-                        return {
-                            "error": "Invalid user",
-                            "status": "unauthenticated",
-                        }, 401
+                user: User | None = User.objects(id = user_id).first()
+                if user:
+                    g.user_id = user_id
+                    g.user = user
             except Exception:
-                return {
-                    "error": "Authentication error",
-                    "status": "unauthenticated",
-                }, 401
+                pass  # nosec B110
 
-        g.user_id = user_id
-        g.user = user
+        return fn(*args, **kwargs)
 
-        if user.is_admin:
-            admin_user = Unified
+    return wrapper
+
 ```
 
 ---
@@ -116,23 +78,28 @@ def auth_required(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 **Pattern Used:** Decorator Pattern
 
-The `auth_required` decorator in the provided code implements the **Decorator Pattern**, which allows for adding new functionality to an existing object without modifying its structure.
+The `auth_optional` decorator is implemented to optionally authenticate users based on JWT or session headers. Here’s a breakdown:
 
-#### Implementation Details:
-- The `auth_required` function wraps another function (`fn`) and provides authentication logic before executing it. It checks if a JWT token is present, retrieves user information from it (or session/headers), caches the user data, and sets necessary attributes in the global context (`g.user_id`, `g.user`, `g.admin_user`, `g.has_admin_access`).
+1. **Implementation:**
+   - The function `auth_optional` takes a callable `fn` and returns another callable.
+   - It uses the `verify_jwt_in_request` method from Flask-JWT-Extended with the `optional=True` parameter to allow for optional authentication.
+   - If no JWT is present, it checks session data or headers for a user ID.
 
-#### Benefits:
-- **Flexibility:** The decorator can be applied to any function that requires authentication, making the code reusable.
-- **Modularity:** Authentication logic is separated from business logic, improving maintainability and testability.
-- **Centralized Security Handling:** Ensures consistent security checks across multiple endpoints.
+2. **Benefits:**
+   - Flexibility in handling authenticated and unauthenticated requests.
+   - Centralized authentication logic that can be easily applied to any function requiring optional authentication.
+   - Improved code readability by abstracting the authentication process.
 
-#### Deviations:
-- The implementation uses `flask` context (`g`) for storing user-related data, which is a deviation from the standard decorator pattern that typically returns a new function or object without altering the original structure significantly.
-- The use of exception handling and conditional logic to handle different authentication scenarios adds complexity but ensures robustness.
+3. **Deviations from Standard Pattern:**
+   - The decorator does not modify or wrap the original function's behavior directly but rather sets up global context (`g.user_id` and `g.user`) which can be used within the decorated function.
+   - It handles exceptions by setting `user_id` to `None`, which is a deviation from typical pattern where such errors might raise an exception.
 
-#### Appropriate Use Cases:
-This pattern is appropriate in web applications where multiple endpoints require consistent authentication checks. It is particularly useful in frameworks like Flask, where decorators can be easily applied to routes or functions without altering their structure. However, it may not be as suitable for simpler scripts or scenarios where the overhead of a decorator might be unnecessary.
+4. **Appropriateness:**
+   - This pattern is appropriate when you need to handle both authenticated and unauthenticated requests in a consistent manner, especially in APIs that support JWT tokens but also allow for other authentication methods.
+   - It’s useful in scenarios where the presence of a user ID is not mandatory for all operations.
+
+This decorator ensures that the code remains clean and focused on its primary logic while abstracting away the complexities of handling different authentication mechanisms.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 13:37*
+*Generated by CodeWorm on 2026-02-21 14:25*
