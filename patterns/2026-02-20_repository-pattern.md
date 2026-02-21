@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** Cybersecurity-Projects
-**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/user/service.py
+**File:** TEMPLATES/fullstack-template/examples/minimal-production/backend/app/user/repository.py
 **Language:** python
-**Lines:** 1-95
+**Lines:** 1-92
 **Complexity:** 0.0
 
 ---
@@ -14,98 +14,95 @@
 ```python
 """
 ⒸAngelaMos | 2025
-service.py
+repository.py
 """
-
 from uuid import UUID
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-)
 
-from core.exceptions import (
-    EmailAlreadyExists,
-    InvalidCredentials,
-    UserNotFound,
-)
-from core.security import (
-    hash_password,
-    verify_password,
-)
-from .schemas import (
-    UserCreate,
-    UserResponse,
-)
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from .User import User
-from .repository import UserRepository
+from core.base_repository import BaseRepository
 
 
-class UserService:
+class UserRepository(BaseRepository[User]):
     """
-    Business logic for user operations
+    Repository for User model database operations
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    model = User
 
-    async def create_user(
-        self,
-        user_data: UserCreate,
-    ) -> UserResponse:
+    @classmethod
+    async def get_by_email(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> User | None:
         """
-        Register a new user
+        Get user by email address
         """
-        if await UserRepository.email_exists(self.session,
-                                             user_data.email):
-            raise EmailAlreadyExists(user_data.email)
-
-        hashed = await hash_password(user_data.password)
-        user = await UserRepository.create_user(
-            self.session,
-            email = user_data.email,
-            hashed_password = hashed,
+        result = await session.execute(
+            select(User).where(User.email == email)
         )
-        return UserResponse.model_validate(user)
+        return result.scalars().first()
 
-    async def get_user_by_id(
-        self,
-        user_id: UUID,
-    ) -> UserResponse:
+    @classmethod
+    async def get_by_id(
+        cls,
+        session: AsyncSession,
+        id: UUID,
+    ) -> User | None:
         """
         Get user by ID
         """
-        user = await UserRepository.get_by_id(self.session, user_id)
-        if not user:
-            raise UserNotFound(str(user_id))
-        return UserResponse.model_validate(user)
+        return await session.get(User, id)
 
-    async def change_password(
-        self,
-        user: User,
-        current_password: str,
-        new_password: str,
-    ) -> None:
+    @classmethod
+    async def email_exists(
+        cls,
+        session: AsyncSession,
+        email: str,
+    ) -> bool:
         """
-        Change user password
+        Check if email is already registered
         """
-        is_valid, _ = await verify_password(current_password, user.hashed_password)
-        if not is_valid:
-            raise InvalidCredentials()
-
-        hashed = await hash_password(new_password)
-        await UserRepository.update_password(self.session, user, hashed)
-
-    async def deactivate_user(
-        self,
-        user: User,
-    ) -> UserResponse:
-        """
-        Deactivate user account
-        """
-        updated = await UserRepository.update(
-            self.session,
-            user,
-            is_active = False
+        result = await session.execute(
+            select(User.id).where(User.email == email)
         )
-        return UserResponse.model_validate(updated)
+        return result.scalars().first() is not None
+
+    @classmethod
+    async def create_user(
+        cls,
+        session: AsyncSession,
+        email: str,
+        hashed_password: str,
+    ) -> User:
+        """
+        Create a new user
+        """
+        user = User(
+            email = email,
+            hashed_password = hashed_password,
+        )
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
+
+    @classmethod
+    async def update_password(
+        cls,
+        session: AsyncSession,
+        user: User,
+        hashed_password: str,
+    ) -> User:
+        """
+        Update user password
+        """
+        user.hashed_password = hashed_password
+        await session.flush()
+        await session.refresh(user)
+        return user
 
 ```
 
@@ -118,20 +115,20 @@ class UserService:
 **Pattern Used:** Repository Pattern
 
 **Implementation:**
-The `UserService` class encapsulates business logic for user operations, delegating data access to the `UserRepository`. Methods like `create_user`, `get_user_by_id`, and `deactivate_user` interact with the repository through asynchronous methods. For example, `create_user` checks if an email already exists using `email_exists` from `UserRepository`.
+The `UserRepository` class in the provided code implements the repository pattern, which abstracts data access operations for a specific entity (`User`). It provides methods to perform CRUD (Create, Read, Update, Delete) operations on the database. Each method is a class method that takes an `AsyncSession` and operates on instances of the `User` model.
 
 **Benefits:**
-- **Separation of Concerns:** The business logic is separated from data access concerns.
-- **Testability:** Repository methods can be easily mocked or replaced for unit testing.
-- **Flexibility:** Easier to switch between different database implementations.
+1. **Encapsulation:** The repository encapsulates all data access logic, making it easier to switch between different databases or storage mechanisms.
+2. **Testability:** By abstracting database operations, unit tests can be more easily written without needing a real database.
+3. **Separation of Concerns:** It keeps business logic separate from data access logic.
 
 **Deviations:**
-- The `UserRepository` is not explicitly defined as a separate class; instead, its methods are called directly within the `UserService`.
-- There's no explicit transaction management, which might be necessary in more complex scenarios involving multiple repository operations.
+- The repository does not include methods for deleting (`Delete`) or querying multiple entities, which are common in the standard pattern.
+- The `BaseRepository` class is used as a base class to define common behavior, but specific implementations (like `UserRepository`) still handle model-specific operations directly.
 
 **Appropriateness:**
-This pattern is appropriate for this context where the business logic and data access responsibilities are clearly separated. It provides a good balance between simplicity and maintainability, making it easier to manage and test user-related operations. However, if the application grows or requires more complex transactional behavior, additional patterns like Unit of Work might be considered.
+This pattern is appropriate when you need to abstract database interactions and ensure that your application logic remains decoupled from the data access layer. It's particularly useful in larger applications where multiple entities have similar CRUD operations, but here it seems tailored specifically for `User` management.
 
 ---
 
-*Generated by CodeWorm on 2026-02-20 21:24*
+*Generated by CodeWorm on 2026-02-20 21:40*
