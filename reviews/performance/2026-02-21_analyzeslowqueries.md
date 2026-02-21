@@ -1,0 +1,146 @@
+# AnalyzeSlowQueries
+
+**Type:** Performance Analysis
+**Repository:** angelamos-operations
+**File:** CertGamesDB-Argos/go-backend/internal/metrics/service.go
+**Language:** go
+**Lines:** 307-407
+**Complexity:** 15.0
+
+---
+
+## Source Code
+
+```go
+func (s *Service) AnalyzeSlowQueries(ctx context.Context, minMillis, limit int) (*SlowQueryAnalysis, error) {
+	queries, err := s.repo.GetSlowQueries(ctx, s.database, minMillis, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get slow queries: %w", err)
+	}
+
+	collectionMap := make(map[string]*collectionAggregator)
+	operationMap := make(map[string]*operationAggregator)
+	suggestionMap := make(map[string]*IndexSuggestion)
+
+	for _, q := range queries {
+		if agg, ok := collectionMap[q.Namespace]; ok {
+			agg.count++
+			agg.totalMillis += q.MillisRuntime
+			if q.MillisRuntime > agg.maxMillis {
+				agg.maxMillis = q.MillisRuntime
+			}
+		} else {
+			collectionMap[q.Namespace] = &collectionAggregator{
+				namespace:   q.Namespace,
+				count:       1,
+				totalMillis: q.MillisRuntime,
+				maxMillis:   q.MillisRuntime,
+			}
+		}
+
+		if agg, ok := operationMap[q.Op]; ok {
+			agg.count++
+			agg.totalMillis += q.MillisRuntime
+		} else {
+			operationMap[q.Op] = &operationAggregator{
+				operation:   q.Op,
+				count:       1,
+				totalMillis: q.MillisRuntime,
+			}
+		}
+
+		if q.PlanSummary == "COLLSCAN" && q.DocsExamined > 100 {
+			key := q.Namespace + ":COLLSCAN"
+			if sug, ok := suggestionMap[key]; ok {
+				sug.Occurrences++
+			} else {
+				suggestionMap[key] = &IndexSuggestion{
+					Collection:     q.Namespace,
+					SuggestedIndex: []string{"_id"},
+					Reason:         "Collection scan detected with high document examination",
+					QueryPattern:   "COLLSCAN",
+					Occurrences:    1,
+				}
+			}
+		}
+
+		if q.KeysExamined > 0 && q.DocsExamined > q.KeysExamined*10 {
+			key := q.Namespace + ":INEFFICIENT_INDEX"
+			if sug, ok := suggestionMap[key]; ok {
+				sug.Occurrences++
+			} else {
+				suggestionMap[key] = &IndexSuggestion{
+					Collection:     q.Namespace,
+					SuggestedIndex: []string{"examine query filter fields"},
+					Reason:         fmt.Sprintf("Inefficient index usage: %d docs examined vs %d keys", q.DocsExamined, q.KeysExamined),
+					QueryPattern:   q.PlanSummary,
+					Occurrences:    1,
+				}
+			}
+		}
+	}
+
+	var topCollections []CollectionStats
+	for _, agg := range collectionMap {
+		topCollections = append(topCollections, CollectionStats{
+			Namespace: agg.namespace,
+			Count:     agg.count,
+			AvgMillis: float64(agg.totalMillis) / float64(agg.count),
+			MaxMillis: agg.maxMillis,
+		})
+	}
+
+	var topOperations []OperationStats
+	for _, agg := range operationMap {
+		topOperations = append(topOperations, OperationStats{
+			Operation: agg.operation,
+			Count:     agg.count,
+			AvgMillis: float64(agg.totalMillis) / float64(agg.count),
+		})
+	}
+
+	var suggestions []IndexSuggestion
+	for _, sug := range suggestionMap {
+		suggestions = append(suggestions, *sug)
+	}
+
+	return &SlowQueryAnalysis{
+		Database:        s.database,
+		TotalQueries:    len(queries),
+		AnalyzedQueries: len(queries),
+		Suggestions:     suggestions,
+		TopCollections:  topCollections,
+		TopOperations:   topOperations,
+	}, nil
+}
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of the `AnalyzeSlowQueries` function is \(O(n \cdot m)\), where \(n\) is the number of slow queries and \(m\) is the average length of operations (e.g., `Namespace`, `Op`). This is due to the nested loops and map lookups.
+
+#### Space Complexity
+The space complexity is \(O(k + l + s)\), where \(k\) is the number of unique collections, \(l\) is the number of unique operations, and \(s\) is the number of suggestions. The maps `collectionMap`, `operationMap`, and `suggestionMap` store these aggregations.
+
+#### Bottlenecks or Inefficiencies
+1. **Redundant Operations**: The function performs multiple map lookups for each query, which can be costly if there are many queries.
+2. **Unnecessary Iteration**: The nested loops over the `queries` slice and subsequent map updates could be optimized to reduce redundant operations.
+
+#### Optimization Opportunities
+1. **Use of Maps**: Consider using a single map with composite keys (e.g., `Namespace:Op`) for both collections and operations to reduce the number of lookups.
+2. **Batch Processing**: If the number of queries is large, consider processing them in batches to avoid excessive memory usage.
+
+#### Resource Usage Concerns
+- Ensure that the `repo.GetSlowQueries` method handles context cancellation properly to prevent blocking calls.
+- The function does not appear to have any resource leaks, but ensure that all database connections and file handles are closed appropriately if used elsewhere.
+
+By optimizing map lookups and reducing redundant operations, you can improve the performance of this function.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 16:53*
