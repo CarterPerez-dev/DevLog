@@ -1,0 +1,135 @@
+# generator
+
+**Type:** File Overview
+**Repository:** CodeWorm
+**File:** codeworm/llm/generator.py
+**Language:** python
+**Lines:** 1-350
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+llm/generator.py
+"""
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from dataclasses import dataclass
+
+from typing import TYPE_CHECKING
+
+from codeworm.core import get_logger
+from codeworm.llm.client import (
+    OllamaClient,
+)
+from codeworm.llm.prompts import (
+    PromptBuilder,
+    build_commit_prompt,
+    build_documentation_prompt,
+)
+from codeworm.models import DocType
+
+if TYPE_CHECKING:
+    from codeworm.analysis import AnalysisCandidate
+    from codeworm.analysis.targets import DocumentationTarget
+    from codeworm.core.config import OllamaSettings, PromptSettings
+
+
+logger = get_logger("generator")
+
+DOC_TYPE_LABELS: dict[DocType,
+                      str] = {
+                          DocType.FUNCTION_DOC: "Documentation",
+                          DocType.CLASS_DOC: "Class Documentation",
+                          DocType.FILE_DOC: "File Overview",
+                          DocType.MODULE_DOC: "Module Overview",
+                          DocType.SECURITY_REVIEW: "Security Review",
+                          DocType.PERFORMANCE_ANALYSIS: "Performance Analysis",
+                          DocType.TIL: "Today I Learned",
+                          DocType.CODE_EVOLUTION: "Code Evolution",
+                          DocType.PATTERN_ANALYSIS: "Pattern Analysis",
+                          DocType.WEEKLY_SUMMARY: "Weekly Summary",
+                          DocType.MONTHLY_SUMMARY: "Monthly Summary",
+                      }
+
+
+@dataclass
+class GeneratedDocumentation:
+    """
+    Generated documentation for a code snippet
+    """
+    content: str
+    commit_message: str
+    snippet_filename: str
+    generated_at: datetime
+    tokens_used: int
+    generation_time_ms: int
+    doc_type: DocType = DocType.FUNCTION_DOC
+
+    @property
+    def word_count(self) -> int:
+        return len(self.content.split())
+
+    def to_markdown(self, candidate: AnalysisCandidate) -> str:
+        """
+        Format as markdown file content for AnalysisCandidate (legacy)
+        """
+        return self._format_markdown(
+            display_name = candidate.snippet.display_name,
+            repo = candidate.snippet.repo,
+            file_path = str(candidate.scanned_file.relative_path),
+            language = candidate.snippet.language.value,
+            start_line = candidate.snippet.start_line,
+            end_line = candidate.snippet.end_line,
+            complexity = candidate.snippet.complexity,
+            source = candidate.snippet.source,
+        )
+
+    def to_markdown_from_target(self, target: DocumentationTarget) -> str:
+        """
+        Format as markdown file content for DocumentationTarget
+        """
+        return self._format_markdown(
+            display_name = target.display_name,
+            repo = target.snippet.repo,
+            file_path = target.metadata.get(
+                "relative_path",
+                str(target.snippet.file_path)
+            ),
+            language = target.snippet.language.val
+```
+
+---
+
+## File Overview
+
+### generator.py
+
+**Purpose and Responsibility:**
+This Python file is responsible for generating documentation for code snippets using a language model (LLM). It leverages an `OllamaClient` to interact with the LLM, utilizing prompts constructed by `PromptBuilder`. The generated documentation includes detailed comments and metadata about the code snippet.
+
+**Key Exports and Public Interface:**
+- **GeneratedDocumentation:** A dataclass representing the generated documentation for a code snippet.
+  - Properties include content, commit message, filename, generation time, tokens used, and document type.
+  - Methods to format the documentation as markdown for different use cases.
+- **DocumentationGenerator:** A class responsible for generating documentation using an `OllamaClient`.
+  - It initializes with an LLM client and optional prompt settings.
+  - The `generate` method constructs prompts and retrieves responses from the LLM.
+
+**How it Fits into the Project:**
+This file is a crucial component of CodeWorm, which aims to analyze and document code. By generating high-quality documentation automatically, it enhances the project's ability to provide detailed insights into codebases. It integrates with other modules like `analysis` for candidate selection and `core` for configuration management.
+
+**Notable Design Decisions:**
+- **Dataclass Usage:** The use of dataclasses (`GeneratedDocumentation`) ensures type safety and easy serialization.
+- **Prompt Construction:** Prompts are dynamically built using `PromptBuilder`, allowing flexibility in the generation process.
+- **Asynchronous Operations:** Asynchronous methods like `generate` ensure efficient handling of LLM requests, making the system responsive.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 07:06*
