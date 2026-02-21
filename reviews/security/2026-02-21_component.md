@@ -1,0 +1,153 @@
+# Component
+
+**Type:** Security Review
+**Repository:** vuemantics
+**File:** frontend/src/routes/upload/index.tsx
+**Language:** tsx
+**Lines:** 32-251
+**Complexity:** 19.0
+
+---
+
+## Source Code
+
+```tsx
+function Component(): React.ReactElement {
+  const {
+    fileQueue,
+    addFiles,
+    removeFile,
+    clearQueue,
+    setDragActive,
+    dragActive,
+    setCurrentBatchId,
+  } = useBulkUploadUIStore()
+
+  const { data: clientConfig } = useClientConfig()
+  const maxFileSizeBytes = (clientConfig?.max_upload_size_mb ?? 100) * 1024 * 1024
+
+  const createBulkUpload = useCreateBulkUpload()
+
+  const { batchProgress, setBatchProgress, setCurrentFile } =
+    useGlobalBatchProgress()
+  const { currentFile, handleFileProgress } = useFileProgress()
+
+  useSocket({
+    enabled: true,
+    onBatchProgress: (data) => {
+      setBatchProgress(data.payload.batch_id, {
+        status: data.payload.status,
+        total: data.payload.total,
+        processed: data.payload.processed,
+        successful: data.payload.successful,
+        failed: data.payload.failed,
+        progressPercentage: data.payload.progress_percentage,
+      })
+    },
+    onFileProgress: (data) => {
+      handleFileProgress(data)
+      // Also update global store for header indicator
+      if (data.payload.status === 'processing') {
+        setCurrentFile({
+          uploadId: data.payload.upload_id,
+          fileName: data.payload.file_name,
+          fileSize: data.payload.file_size,
+          progress: data.payload.progress_percentage,
+          status: data.payload.status,
+        })
+      } else {
+        setCurrentFile(null)
+      }
+    },
+  })
+
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
+    const maxSizeMB = clientConfig?.max_upload_size_mb ?? 100
+    if (file.size > maxFileSizeBytes) {
+      return { valid: false, error: `Too large (max ${maxSizeMB}MB)` }
+    }
+
+    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
+      return { valid: false, error: 'Unsupported file type' }
+    }
+
+    return { valid: true }
+  }
+
+  const handleDrag = (e: React.DragEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const processFiles = (files: FileList | File[]): void => {
+    const fileArray = Array.from(files)
+    const newQueuedFiles: QueuedFile[] = []
+
+    // Check for duplicates in existing queue
+    const existingNames = new Set(fileQueue.map((f) => f.file.name))
+
+    fileArray.forEach((file) => {
+      const validation = validateFile(file)
+      const isDuplicate = existingNames.has(file.name)
+
+      const queuedFile: QueuedFile = {
+        id: `${Date.now()}-${Math.random()}`,
+        file,
+        status: isDuplicate
+          ? 'duplicate'
+          : validation.valid
+            ? 'valid'
+            : validation.error?.includes('large')
+              ? 'too-large'
+              : 'unsupported',
+        error: isDuplicate ? 'Already in queue' : validation.error,
+      }
+
+      // Generate preview for images
+      if (file.type.startsWith('image/') && validation.valid) {
+       
+```
+
+---
+
+## Security Review
+
+### Security Review for `Component` in `/home/yoshi/dev/CURRENT/vuemantics/frontend/src/routes/upload/index.tsx`
+
+#### Vulnerabilities and Severity:
+
+1. **Input Validation Gaps (Medium)**
+   - **Line 89-107**: The `validateFile` function does not validate file names or content, which could allow for malicious files to bypass validation.
+   
+2. **Hardcoded Secrets or Credentials (Info)**
+   - No hardcoded secrets found in the provided code snippet.
+
+3. **Error Handling that Leaks Information (Low)**
+   - **Line 147**: The `toast.error` and `toast.success` calls could leak information about the state of the application, but this is mitigated by using toast notifications which are generally safe for user-facing errors.
+
+#### Attack Vectors:
+
+- An attacker could upload files with malicious content that bypasses validation.
+- Error messages from `toast` could provide insights into the system's internal state.
+
+#### Recommended Fixes:
+
+1. **Enhance Input Validation (Line 89-107)**
+   - Validate file names to prevent directory traversal attacks.
+   - Implement a content scanning mechanism for files, especially if they are of types that can contain executable code or other malicious payloads.
+
+2. **Refine Error Handling (Line 147)**
+   - Ensure error messages do not leak sensitive information about the application's internal state.
+
+#### Overall Security Posture:
+
+The component has some vulnerabilities related to input validation and error handling, but these can be mitigated with proper validation and secure error messaging practices. The overall security posture is moderate; addressing the identified issues will significantly improve the robustness of the upload functionality.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 12:57*
