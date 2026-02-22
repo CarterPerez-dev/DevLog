@@ -1,0 +1,119 @@
+# get_current_metrics
+
+**Type:** Performance Analysis
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/routes/performance.rs
+**Language:** rust
+**Lines:** 81-163
+**Complexity:** 7.0
+
+---
+
+## Source Code
+
+```rust
+pub async fn get_current_metrics(
+    State(app_state): State<AppState>,
+    Query(params): Query<MetricsQuery>,
+) -> Result<JsonResponse<CurrentMetricsResponse>> {
+    info!("Fetching current performance metrics");
+
+    // Collect system metrics
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let system_perf = SystemPerformance {
+        cpu_usage_percent: system.global_cpu_info().cpu_usage() as f64,
+        memory_usage_percent: {
+            let total = system.total_memory() as f64;
+            let available = system.available_memory() as f64;
+            ((total - available) / total) * 100.0
+        },
+        memory_total_gb: system.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+        memory_available_gb: system.available_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+        disk_usage_percent: {
+            if let Some(disk) = system.disks().first() {
+                let total = disk.total_space() as f64;
+                let available = disk.available_space() as f64;
+                ((total - available) / total) * 100.0
+            } else {
+                0.0
+            }
+        },
+        load_average_1m: system.load_average().one,
+        load_average_5m: system.load_average().five,
+        load_average_15m: system.load_average().fifteen,
+        uptime_seconds: system.uptime(),
+        active_processes: system.processes().len() as u32,
+    };
+
+    let cpu_threads = system.cpus().len() as u32;
+    let cpu_cores = system.physical_core_count()
+        .map(|c| c as u32)
+        .unwrap_or_else(|| {
+            if cpu_threads > 0 { (cpu_threads / 2).max(1) } else { 1 }
+        });
+
+    let hardware_info = HardwareInfo {
+        cpu_model: if system.global_cpu_info().brand().is_empty() {
+            "Unknown CPU".to_string()
+        } else {
+            system.global_cpu_info().brand().to_string()
+        },
+        cpu_cores,
+        cpu_threads,
+        architecture: std::env::consts::ARCH.to_string(),
+        total_memory_gb: system.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+    };
+
+    // Application performance metrics (simplified for now)
+    let app_perf = ApplicationPerformance {
+        requests_handled: 0, // Would be tracked from middleware
+        average_response_time_ms: 0.0, // Would be calculated from request timings
+        fractal_computations: 0, // Would be tracked from fractal service
+        github_api_calls: 0, // Would be tracked from GitHub service
+        cache_hit_rate: 0.0, // Would be retrieved from cache service
+        database_connections: app_state.db_pool.size(),
+        memory_usage_mb: 0.0, // Would be calculated from process memory usage
+    };
+
+    let runtime_info = RuntimeInfo {
+        rust_version: option_env!("BUILD_RUST_VERSION").unwrap_or("unknown").to_string(),
+        build_type: if cfg!(debug_assertions) { "debug".to_string() } else { "release".to_string() },
+        optimization_level: if cfg!(debug_assertions) { "none".to_string() } else { "3".to_strin
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(1)\) for the main operations, as it performs a fixed set of tasks regardless of input size. However, calling `System::new_all().refresh_all()` is costly due to its internal system calls and CPU usage.
+
+**Space Complexity:** The space complexity is also \(O(1)\), but there are potential memory leaks if `System` or `Disk` instances hold onto references unnecessarily.
+
+**Bottlenecks:**
+- **Blocking System Calls:** Calling `refresh_all()` can block the event loop, leading to poor performance in async contexts.
+- **Redundant Calculations:** Recalculating `total_memory_gb` and `cpu_threads` is redundant since they are already computed by `System`.
+
+**Inefficiencies:**
+- The function fetches system metrics synchronously, which can block the runtime. Consider using asynchronous equivalents if available.
+- Unnecessary checks like `if cpu_threads > 0 { (cpu_threads / 2).max(1) }` can be simplified.
+
+**Optimization Opportunities:**
+- Use async versions of system calls if available to avoid blocking.
+- Cache hardware and system information if it doesn't change frequently.
+- Simplify redundant calculations, e.g., remove `total_memory_gb` from `hardware_info`.
+
+**Resource Usage Concerns:**
+- Ensure that all resources are properly managed. For example, check if `System` or `Disk` instances implement the `Drop` trait and ensure they are dropped when no longer needed.
+
+### Suggested Optimizations
+1. Replace blocking calls with async equivalents.
+2. Cache system information to reduce redundant calculations.
+3. Simplify conditional checks for readability and efficiency.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 19:31*
