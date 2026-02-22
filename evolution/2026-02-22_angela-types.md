@@ -1,0 +1,162 @@
+# angela.types
+
+**Type:** Code Evolution
+**Repository:** angelamos-operations
+**File:** CarterOS-Client/src/aspects/assistant/facets/angela/types/angela.types.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 3894239b
+Message: angela-3d implementation - in prog open wake
+Author: CarterPerez-dev
+File: CarterOS-Client/src/aspects/assistant/facets/angela/types/angela.types.ts
+Change type: modified
+
+Diff:
+@@ -1,9 +1,7 @@
+-/**
+- * Angela AI Assistant - Type Definitions
+- */
+-
+-import type { AngelaState, Expression } from './angela.enums'
+-
++// ===================
++// © AngelaMos | 2026
++// angela.types.ts
++// ===================
+ export interface ChatMessage {
+   role: 'user' | 'assistant' | 'system'
+   content: string
+@@ -18,40 +16,6 @@ export interface AngelaSettings {
+   silenceDuration: number
+ }
+ 
+-export interface AngelaStoreState {
+-  status: AngelaState
+-  transcript: string | null
+-  response: string | null
+-  error: string | null
+-  messages: ChatMessage[]
+-  isRecording: boolean
+-  audioLevel: number
+-  currentExpression: Expression
+-  isSpeaking: boolean
+-  settings: AngelaSettings
+-  isExpanded: boolean
+-  isEnabled: boolean
+-}
+-
+-export interface AngelaStoreActions {
+-  transitionTo: (state: AngelaState) => void
+-  setTranscript: (text: string | null) => void
+-  setResponse: (text: string | null) => void
+-  addMessage: (message: ChatMessage) => void
+-  clearConversation: () => void
+-  setRecording: (recording: boolean) => void
+-  setAudioLevel: (level: number) => void
+-  setExpression: (expression: Expression) => void
+-  setSpeaking: (speaking: boolean) => void
+-  updateSettings: (settings: Partial<AngelaSettings>) => void
+-  setError: (error: string | null) => void
+-  setExpanded: (expanded: boolean) => void
+-  setEnabled: (enabled: boolean) => void
+-  reset: () => void
+-}
+-
+-export type AngelaStore = AngelaStoreState & AngelaStoreActions
+-
+ export interface TranscriptResult {
+   text: string
+   duration_ms?: number
+@@ -80,14 +44,30 @@ export interface ElevenLabsVoice {
+   category: string
+ }
+ 
++export type TTSProvider = 'elevenlabs' | 'edgetts'
++
++export type AngelaStatus = 'initializing' | 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking' | 'error'
++
+ export interface AngelaConfig {
++  debug: boolean
++  vrm: {
++    modelPath: string
++  }
++  tts: {
++    provider: TTSProvider
++    endpoint: string
++  }
+   elevenlabs: {
+     apiKey: string
+     voiceId: string
++    stability: number
++    similarityBoost: number
+   }
+-  picovoice: {
++  porcupine: {
+     accessKey: string
+-    wakeWordPath: string
++    keywordPath: string
++    modelPath: string
++    sensitivity: number
+   }
+   whisper: {
+     endpoint: string
+@@ -95,5 +75,23 @@ export interface AngelaConfig {
+   ollama: {
+     endpoint: string
+     model: string
++    temperature: number
++    maxTokens: number
++  }
++  audio: {
++    sampleRate: number
++    silenceThreshold: number
++    silenceDuration: number
++    minSpeechDuration: number
++  }
++  animation: {
++    blinkMinInterval: number
++    blinkMaxInterval: number
++  }
++  scene: {
++    backgroundColor: number
++    cameraFov: number
++    cameraPosition: [number, number, number]
++    cameraTarget: [number, number, number]
+ 
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code in `angela.types.ts` was modified to update type definitions and add new properties. Specifically, the file now includes:
+- A copyright notice at the top.
+- New types for `TTSProvider`, `AngelaStatus`.
+- Updated `AngelaConfig` interface with additional fields like `debug`, `vrm.modelPath`, `tts.provider`, `tts.endpoint`, and more detailed properties under `elevenlabs` and `porcupine`.
+
+**Why it was Likely Changed:**
+This change likely reflects updates to the Angela AI Assistant's architecture, possibly incorporating new features or enhancing existing ones. The addition of `TTSProvider` suggests support for multiple text-to-speech providers, while `AngelaStatus` provides a clearer state management system.
+
+**Impact on Behavior:**
+These changes will impact how the assistant handles its internal states and configurations. For instance, the `debug` flag can enable detailed logging during development, and new fields in `AngelaConfig` allow for more granular control over various aspects like voice models and audio settings.
+
+**Risks or Concerns:**
+- **Backward Compatibility:** Changes to type definitions might break existing code that relies on older versions of the types.
+- **Complexity Increase:** Adding numerous properties could increase complexity, making it harder to manage configurations.
+- **Documentation:** Ensuring all new fields are properly documented will be crucial for developers using or maintaining this code.
+
+Overall, these changes seem aimed at improving flexibility and detail in configuration management while adding necessary copyright information.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 15:43*
