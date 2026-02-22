@@ -2,7 +2,7 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/rules.py
+**File:** backend/api/admin/utils/decorators/response.py
 **Language:** python
 **Lines:** 1-41
 **Complexity:** 0.0
@@ -13,45 +13,45 @@
 
 ```python
 """
-Rules Decorator - For business rule validation
-/api/middleware/decorators/rules.py
+Pydantic Response Decorator
+/api/admin/utils/response.py
 """
 
-import logging
-from typing import Any
 from functools import wraps
-from collections.abc import Callable
+from pydantic import BaseModel
 
 
-logger = logging.getLogger(__name__)
-
-
-def rules(*validators: Callable):
+def R(schema_class: type[BaseModel]):
     """
-    Business rules validation decorator.
+    Response schema decorator for Pydantic models
     """
-    def decorator(f: Callable) -> Callable:
+    def decorator(f):
         @wraps(f)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            for validator in validators:
-                try:
-                    validator()
-                except Exception as e:
-                    logger.debug(
-                        "Rule validation failed in %s: %s",
-                        validator.__name__,
-                        str(e)
-                    )
-                    raise
+        def wrapper(*args, **kwargs):
+            result = f(*args, **kwargs)
 
-            return f(*args, **kwargs)
+            if isinstance(result, tuple):
+                data, status_code = result
+                if isinstance(data, dict):
+                    validated = schema_class(**data)
+                    return validated.model_dump(mode = 'json'), status_code
+                return result
+
+            if isinstance(result, dict):
+                validated = schema_class(**result)
+                return validated.model_dump(mode = 'json')
+
+            if isinstance(result, BaseModel):
+                if isinstance(result, schema_class):
+                    return result.model_dump(mode = 'json')
+                validated = schema_class(**result.model_dump())
+                return validated.model_dump(mode = 'json')
+
+            return result
 
         return wrapper
 
     return decorator
-
-
-R = rules
 
 ```
 
@@ -63,24 +63,20 @@ R = rules
 
 **Pattern Used:** Decorator Pattern
 
-The `rules` decorator in the provided code is a variation of the Decorator design pattern, specifically tailored for business rule validation. It wraps a function (`f`) with another function (`wrapper`) that iterates over a list of validators. Each validator is called within a try-except block to ensure any exceptions are caught and logged.
-
-**Implementation:**
-- The `rules` decorator accepts multiple validators as arguments.
-- Inside the `wrapper`, each validator is executed, and if an exception occurs during validation, it is logged and re-raised.
+The `R` decorator in the provided code wraps a function to ensure that its return value, if it's a dictionary or an instance of a Pydantic model, gets validated and returned as JSON. This implementation follows the Decorator pattern by enhancing the functionality of the decorated function without modifying its structure.
 
 **Benefits:**
-1. **Modularity:** Validators can be added or removed easily without modifying the core function logic.
-2. **Centralized Validation Logic:** All validation logic is centralized in one place, making the code more maintainable.
-3. **Logging and Error Handling:** Exceptions are logged, providing clear insights into which rules failed.
+- **Encapsulation:** The decorator encapsulates validation logic, making it reusable across multiple functions.
+- **Flexibility:** It can handle different types of return values (tuple, dict, or Pydantic model) and validate them accordingly.
+- **Consistency:** Ensures that all responses adhere to the specified schema, promoting consistency in API outputs.
 
 **Deviations:**
-- The `rules` decorator itself returns another decorator (`decorator`), which is a common deviation from the standard pattern where typically only a single layer of decoration is applied directly to the target function.
-- The use of `@wraps(f)` ensures that metadata like docstrings and names are preserved, making the decorated functions easier to understand.
+- The decorator checks for multiple conditions (`tuple`, `dict`, `BaseModel`) and handles each case differently. This is a deviation from the standard single responsibility principle of decorators, which typically wrap a function with minimal changes.
+- The use of `@wraps(f)` ensures that the metadata (name, docstring) of the original function is preserved.
 
 **Appropriateness:**
-This pattern is appropriate for scenarios requiring multiple validation steps before executing core logic. It's particularly useful in API middleware or business logic where rules must be enforced consistently across different operations. However, it may not be ideal for performance-critical applications with many validators, as each one will be executed sequentially.
+This pattern is appropriate when you need to add cross-cutting concerns like validation or formatting to multiple functions without modifying their core logic. It's particularly useful in APIs where consistent response formats are essential. However, it might be overkill for simple functions with straightforward return types.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 00:39*
+*Generated by CodeWorm on 2026-02-22 07:01*
