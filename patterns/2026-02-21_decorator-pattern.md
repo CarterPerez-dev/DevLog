@@ -2,7 +2,7 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/load.py
+**File:** backend/api/core/decorators/response.py
 **Language:** python
 **Lines:** 1-41
 **Complexity:** 0.0
@@ -13,45 +13,45 @@
 
 ```python
 """
-Load Decorator - For populating Flask g object
-/api/middleware/decorators/load.py
+CertGames API Response Decorator
+/api/core/decorators/response.py
 """
 
-import logging
-from typing import Any
 from functools import wraps
-from collections.abc import Callable
+from pydantic import BaseModel
 
 
-logger = logging.getLogger(__name__)
-
-
-def load(*loaders: Callable):
+def CertGamesAPI(schema_class: type[BaseModel]):
     """
-    Load decorator for populating Flask g object.
+    CertGames API response schema decorator for Pydantic models
     """
-    def decorator(f: Callable) -> Callable:
+    def decorator(f):
         @wraps(f)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            for loader in loaders:
-                try:
-                    loader()
-                except Exception as e:
-                    logger.debug(
-                        "Loader failed in %s: %s",
-                        loader.__name__,
-                        str(e)
-                    )
-                    raise
+        def wrapper(*args, **kwargs):
+            result = f(*args, **kwargs)
 
-            return f(*args, **kwargs)
+            if isinstance(result, tuple):
+                data, status_code = result
+                if isinstance(data, dict):
+                    validated = schema_class(**data)
+                    return validated.model_dump(mode = 'json'), status_code
+                return result
+
+            if isinstance(result, dict):
+                validated = schema_class(**result)
+                return validated.model_dump(mode = 'json')
+
+            if isinstance(result, BaseModel):
+                if isinstance(result, schema_class):
+                    return result.model_dump(mode = 'json')
+                validated = schema_class(**result.model_dump())
+                return validated.model_dump(mode = 'json')
+
+            return result
 
         return wrapper
 
     return decorator
-
-
-G = load
 
 ```
 
@@ -63,27 +63,21 @@ G = load
 
 **Pattern Used:** Decorator Pattern
 
-The `load` function in the provided code implements a decorator to populate the Flask global object (`g`). It wraps a function `f` and executes multiple loaders before calling it.
+The `CertGamesAPI` decorator wraps a function to ensure that its return value conforms to a specified Pydantic schema. This implementation uses Python's `functools.wraps` and a nested decorator structure.
 
-1. **Implementation:**
-   - The `load` function takes one or more loader functions as arguments.
-   - Each loader is called within the wrapper function, which logs any exceptions that occur during execution.
+- **Implementation**: The outer `@wraps(f)` preserves the original function’s metadata, while the inner `wrapper` function processes the result according to the schema.
+- **Benefits**:
+  - Ensures consistent data validation and formatting across API responses.
+  - Simplifies handling of different return types (tuple, dict, BaseModel) by abstracting common logic into a decorator.
 
-2. **Benefits:**
-   - **Modularity:** Loaders can be added or removed easily by modifying the `loaders` argument.
-   - **Centralized Logic:** All loading logic is centralized in one decorator, making it easier to manage and maintain.
-   - **Error Handling:** Exceptions from loaders are logged and re-raised, ensuring that any issues are noticed.
+- **Deviations**: 
+  - The pattern deviates slightly from the standard where typically only one function is decorated. Here, it decorates another function that returns various data structures.
+  - It handles multiple cases for result types (`tuple`, `dict`, `BaseModel`), making the logic more complex but also more flexible.
 
-3. **Deviations:**
-   - The pattern uses a `Callable` type hint for the loader functions, which is appropriate but could be more specific if the exact signature of these functions were known.
-   - The decorator itself is named `load`, and it's also aliased as `G`. This might lead to confusion; typically, decorators are named descriptively.
-
-4. **Appropriateness:**
-   - This pattern is suitable for scenarios where multiple setup tasks need to be performed before a function executes.
-   - It works well in Flask applications where the global object (`g`) needs to be populated with various pieces of information from different sources or services.
-
-This decorator pattern provides a clean and flexible way to manage pre-execution logic, making the code more modular and easier to maintain.
+- **Appropriateness**:
+  - This pattern is appropriate when you need to standardize API responses across a project, ensuring all outputs are validated and formatted consistently.
+  - It’s particularly useful in web frameworks where consistent response handling is crucial for maintaining data integrity and ease of use.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 21:30*
+*Generated by CodeWorm on 2026-02-21 23:59*
