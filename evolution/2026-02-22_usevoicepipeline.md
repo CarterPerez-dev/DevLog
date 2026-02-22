@@ -1,0 +1,123 @@
+# useVoicePipeline
+
+**Type:** Code Evolution
+**Repository:** angelamos-operations
+**File:** CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useVoicePipeline.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 3894239b
+Message: angela-3d implementation - in prog open wake
+Author: CarterPerez-dev
+File: CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useVoicePipeline.ts
+Change type: new file
+
+Diff:
+@@ -0,0 +1,246 @@
++// ===================
++// © AngelaMos | 2026
++// useVoicePipeline.ts
++// ===================
++
++import { useRef, useCallback } from 'react'
++import { AnimationController, AnimationManager } from '../lib/animation'
++import { AudioRecorder, SilenceDetector } from '../lib/audio'
++import { transcribeAudio } from '../api/whisper.client'
++import { streamChat } from '../api/ollama.client'
++import { synthesizeSpeech } from '../api/tts.client'
++import { getAngelaConfig } from '../config'
++import { logger } from '../lib/debug'
++import type { OllamaMessage, AngelaStatus } from '../types'
++
++type WakeWordEngine = {
++  start: () => Promise<void>
++  stop: () => Promise<void>
++  dispose: () => Promise<void>
++  onWakeWord: (() => void) | null
++}
++
++interface UseVoicePipelineProps {
++  animControllerRef: React.MutableRefObject<AnimationController | null>
++  animManagerRef: React.MutableRefObject<AnimationManager | null>
++  analyserRef: React.MutableRefObject<AnalyserNode | null>
++  dataArrayRef: React.MutableRefObject<Uint8Array | null>
++  isPlayingRef: React.MutableRefObject<boolean>
++  wakeWordRef: React.MutableRefObject<WakeWordEngine | null>
++  recorderRef: React.MutableRefObject<AudioRecorder | null>
++  onStatusChange: (status: AngelaStatus) => void
++  onTranscriptChange: (transcript: string) => void
++  onResponseChange: (response: string) => void
++  onError: (error: string) => void
++}
++
++export function useVoicePipeline({
++  animControllerRef,
++  animManagerRef,
++  analyserRef,
++  dataArrayRef,
++  isPlayingRef,
++  wakeWordRef,
++  recorderRef,
++  onStatusChange,
++  onTranscriptChange,
++  onResponseChange,
++  onError,
++}: UseVoicePipelineProps) {
++  const audioContextRef = useRef<AudioContext | null>(null)
++  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
++  const messagesRef = useRef<OllamaMessage[]>([])
++  const statusRef = useRef<AngelaStatus>('initializing')
++  const abortControllerRef = useRef<AbortController | null>(null)
++
++  const updateStatus = useCallback((newStatus: AngelaStatus) => {
++    statusRef.current = newStatus
++    onStatusChange(newStatus)
++
++    const state = newStatus === 'processing' ? 'thinking' : newStatus
++
++    if (animControllerRef.current) {
++      animControllerRef.current.setState(state as 'idle' | 'listening' | 'thinking' | 'speaking' | 'error')
++    }
++
++    if (animManagerRef.current) {
++      animManagerRef.current.setState(state as 'idle' | 'listening' | 'thinking' | 'speaking' | 'error')
++    }
++  }, [animControllerRef, animManagerRef, onStatusChange])
++
++  const playAudioWithLipSync = useCallback(async (audioBuffer: ArrayBuffer): Promise<void> => {
++    audioContextRef.current = new AudioContext()
++    analyserRef.current = audioContextRef.current.createAnalyser()
++    analyserRef.cu
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `useVoicePipeline.ts`
+
+**What was Changed:**
+The commit introduces a new file, `useVoicePipeline.ts`, which contains a React hook responsible for managing the voice pipeline in AngelaMos's assistant facet. The hook handles audio recording, wake word detection, transcription, and response generation.
+
+**Why it was Likely Changed:**
+This change likely aims to centralize voice interaction logic within the AngelaMos client application, improving modularity and reusability. By encapsulating these functionalities into a single hook, the code becomes easier to maintain and test.
+
+**Impact on Behavior:**
+The introduction of `useVoicePipeline` significantly enhances the assistant's functionality by enabling real-time audio processing, wake word detection, transcription, and response generation based on user input. This will likely improve the overall user experience by making voice interactions more seamless and responsive.
+
+**Risks or Concerns:**
+- **Complexity:** The hook introduces a significant amount of logic, which could make it harder to understand and maintain.
+- **Performance:** Real-time audio processing and transcription might introduce performance bottlenecks if not optimized properly.
+- **Error Handling:** Proper error handling is crucial given the asynchronous nature of operations like audio recording and streaming responses.
+
+Overall, this change represents a substantial step towards implementing voice capabilities in AngelaMos, but careful consideration should be given to potential performance and maintainability issues.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 15:25*
