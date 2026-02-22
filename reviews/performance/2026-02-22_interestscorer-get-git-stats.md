@@ -1,0 +1,153 @@
+# InterestScorer.get_git_stats
+
+**Type:** Performance Analysis
+**Repository:** CodeWorm
+**File:** codeworm/analysis/scoring.py
+**Language:** python
+**Lines:** 242-295
+**Complexity:** 9.0
+
+---
+
+## Source Code
+
+```python
+def get_git_stats(
+        self,
+        file_path: Path,
+        _start_line: int = 0,
+        _end_line: int = 0
+    ) -> GitStats:
+        """
+        Get git statistics for a file
+        """
+        if not self.git_repo:
+            return GitStats()
+
+        try:
+            commits_30d = 0
+            commits_90d = 0
+            last_modified = None
+            authors = set()
+
+            now = datetime.now()
+            cutoff_30d = now - timedelta(days = 30)
+            cutoff_90d = now - timedelta(days = 90)
+
+            rel_path = str(file_path)
+            with contextlib.suppress(ValueError):
+                rel_path = str(file_path.relative_to(self.git_repo.working_dir))
+
+            for commit in self.git_repo.iter_commits(paths = rel_path,
+                                                     max_count = 100):
+                commit_date = datetime.fromtimestamp(commit.committed_date)
+
+                if last_modified is None:
+                    last_modified = commit_date
+
+                if commit_date >= cutoff_30d:
+                    commits_30d += 1
+                if commit_date >= cutoff_90d:
+                    commits_90d += 1
+
+                authors.add(commit.author.email)
+
+            is_new = commits_90d <= 2 and last_modified and (
+                now - last_modified
+            ).days <= 14
+
+            return GitStats(
+                commit_count_30d = commits_30d,
+                commit_count_90d = commits_90d,
+                last_modified = last_modified,
+                unique_authors = len(authors),
+                is_new = is_new,
+            )
+
+        except Exception:
+            return GitStats()
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of the function is \(O(n)\), where \(n\) is the number of commits in the specified file path. The `iter_commits` method iterates over up to 100 commits, but it could potentially iterate over more if there are fewer than 100 commits.
+
+#### Space Complexity
+The space complexity is \(O(1)\) for variables like `commits_30d`, `commits_90d`, and `authors`. The primary memory usage comes from the commit objects, which can be significant if many commits are processed. However, since only up to 100 commits are iterated over, this is manageable.
+
+#### Bottlenecks or Inefficiencies
+- **Redundant Iteration**: The function iterates over all commits in the file path, even though it stops after processing 100 commits.
+- **Date Calculations**: Converting timestamps to `datetime` objects and comparing them repeatedly can be costly if many commits are processed.
+
+#### Optimization Opportunities
+- **Limit Iteration Early**: If fewer than 100 commits meet the criteria (e.g., within the last 90 days), stop iterating early.
+- **Efficient Date Handling**: Use `commit.committed_date` directly for comparisons instead of converting to `datetime`.
+
+```python
+def get_git_stats(
+        self,
+        file_path: Path,
+        _start_line: int = 0,
+        _end_line: int = 0
+    ) -> GitStats:
+    """
+    Get git statistics for a file
+    """
+    if not self.git_repo:
+        return GitStats()
+
+    try:
+        commits_30d = 0
+        commits_90d = 0
+        last_modified = None
+        authors = set()
+
+        now = datetime.now()
+        cutoff_30d = now - timedelta(days=30)
+        cutoff_90d = now - timedelta(days=90)
+
+        rel_path = str(file_path)
+        with contextlib.suppress(ValueError):
+            rel_path = str(file_path.relative_to(self.git_repo.working_dir))
+
+        for commit in self.git_repo.iter_commits(paths=rel_path, max_count=100):
+            if commits_90d >= 2 and last_modified and (now - last_modified).days > 14:
+                break
+
+            commit_date = commit.committed_date
+            if not last_modified:
+                last_modified = commit_date
+
+            if commit_date >= cutoff_30d:
+                commits_30d += 1
+            if commit_date >= cutoff_90d:
+                commits_90d += 1
+
+            authors.add(commit.author.email)
+
+        is_new = commits_90d <= 2 and last_modified and (now - last_modified).days <= 14
+
+        return GitStats(
+            commit_count_30d=commits_30d,
+            commit_count_90d=commits_90d,
+            last_modified=last_modified,
+            unique_authors=len(authors),
+            is_new=is_new,
+        )
+
+    except Exception:
+        return GitStats()
+```
+
+#### Resource Usage Concerns
+- Ensure `self.git_repo` is properly initialized and closed if necessary.
+- Use context managers for file paths to ensure they are handled correctly.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 08:51*
