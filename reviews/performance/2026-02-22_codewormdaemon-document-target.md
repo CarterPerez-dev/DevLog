@@ -1,0 +1,126 @@
+# CodeWormDaemon._document_target
+
+**Type:** Performance Analysis
+**Repository:** CodeWorm
+**File:** codeworm/daemon.py
+**Language:** python
+**Lines:** 468-575
+**Complexity:** 6.0
+
+---
+
+## Source Code
+
+```python
+async def _document_target(self, target: DocumentationTarget) -> bool:
+        """
+        Generate documentation and commit for a DocumentationTarget
+        """
+        self.logger.info(
+            "documenting",
+            target = target.display_name,
+            doc_type = target.doc_type.value,
+            repo = target.snippet.repo,
+            score = round(target.score,
+                          2),
+            dry_run = self.dry_run,
+        )
+
+        try:
+            self._emit_event(
+                "generating",
+                {
+                    "target": target.display_name,
+                    "doc_type": target.doc_type.value,
+                    "repo": target.snippet.repo,
+                    "language": target.snippet.language.value,
+                }
+            )
+
+            client = await self._init_llm()
+            generator = DocumentationGenerator(client, self.settings.prompts)
+            doc = await generator.generate_from_target(target)
+
+            if self.dry_run:
+                self.logger.info(
+                    "dry_run_complete",
+                    target = target.display_name,
+                    doc_type = target.doc_type.value,
+                    tokens = doc.tokens_used,
+                    time_ms = doc.generation_time_ms,
+                    would_commit = doc.commit_message,
+                )
+                return True
+
+            markdown_content = doc.to_markdown_from_target(target)
+
+            file_path = self.devlog.write_snippet(
+                content = markdown_content,
+                filename = doc.snippet_filename,
+                language = target.snippet.language.value,
+                doc_type = target.doc_type,
+            )
+
+            result = self.devlog.commit(
+                message = doc.commit_message,
+                files = [file_path],
+            )
+
+            self.state.record_documentation(
+                snippet = target.snippet,
+                snippet_path = str(file_path.relative_to(self.devlog.repo_path)),
+                git_commit = result.commit_hash,
+                doc_type = target.doc_type,
+            )
+
+            self.logger.info(
+                "documentation_committed",
+                target = target.display_name,
+                doc_type = target.doc_type.value,
+                commit = result.commit_hash,
+                tokens = doc.tokens_used,
+                time_ms = doc.generation_time_ms,
+            )
+
+            self._emit_event(
+                "documentation_committed",
+                {
+                    "target": target.display_name,
+                    "doc_type": target.doc_type.value,
+                    "commit": result.commit_hash,
+                    "tokens": doc.tokens_used,
+                    "time_ms": doc.generation_time_ms,
+                    "repo": target.snippet.repo,
+                    "language": target.snippet.language.value,
+                    "commit_message": doc.commit_message,
+                }
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(1)\) for the majority of operations, as most steps are constant-time. However, the `generate_from_target` and `to_markdown_from_target` methods could be costly if they involve complex computations or I/O operations.
+
+**Space Complexity:** The space complexity is also \(O(1)\), assuming that the size of the input parameters (`target`) does not significantly increase with the scale of the application. However, the creation of log messages and temporary variables can consume memory, especially in large-scale operations.
+
+**Bottlenecks or Inefficiencies:**
+- **Logging:** Frequent logging calls can be costly due to string formatting and I/O operations.
+- **Redundant Operations:** The `self.logger.info` calls are repeated multiple times with similar information. Consider consolidating these into a single log message at the end of successful execution.
+
+**Optimization Opportunities:**
+- Use context managers for `client = await self._init_llm()` to ensure it is properly closed.
+- Cache results from `generate_from_target` if the target and settings do not change frequently.
+- Minimize redundant logging by consolidating messages. For example, log at the end of successful execution with all necessary details.
+
+**Resource Usage Concerns:**
+- Ensure that connections are properly managed using context managers to avoid resource leaks.
+- Consider batching operations or using asynchronous I/O for remote pushes if they become a bottleneck.
+
+By addressing these points, you can improve both the performance and maintainability of your code.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 09:31*
