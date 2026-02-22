@@ -2,10 +2,10 @@
 
 **Type:** Performance Analysis
 **Repository:** vuemantics
-**File:** frontend/src/routes/upload/index.tsx
+**File:** frontend/src/routes/landing/index.tsx
 **Language:** tsx
-**Lines:** 32-251
-**Complexity:** 19.0
+**Lines:** 14-97
+**Complexity:** 7.0
 
 ---
 
@@ -13,104 +13,89 @@
 
 ```tsx
 function Component(): React.ReactElement {
-  const {
-    fileQueue,
-    addFiles,
-    removeFile,
-    clearQueue,
-    setDragActive,
-    dragActive,
-    setCurrentBatchId,
-  } = useBulkUploadUIStore()
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>Vuemantic</h1>
+        <p className={styles.subtitle}>Smart Multimodal Search</p>
+        <a
+          href="https://github.com/CarterPerez-dev/vuemantics"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.github}
+          aria-label="View source on GitHub"
+        >
+          <FiGithub />
+        </a>
+      </header>
 
-  const { data: clientConfig } = useClientConfig()
-  const maxFileSizeBytes = (clientConfig?.max_upload_size_mb ?? 100) * 1024 * 1024
+      <div className={styles.content}>
+        <div className={styles.sections}>
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <GiMagnifyingGlass />
+            </div>
+            <h2 className={styles.sectionTitle}>Semantic Search</h2>
+            <p className={styles.sectionText}>
+              Natural language queries like "red car" or "funny meme". Vision
+              models analyze image/video content with vector embeddings for
+              semantic similarity using pgvector.
+            </p>
+          </section>
 
-  const createBulkUpload = useCreateBulkUpload()
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <ImImages />
+            </div>
+            <h2 className={styles.sectionTitle}>Media Management</h2>
+            <p className={styles.sectionText}>
+              AI Analysis: Upload images and videos. Vision models extract
+              features, generate descriptions, and create vector embeddings for
+              semantic search.
+            </p>
+          </section>
 
-  const { batchProgress, setBatchProgress, setCurrentFile } =
-    useGlobalBatchProgress()
-  const { currentFile, handleFileProgress } = useFileProgress()
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <SiOllama />
+            </div>
+            <h2 className={styles.sectionTitle}>Technology Stack</h2>
+            <p className={styles.sectionText}>
+              Qwen2.5-VL for vision analysis, bge-m3 for embeddings. PostgreSQL +
+              pgvector for vector search. Ollama for local model inference. React
+              + TypeScript frontend.
+            </p>
+          </section>
 
-  useSocket({
-    enabled: true,
-    onBatchProgress: (data) => {
-      setBatchProgress(data.payload.batch_id, {
-        status: data.payload.status,
-        total: data.payload.total,
-        processed: data.payload.processed,
-        successful: data.payload.successful,
-        failed: data.payload.failed,
-        progressPercentage: data.payload.progress_percentage,
-      })
-    },
-    onFileProgress: (data) => {
-      handleFileProgress(data)
-      // Also update global store for header indicator
-      if (data.payload.status === 'processing') {
-        setCurrentFile({
-          uploadId: data.payload.upload_id,
-          fileName: data.payload.file_name,
-          fileSize: data.payload.file_size,
-          progress: data.payload.progress_percentage,
-          status: data.payload.status,
-        })
-      } else {
-        setCurrentFile(null)
-      }
-    },
-  })
+          <section className={styles.section}>
+            <div className={styles.sectionIcon}>
+              <SiClaude />
+            </div>
+            <h2 className={styles.sectionTitle}>Coming Soon</h2>
+            <p className={styles.sectionText}>
+              MCP Server: Model Context Protocol integration. Let AI assistants
+              query your media collection through standardized tool interfaces.
+            </p>
+          </section>
+        </div>
 
-  const validateFile = (file: File): { valid: boolean; error?: string } => {
-    const maxSizeMB = clientConfig?.max_upload_size_mb ?? 100
-    if (file.size > maxFileSizeBytes) {
-      return { valid: false, error: `Too large (max ${maxSizeMB}MB)` }
-    }
-
-    if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
-      return { valid: false, error: 'Unsupported file type' }
-    }
-
-    return { valid: true }
-  }
-
-  const handleDrag = (e: React.DragEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDragActive(false)
-    }
-  }
-
-  const processFiles = (files: FileList | File[]): void => {
-    const fileArray = Array.from(files)
-    const newQueuedFiles: QueuedFile[] = []
-
-    // Check for duplicates in existing queue
-    const existingNames = new Set(fileQueue.map((f) => f.file.name))
-
-    fileArray.forEach((file) => {
-      const validation = validateFile(file)
-      const isDuplicate = existingNames.has(file.name)
-
-      const queuedFile: QueuedFile = {
-        id: `${Date.now()}-${Math.random()}`,
-        file,
-        status: isDuplicate
-          ? 'duplicate'
-          : validation.valid
-            ? 'valid'
-            : validation.error?.includes('large')
-              ? 'too-large'
-              : 'unsupported',
-        error: isDuplicate ? 'Already in queue' : validation.error,
-      }
-
-      // Generate preview for images
-      if (file.type.startsWith('image/') && validation.valid) {
-       
+        <div className={styles.actions}>
+          <Link to={ROUTES.LOGIN} className={styles.button}>
+            Open Demo
+          </Link>
+          <a
+            href="/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.buttonOutline}
+          >
+            API Documentation
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
 ```
 
 ---
@@ -119,29 +104,24 @@ function Component(): React.ReactElement {
 
 ### Performance Analysis
 
-#### Time Complexity
-The `processFiles` function has a time complexity of \(O(n^2)\) due to the nested iteration where each file is checked against existing queue entries using a set, and then validated individually.
+**Time Complexity:** The time complexity of this component is O(1), as it does not depend on any input size. However, the JSX structure is relatively complex with multiple nested elements and repeated class bindings.
 
-#### Space Complexity
-- The space complexity is \(O(n)\) for storing files in memory, where \(n\) is the number of files being processed.
-- The `validateFile` function uses constant space but performs multiple checks on each file.
+**Space Complexity:** The space complexity is also O(1) since there are no dynamic data structures or arrays that grow based on input size. The only potential concern is the number of DOM nodes created, which remains constant regardless of component state changes.
 
-#### Bottlenecks or Inefficiencies
-1. **Duplicate Check**: The use of a set to check for duplicate filenames introduces an unnecessary iteration over existing queue entries.
-2. **Redundant Operations**: Each file is validated and checked for duplicates separately, leading to redundant operations.
-3. **Blocking Calls**: `useSocket` calls are asynchronous but the handling functions (`onBatchProgress`, `onFileProgress`) are blocking.
+**Bottlenecks or Inefficiencies:**
+- **Redundant Class Bindings:** Each element has a class binding like `className={styles.header}`, which can be optimized by defining these classes directly in JSX if they are static.
+- **Static Text and Icons:** The text and icons used within the sections are static. Consider using inline styles or constants to reduce re-rendering overhead.
 
-#### Optimization Opportunities
-1. **Optimize Duplicate Check**: Use a more efficient data structure like a map or object to store file names and their statuses, reducing the time complexity of duplicate checks.
-2. **Lazy Validation**: Validate files only when necessary, e.g., on drag/drop events rather than continuously checking during processing.
-3. **Asynchronous Handling**: Ensure that `onBatchProgress` and `onFileProgress` handle updates asynchronously to avoid blocking.
+**Optimization Opportunities:**
+- **Inline Class Definitions:** Inline class definitions for static elements like `<h1 className="title">` can improve performance by reducing the number of render passes.
+- **Memoization:** Use `React.memo` or `useMemo` for sections if their content does not change frequently, to avoid unnecessary re-renders.
 
-#### Resource Usage Concerns
-- **Memory Leaks**: Ensure all created URLs (`URL.createObjectURL`) are properly cleared when no longer needed.
-- **Socket Handling**: Avoid unnecessary state updates in socket handlers by batching them or using debouncing techniques.
+**Resource Usage Concerns:**
+- Ensure that all imported styles and icons are correctly optimized. Large images or heavy icon files can impact load times.
+- Consider lazy loading images and other media assets to improve initial load performance.
 
-By addressing these issues, the performance and efficiency of the component can be significantly improved.
+By addressing these points, you can enhance the component's efficiency without significantly altering its structure.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 21:39*
+*Generated by CodeWorm on 2026-02-21 23:01*
