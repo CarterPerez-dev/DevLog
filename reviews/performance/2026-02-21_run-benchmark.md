@@ -1,0 +1,119 @@
+# run_benchmark
+
+**Type:** Performance Analysis
+**Repository:** kill-pr0cess.inc
+**File:** backend/src/routes/performance.rs
+**Language:** rust
+**Lines:** 183-300
+**Complexity:** 6.0
+
+---
+
+## Source Code
+
+```rust
+pub async fn run_benchmark(
+    State(_app_state): State<AppState>,
+) -> Result<JsonResponse<serde_json::Value>> {
+    info!("Starting comprehensive performance benchmark");
+    let benchmark_start = std::time::Instant::now();
+
+    // CPU benchmark: prime number calculation
+    let cpu_benchmark = tokio::task::spawn_blocking(|| {
+        let start = std::time::Instant::now();
+        let mut primes = Vec::new();
+
+        for i in 2..10000 {
+            if is_prime(i) {
+                primes.push(i);
+            }
+        }
+
+        let single_thread_time = start.elapsed();
+        let single_thread_primes = primes.len();
+
+        // Multi-threaded benchmark
+        let start = std::time::Instant::now();
+        let multi_thread_primes = (2..50000u32)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter(|&i| is_prime(i))
+            .count();
+        let multi_thread_time = start.elapsed();
+
+        serde_json::json!({
+            "single_thread": {
+                "primes_found": single_thread_primes,
+                "duration_ms": single_thread_time.as_secs_f64() * 1000.0,
+                "duration_us": single_thread_time.as_micros(),
+                "primes_per_second": single_thread_primes as f64 / single_thread_time.as_secs_f64()
+            },
+            "multi_thread": {
+                "primes_found": multi_thread_primes,
+                "duration_ms": multi_thread_time.as_secs_f64() * 1000.0,
+                "duration_us": multi_thread_time.as_micros(),
+                "primes_per_second": multi_thread_primes as f64 / multi_thread_time.as_secs_f64()
+            },
+            "parallel_efficiency": (multi_thread_primes as f64 / multi_thread_time.as_secs_f64()) /
+                                  (single_thread_primes as f64 / single_thread_time.as_secs_f64())
+        })
+    }).await.unwrap();
+
+    // Memory benchmark: array operations
+    let memory_benchmark = tokio::task::spawn_blocking(|| {
+        let start = std::time::Instant::now();
+        let data_size = 10_000_000;
+        let data: Vec<u64> = (0..data_size as u64).collect();
+        let allocation_time = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let sum: u64 = data.iter().sum();
+        let read_time = start.elapsed();
+
+        let start = std::time::Instant::now();
+        let mut write_data = vec![0u64; data_size as usize];
+        for i in 0..data_size as usize {
+            write_data[i] = i as u64;
+        }
+        let write_time = start.elapsed();
+
+        serde_json::json!({
+            "allocation": {
+                "duration_ms": allocation_time.as_secs_f64() * 1000.0,
+                "duration_us": allocation_time.as_micros(),
+                "mb_allocated": (data_size * 8) as f64 / (1024.0 * 1024.0),
+                "mb_per_second": (data_size * 8) as f64 / (1024.0 * 1024.0) / allocation_time.as_secs_f64()
+            },
+            "sequential_read": {
+                "duration_ms": read_time.as_secs_f64() 
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity dominated by the `is_prime` checks, which are O(n√n). The multi-threaded prime calculation introduces parallelism but does not significantly reduce the overall complexity.
+
+**Space Complexity:** The primary space concern is the large vector allocations (`Vec<u64>`), which can be costly in terms of memory and CPU cache usage. Additionally, multiple vectors are created for each benchmark task.
+
+**Bottlenecks or Inefficiencies:**
+1. **Redundant Vector Creation:** Creating `primes` and `write_data` vectors repeatedly within the blocking tasks is inefficient.
+2. **CPU Benchmark Overhead:** The single-threaded prime calculation can be optimized by using more efficient algorithms.
+3. **Sequential Operations:** Sequential reads and writes in memory benchmarks are not fully utilizing parallelism.
+
+**Optimization Opportunities:**
+1. **Prime Calculation Optimization:** Use a more efficient algorithm like Sieve of Eratosthenes to reduce the number of iterations.
+2. **Vector Reuse:** Reuse vectors instead of creating new ones for each benchmark task.
+3. **Parallel Iteration:** Utilize `rayon` crate for parallel iteration in memory benchmarks.
+
+**Resource Usage Concerns:**
+1. **Memory Leaks:** Ensure all allocated data is fully utilized before the function exits to avoid unnecessary memory usage.
+2. **Blocking Calls:** The use of blocking calls within async functions can block the event loop, affecting overall performance and responsiveness.
+
+By addressing these points, you can significantly improve both the efficiency and resource management of your benchmarking function.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 19:24*
