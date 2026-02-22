@@ -1,0 +1,111 @@
+# AngelaPage
+
+**Type:** Code Evolution
+**Repository:** angelamos-operations
+**File:** CarterOS-Client/src/aspects/assistant/facets/angela/AngelaPage.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: 3894239b
+Message: angela-3d implementation - in prog open wake
+Author: CarterPerez-dev
+File: CarterOS-Client/src/aspects/assistant/facets/angela/AngelaPage.tsx
+Change type: modified
+
+Diff:
+@@ -3,323 +3,54 @@
+ // AngelaPage.tsx
+ // ===================
+ 
+-import { useEffect, useRef, useState } from 'react'
+-import * as THREE from 'three'
+-import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm'
+-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+-import { AnimationController } from './lib/animation'
+-import { createWakeWordEngine } from './lib/porcupine'
+-import { AudioRecorder, SilenceDetector } from './lib/audio'
+-import { transcribeAudio } from './api/whisper.client'
+-import { streamChat } from './api/ollama.client'
+-import { synthesizeSpeech } from './api/elevenlabs.client'
+-import type { OllamaMessage } from './types'
+-
+-type Status = 'initializing' | 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking' | 'error'
++import { useState, useCallback, useEffect } from 'react'
++import { useThreeScene, useWakeWord, useVoicePipeline } from './hooks'
++import { StatusOverlay } from './components'
++import type { AngelaStatus } from './types'
+ 
+ export function AngelaPage() {
+-  const canvasRef = useRef<HTMLCanvasElement>(null)
+-  const vrmRef = useRef<VRM | null>(null)
+-  const animControllerRef = useRef<AnimationController | null>(null)
+-  const analyserRef = useRef<AnalyserNode | null>(null)
+-  const audioContextRef = useRef<AudioContext | null>(null)
+-  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
+-  const dataArrayRef = useRef<Uint8Array | null>(null)
+-  const isPlayingRef = useRef(false)
+-  const wakeWordRef = useRef<ReturnType<typeof createWakeWordEngine> extends Promise<infer T> ? T : never>(null)
+-  const recorderRef = useRef<AudioRecorder | null>(null)
+-  const messagesRef = useRef<OllamaMessage[]>([])
+-  const statusRef = useRef<Status>('initializing')
+-
+-  const [status, setStatus] = useState<Status>('initializing')
++  const [status, setStatus] = useState<AngelaStatus>('initializing')
+   const [transcript, setTranscript] = useState('')
+   const [response, setResponse] = useState('')
+   const [error, setError] = useState('')
+ 
+-  const updateStatus = (newStatus: Status) => {
+-    statusRef.current = newStatus
+-    setStatus(newStatus)
+-
+-    if (animControllerRef.current) {
+-      if (newStatus === 'idle') {
+-        animControllerRef.current.setState('idle')
+-      } else if (newStatus === 'listening') {
+-        animControllerRef.current.setState('listening')
+-      } else if (newStatus === 'thinking' || newStatus === 'processing') {
+-        animControllerRef.current.setState('thinking')
+-      } else if (newStatus === 'speaking') {
+-        animControllerRef.current.setState('speaking')
+-      }
+-    }
+-  }
+-
+-  useEffect(() => {
+-    const canvas = canvasRef.current
+-    if (!canvas) return
+-
+-    const width = wi
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code refactors the `AngelaPage` component by simplifying state management and integrating custom hooks for managing the three.js scene, wake word detection, and voice pipeline. The `Status` type is renamed to `AngelaStatus`, and a new `StatusOverlay` component is introduced. Most of the state variables are moved into these hooks.
+
+**Why it was Likely Changed:**
+This refactoring likely aims to streamline the codebase by leveraging custom React hooks for managing complex state logic, making the main component cleaner and more focused on its core functionality. The integration of `useThreeScene`, `useWakeWord`, and `useVoicePipeline` suggests a modular approach that could improve maintainability and reusability.
+
+**Impact on Behavior:**
+The overall behavior remains largely unchanged, but the code structure is now more organized. The `StatusOverlay` component will likely provide a visual representation of the current status, enhancing user experience. The integration of these hooks ensures better state management and lifecycle handling for components like the VRM model and audio processing.
+
+**Risks or Concerns:**
+There's a risk that the custom hooks might introduce bugs if not implemented correctly. Ensuring that `useThreeScene`, `useWakeWord`, and `useVoicePipeline` are robust and well-tested is crucial. Additionally, the removal of inline state management requires careful testing to ensure all edge cases are handled properly.
+
+Overall, this change improves code organization and maintainability while maintaining functionality.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 15:35*
