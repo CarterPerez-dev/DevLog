@@ -1,0 +1,120 @@
+# useThreeScene
+
+**Type:** Code Evolution
+**Repository:** angelamos-operations
+**File:** CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useThreeScene.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 3894239b
+Message: angela-3d implementation - in prog open wake
+Author: CarterPerez-dev
+File: CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useThreeScene.ts
+Change type: new file
+
+Diff:
+@@ -0,0 +1,226 @@
++// ===================
++// © AngelaMos | 2026
++// useThreeScene.ts
++// ===================
++
++import { useEffect, useRef } from 'react'
++import * as THREE from 'three'
++import { VRM, VRMLoaderPlugin } from '@pixiv/three-vrm'
++import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
++import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
++import { AnimationController, AnimationManager } from '../lib/animation'
++import { getAngelaConfig } from '../config'
++import { logger } from '../lib/debug'
++
++interface UseThreeSceneResult {
++  canvasRef: React.RefObject<HTMLCanvasElement | null>
++  vrmRef: React.MutableRefObject<VRM | null>
++  animControllerRef: React.MutableRefObject<AnimationController | null>
++  animManagerRef: React.MutableRefObject<AnimationManager | null>
++  analyserRef: React.MutableRefObject<AnalyserNode | null>
++  dataArrayRef: React.MutableRefObject<Uint8Array | null>
++  isPlayingRef: React.MutableRefObject<boolean>
++}
++
++export function useThreeScene(): UseThreeSceneResult {
++  const canvasRef = useRef<HTMLCanvasElement | null>(null)
++  const vrmRef = useRef<VRM | null>(null)
++  const animControllerRef = useRef<AnimationController | null>(null)
++  const animManagerRef = useRef<AnimationManager | null>(null)
++  const analyserRef = useRef<AnalyserNode | null>(null)
++  const dataArrayRef = useRef<Uint8Array | null>(null)
++  const isPlayingRef = useRef(false)
++
++  useEffect(() => {
++    const canvas = canvasRef.current
++    if (!canvas) return
++
++    const config = getAngelaConfig()
++    const width = window.innerWidth
++    const height = window.innerHeight
++
++    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
++    renderer.setPixelRatio(window.devicePixelRatio)
++    renderer.setSize(width, height)
++    renderer.outputColorSpace = THREE.SRGBColorSpace
++
++    const scene = new THREE.Scene()
++    const bgColor = new THREE.Color(config.scene.backgroundColor)
++    scene.background = bgColor
++    scene.fog = new THREE.FogExp2(bgColor.getHex(), 0.1)
++
++    const grid = new THREE.GridHelper(200, 200, 0xffffff, 0xffffff)
++    grid.position.y = 0
++    grid.material.opacity = 0.15
++    grid.material.transparent = true
++    scene.add(grid)
++
++    const starCount = 50
++    const starPositions = new Float32Array(starCount * 3)
++    const starPhases = new Float32Array(starCount)
++    const starSpeeds = new Float32Array(starCount)
++
++    for (let i = 0; i < starCount; i++) {
++      starPositions[i * 3] = (Math.random() - 0.5) * 30
++      starPositions[i * 3 + 1] = Math.random() * 15 + 2
++      starPositions[i * 3 + 2] = -Math.random() * 20 - 5
++      starPhases[i] = Math.random() * Math.PI * 2
++      starSpeeds[i] = 0.3 + Math.random() * 0.4
++    }
++
++    const starGeometry =
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `useThreeScene.ts`
+
+**What was Changed:**
+A new file, `useThreeScene.ts`, was added to the repository. This file introduces a React hook that sets up and manages a 3D scene using the Three.js library. The hook initializes various components such as the renderer, scene, camera, controls, lights, and VRM models.
+
+**Why it Was Likely Changed:**
+This change likely aims to implement AngelaMos' 3D rendering capabilities within the application. By creating this hook, the development team can encapsulate complex 3D setup logic, making it reusable across different parts of the application. The integration with VRM (Virtual Reality Model) and custom animations suggests a focus on interactive 3D content.
+
+**Impact on Behavior:**
+The introduction of `useThreeScene` will enable dynamic 3D rendering within the application. Users can expect to see realistic lighting, camera controls, and animated models. This change significantly enhances the visual experience, potentially providing more engaging interactions for users.
+
+**Risks or Concerns:**
+- **Performance:** The implementation of complex 3D scenes could impact performance, especially on lower-end devices.
+- **Resource Intensive:** Loading VRM models and managing animations might consume significant resources, which could affect overall application stability.
+- **Debugging Complexity:** With the addition of multiple components (renderer, camera, lights), debugging issues related to rendering or animation may become more challenging.
+
+Overall, this change is a feature implementation that aims to enhance the visual capabilities of the application.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 15:21*
