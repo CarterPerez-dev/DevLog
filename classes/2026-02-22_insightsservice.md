@@ -1,0 +1,115 @@
+# InsightsService
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/analytics/facets/insights/service.py
+**Language:** python
+**Lines:** 37-462
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class InsightsService:
+    """
+    Service for analytics insights operations
+    """
+    @staticmethod
+    async def get_overview_insights(
+        session: AsyncSession,
+    ) -> OverviewInsightsResponse:
+        """Get high-level overview of all metrics"""
+        metrics_data = await InsightsRepository.get_overview_metrics(
+            session
+        )
+        videos = await InsightsRepository.get_all_videos(session)
+
+        # Calculate average engagement rate
+        total_engagement_rate = sum(
+            InsightsRepository.calculate_engagement_rate(v) for v in videos
+        )
+        avg_engagement_rate = total_engagement_rate / len(
+            videos
+        ) if videos else 0.0
+
+        # Find top video
+        top_video = None
+        if videos:
+            top_by_views = max(videos, key = lambda v: v.views)
+            top_video = VideoPerformance(
+                id = str(top_by_views.id),
+                rank = top_by_views.rank,
+                hook = top_by_views.hook,
+                views = top_by_views.views,
+                engagement_rate = InsightsRepository.
+                calculate_engagement_rate(top_by_views),
+                follower_conversion_rate = InsightsRepository.
+                calculate_follower_conversion_rate(top_by_views),
+                avg_watch_time = top_by_views.avg_watch_time,
+                watched_full_video_percentage = top_by_views.
+                watched_full_video_percentage,
+                date_posted = top_by_views.date_posted.isoformat(),
+            )
+
+        # Determine trend (simple: compare first half vs second half of videos)
+        trend = "stable"
+        if len(videos) >= 4:
+            mid_point = len(videos) // 2
+            first_half_avg = sum(
+                v.views for v in videos[: mid_point]
+            ) / mid_point
+            second_half_avg = sum(v.views for v in videos[mid_point :]
+                                  ) / (len(videos) - mid_point)
+
+            if second_half_avg > first_half_avg * 1.1:
+                trend = "improving"
+            elif second_half_avg < first_half_avg * 0.9:
+                trend = "declining"
+
+        metrics = OverviewMetrics(
+            total_videos = metrics_data["total_videos"],
+            total_views = metrics_data["total_views"],
+            total_likes = metrics_data["total_likes"],
+            total_comments = metrics_data["total_comments"],
+            total_shares = metrics_data["total_shares"],
+            total_bookmarks = metrics_data["total_bookmarks"],
+            total_new_followers = metrics_data["total_new_followers"],
+            avg_engagement_rate = avg_engagement_rate,
+            avg_watch_time = metrics_data["avg_watch_time"],
+            avg_watch_percentage = metrics_data["avg_watch_percentage"],
+            date_range = (
+                metrics_data["min_date"].isoformat()
+                if metrics_data["min_date"] else "",
+                metrics_data["max_date"].isoformat()
+                if me
+```
+
+---
+
+## Class Documentation
+
+### InsightsService Documentation
+
+**Class Responsibility and Purpose:**
+The `InsightsService` class is responsible for generating high-level analytics insights, including an overview of key metrics and performance rankings. It interacts with a repository to fetch data and processes this data to provide meaningful insights.
+
+**Public Interface (Key Methods):**
+- **`get_overview_insights(session)`**: Fetches an overview of all metrics, calculates engagement rates, identifies top-performing videos, and determines recent trends.
+- **`get_performance_rankings(session, limit=10)`**: Retrieves the top performing videos based on views, engagement rate, follower conversion rate, and average watch time.
+
+**Design Patterns Used:**
+- **Factory Method (Implicit)**: The class implicitly uses a factory method pattern for creating `VideoPerformance` objects.
+- **Strategy Pattern (Implicit)**: Calculations like engagement rate and follower conversion rate are delegated to the repository using strategy-like methods.
+
+**Relationship to Other Classes:**
+- **InsightsRepository**: This class interacts with the database to fetch necessary data. It is a key dependency, providing raw metrics which `InsightsService` processes.
+- **OverviewInsightsResponse & PerformanceRankingsResponse**: These response models define the structure of the insights returned by the service.
+
+**State Management Approach:**
+The class maintains no state; it operates on input parameters and returns processed data. This makes it easy to test and ensure that results are consistent across different executions with the same inputs.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 01:53*
