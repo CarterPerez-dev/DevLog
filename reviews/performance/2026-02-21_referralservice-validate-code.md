@@ -62,49 +62,27 @@ def validate_code(db: Session, code: str) -> CodeValidation:
 
 ### Performance Analysis
 
-**Time Complexity:** The function has a time complexity of O(1) since the operations are constant-time, assuming `get_by_code` is also O(1). However, if `get_by_code` involves database queries or other costly operations, it could be O(n).
+**Time Complexity:** The time complexity of the `validate_code` function is O(1) for each validation check, making it O(n) where n is the number of checks (currently 4). This is efficient as long as the database query (`code_repo.get_by_code(code)`) is optimized.
 
-**Space Complexity:** The space complexity is O(1), as no additional data structures that grow with input size are used.
+**Space Complexity:** The space complexity is O(1), assuming that the `ReferralCodeRepository` and `datetime.now()` operations do not introduce additional overhead. However, the function creates several temporary objects (e.g., error messages), which could be minimized to reduce memory allocation.
 
-**Bottlenecks and Inefficiencies:**
-- **Database Query:** If `get_by_code` performs a database query each time, it can become costly if called frequently.
-- **Redundant Checks:** The checks for status, expiration, and max uses could be combined into fewer conditions to reduce redundancy.
+### Bottlenecks or Inefficiencies
 
-**Optimization Opportunities:**
-1. **Cache Repository Results:** Cache the result of `code_repo.get_by_code(code)` using a caching mechanism like Redis or Memcached to avoid repeated database hits.
-2. **Combine Conditions:** Combine multiple if checks into one condition block to reduce redundant code and improve readability.
+- **Redundant Database Query:** The code performs a database query for each validation check, even if an earlier condition fails.
+- **Error Messages:** Creating detailed error messages can be costly in terms of memory and time. Consider using string formatting once at the end to reduce overhead.
 
-```python
-def validate_code(db: Session, code: str) -> CodeValidation:
-    """
-    Validate if a code is active and usable
-    """
-    code_repo = ReferralCodeRepository(db)
-    
-    code_obj = code_repo.get_by_code(code)
-    if not code_obj or (code_obj.status != ReferralCodeStatus.ACTIVE.value 
-                        or code_obj.expires_at and code_obj.expires_at < datetime.now(UTC) 
-                        or code_obj.max_uses and code_obj.uses_count >= code_obj.max_uses):
-        raise CodeNotFoundError(
-            f"Code '{code}' is not valid: {code_obj.status}, expires at {code_obj.expires_at.isoformat()}, uses count {code_obj.uses_count}",
-            code = code,
-            status = code_obj.status if code_obj else None,
-            expires_at = code_obj.expires_at.isoformat() if code_obj and code_obj.expires_at else None,
-            max_uses = code_obj.max_uses if code_obj and code_obj.max_uses else None,
-            uses_count = code_obj.uses_count if code_obj else None
-        )
+### Optimization Opportunities
 
-    return CodeValidation(
-        valid=True,
-        code_id=code_obj.id,
-        program_id=code_obj.program_id,
-        referrer_user_id=code_obj.user_id,
-    )
-```
+1. **Reduce Redundant Queries:** If any validation fails early, return immediately without further database queries.
+2. **Optimize Error Handling:** Use a single error message construction with string interpolation to minimize object creation.
+3. **Use Context Managers:** Ensure that any database connections are properly managed using context managers.
 
-**Resource Usage Concerns:**
-- Ensure `ReferralCodeRepository.get_by_code` uses efficient queries and indexes to avoid blocking database operations.
-- Use context managers for any database connections or file handles to ensure they are properly closed.
+### Resource Usage Concerns
+
+- **Database Connections:** Ensure `ReferralCodeRepository` uses connection pooling and proper context management (`with` statement) to avoid resource leaks.
+- **Error Handling:** Consider logging errors instead of raising exceptions for non-critical validations, reducing the number of exception handling overhead.
+
+By addressing these points, you can improve both the performance and maintainability of your code.
 
 ---
 
