@@ -1,0 +1,187 @@
+# checkSecurityOptions
+
+**Type:** Performance Analysis
+**Repository:** docksec
+**File:** internal/analyzer/container.go
+**Language:** go
+**Lines:** 233-304
+**Complexity:** 13.0
+
+---
+
+## Source Code
+
+```go
+func (a *ContainerAnalyzer) checkSecurityOptions(
+	target finding.Target,
+	info types.ContainerJSON,
+) finding.Collection {
+	var findings finding.Collection
+
+	hasAppArmor := false
+	hasSeccomp := false
+	hasNoNewPrivileges := false
+	seccompDisabled := false
+
+	for _, opt := range info.HostConfig.SecurityOpt {
+		if strings.HasPrefix(opt, "apparmor=") {
+			hasAppArmor = true
+		}
+		if strings.HasPrefix(opt, "seccomp=") {
+			hasSeccomp = true
+			if opt == "seccomp=unconfined" {
+				seccompDisabled = true
+			}
+		}
+		if opt == "no-new-privileges" || opt == "no-new-privileges:true" {
+			hasNoNewPrivileges = true
+		}
+	}
+
+	if !hasAppArmor && !info.HostConfig.Privileged {
+		control, _ := benchmark.Get("5.1")
+		f := finding.New("CIS-5.1", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+		findings = append(findings, f)
+	}
+
+	if seccompDisabled {
+		control, _ := benchmark.Get("5.21")
+		f := finding.New("CIS-5.21", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+		findings = append(findings, f)
+	}
+
+	if !hasSeccomp && !info.HostConfig.Privileged {
+		control, _ := benchmark.Get("5.21")
+		f := finding.New("CIS-5.21", "No seccomp profile set", finding.SeverityMedium, target).
+			WithDescription("Container is running without an explicit seccomp profile. While Docker applies a default profile, it's recommended to explicitly set one.").
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+		findings = append(findings, f)
+	}
+
+	if !hasNoNewPrivileges {
+		control, _ := benchmark.Get("5.25")
+		f := finding.New("CIS-5.25", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+		findings = append(findings, f)
+	}
+
+	return findings
+}
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of the `checkSecurityOptions` function is \(O(n)\), where \(n\) is the number of security options in `info.HostConfig.SecurityOpt`. Each option is processed once, making the loop linear with respect to the input size.
+
+#### Space Complexity and Memory Allocation
+- The space complexity is \(O(1)\) for variables like `hasAppArmor`, `hasSeccomp`, etc.
+- However, the use of `finding.New` creates new finding objects in each iteration, which can be costly if called frequently. This leads to unnecessary memory allocation.
+
+#### Bottlenecks or Inefficiencies
+- **Redundant Operations**: The function repeatedly calls `benchmark.Get("5.1")` and `benchmark.Get("5.21")`, even though the control ID is hardcoded.
+- **Unnecessary Iterations**: The loop iterates over all security options, but only a few conditions are checked.
+
+#### Optimization Opportunities
+- **Cache Control IDs**: Cache the results of `benchmark.Get` to avoid redundant calls.
+- **Early Exit**: If one condition matches and a finding is created, exit early if no further checks are needed.
+
+```go
+func (a *ContainerAnalyzer) checkSecurityOptions(
+	target finding.Target,
+	info types.ContainerJSON,
+) finding.Collection {
+	var findings finding.Collection
+
+	hasAppArmor := false
+	hasSeccomp := false
+	hasNoNewPrivileges := false
+	seccompDisabled := false
+
+	for _, opt := range info.HostConfig.SecurityOpt {
+		if strings.HasPrefix(opt, "apparmor=") {
+			hasAppArmor = true
+		}
+		if strings.HasPrefix(opt, "seccomp=") {
+			hasSeccomp = true
+			if opt == "seccomp=unconfined" {
+				seccompDisabled = true
+			}
+		}
+		if opt == "no-new-privileges" || opt == "no-new-privileges:true" {
+			hasNoNewPrivileges = true
+		}
+	}
+
+	if !hasAppArmor && !info.HostConfig.Privileged {
+		control, _ := benchmark.Get("5.1")
+		finding.New("CIS-5.1", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+	}
+
+	if seccompDisabled {
+		control, _ := benchmark.Get("5.21")
+		finding.New("CIS-5.21", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+	}
+
+	if !hasSeccomp && !info.HostConfig.Privileged {
+		control, _ := benchmark.Get("5.21")
+		finding.New("CIS-5.21", "No seccomp profile set", finding.SeverityMedium, target).
+			WithDescription("Container is running without an explicit seccomp profile. While Docker applies a default profile, it's recommended to explicitly set one.").
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+	}
+
+	if !hasNoNewPrivileges {
+		control, _ := benchmark.Get("5.25")
+		finding.New("CIS-5.25", control.Title, finding.SeverityHigh, target).
+			WithDescription(control.Description).
+			WithCategory(string(CategoryContainerRuntime)).
+			WithRemediation(control.Remediation).
+			WithReferences(control.References...).
+			WithCISControl(control.ToCISControl())
+	}
+
+	return findings
+}
+```
+
+#### Resource Usage Concerns
+- Ensure that `benchmark.Get` is cached to avoid repeated database queries.
+- Consider using a more efficient data structure for storing and checking security options if the number of options grows significantly.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 23:56*
