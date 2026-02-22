@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/auth/unified_auth.py
+**File:** backend/api/core/services/archive/archive_service.py
 **Language:** python
-**Lines:** 1-177
+**Lines:** 1-234
 **Complexity:** 0.0
 
 ---
@@ -13,133 +13,141 @@
 
 ```python
 """
-Unified Authentication System - Connects User and AdminUser models
-/api/core/auth/unified_auth.py
+Universal Archive Service
+/api/core/services/archive/archive_service.py
 """
 
-from typing import Any
-from api.admin.roles.models import AdminRole
-from api.domains.account.models.User import User
-from api.admin.models.users.AdminUser import AdminUser
-from api.core.validation.exceptions import NotFoundError
-from api.domains.account.services.auth import AuthService
+from bson import ObjectId
+from typing import Any, cast
+from mongoengine import get_db
+
+from api.core.validation.exceptions import (
+    NotFoundError,
+    ValidationError,
+    BusinessRuleError,
+)
+from .Archive import Archive, ArchiveReason
 
 
-class UnifiedAuthService:
+class ArchiveService:
     """
-    Dual role authentication between User and AdminUser models
+    Static methods for archiving/restoring documents from any collection
     """
     @staticmethod
-    def create_user_admin_link(
-        user_email: str,
-        admin_role: AdminRole = AdminRole.VIEWER,
-        created_by: str | None = None
+    def archive_document(
+        collection_name: str,
+        document_id: str | ObjectId,
+        reason: ArchiveReason,
+        archived_by: str | ObjectId,
+        additional_data: dict[str,
+                              Any] | None = None
     ) -> dict[str,
               Any]:
         """
-        Create an admin account linked to existing user via shared email
+        Archive a document by moving it from its original collection to archives
         """
-        user = User.objects(email = user_email.lower()).first()
-        if not user:
-            raise NotFoundError(f"User with email {user_email} not found")
+        if not collection_name or not document_id or not reason or not archived_by:
+            raise ValidationError(
+                "Missing required parameters for archiving"
+            )
 
-        existing_admin = AdminUser.objects(email = user_email.lower()
-                                           ).first()
-        if existing_admin:
-            return {
-                "user_id": str(user.id),
-                "admin_id": str(existing_admin.id),
-                "was_created": False
-            }
+        doc_id = ObjectId(document_id) if isinstance(
+            document_id,
+            str
+        ) else document_id
+        admin_id = ObjectId(archived_by) if isinstance(
+            archived_by,
+            str
+        ) else archived_by
 
-        admin_user = AdminUser.create_admin(
-            email = user.email,
-            role = admin_role,
-            created_by = created_by or "unified_auth_system"
-        )
+        db = get_db()
 
-        if user.username and not admin_user.name:
-            admin_user.name = user.username
-            admin_user.save()
+        original_doc = db[collection_name].find_one({"_id": doc_id})
+        if not original_doc:
+            raise NotFoundError(
+                f"Document not found in {collection_name}",
+                str(doc_id)
+            )
 
-        user.is_admin = True
-        user.save()
+        archive_data = {
+            "originalId": doc_id,
+            "originalCollection": collection_name,
+            "archivedBy": admin_id,
+            "reason": reason.value,
+            "originalData": original_doc
+        }
+
+        if additional_data:
+            archive_data["originalData"]["_archive_metadata"
+                                         ] = additional_data
+
+        archive = Archive(**archive_data)
+        archive.save()
+
+        db[collection_name].delete_one({"_id": doc_id})
 
         return {
-            "user_id": str(user.id),
-            "admin_id": str(admin_user.id),
-            "user_email": user.email,
-            "admin_role": admin_role.value,
-            "was_created": True
+            "archive_id": str(archive.id),
+            "original_id": str(doc_id),
+            "collection": collection_name,
+            "reason": reason.value,
+            "archived_at": archive.archivedAt.isoformat(),
         }
 
     @staticmethod
-    def create_admin_user_link(
-        admin_email: str,
-        username: str,
-        password: str,
-        **user_kwargs
+    def restore_document(
+        archive_id: str | ObjectId,
+        restored_by: str | ObjectId
     ) -> dict[str,
               Any]:
         """
-        Create a user account linked to existing admin via shared email
+        Restore an archived document back to its original collection
         """
-        admin = AdminUser.objects(email = admin_email.lower()).first()
-        if not admin:
-            raise NotFoundError(
-                f"Admin with email {admin_email} not found"
-            )
+        arch_id = ObjectId(archive_id) if isinstance(
+            archive_id,
+            str
+        ) else archive_id
 
-        existing_user = User.objects(email = admin_email.lower()).first()
-        if existing_user:
-            return {
-                "user_id": str(existing_user.id),
-                "admin_id": str(admin.id),
-                "was_created": False
-            }
+        archive = Archive.objects(id = arch_id).first()
+        if not archive:
+            raise NotFoundError("Archive record", str(arch_id))
 
-        user = AuthService.create_user(
-            username = username,
-            email = admin.email,
-            password = password,
-            is_admin = True,
-            **user_kwargs
-        )
+        db = get_db()
 
-        if not user:
-            raise NotFoundError("Failed to create user account")
+        original_data = archive.originalData.copy()
 
-        return {
-            "user_id": str(user.id),
-            "admin_id": str(admin.id),
-            "u
+        if "_archive_metadata" in original_data:
+            del original_data["_archive_metadata"]
+
+        exis
 ```
 
 ---
 
 ## Pattern Analysis
 
-### Pattern Analysis
+### Analysis of Repository Pattern in `ArchiveService`
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:** **Repository Pattern**
 
-The `UnifiedAuthService` class in the provided code implements a form of the **Repository Pattern**, which abstracts data access and manipulation logic. This pattern is used to encapsulate storage, including query operations.
+The repository pattern is implemented through static methods within the `ArchiveService` class, which abstracts data access operations for archiving and restoring documents.
 
-- **Implementation**: The `UnifiedAuthService` contains static methods for creating and retrieving user-admin linkages, checking admin access, and upgrading or revoking admin roles. Each method interacts with models (`User`, `AdminUser`) through their respective database queries.
-  
-- **Benefits**:
-  - **Encapsulation**: Abstracts the underlying data storage logic, making it easier to switch between different databases or storage mechanisms if needed.
-  - **Testability**: Facilitates unit testing by isolating business logic from specific database interactions.
+- **Implementation:**
+  - The service provides static methods like `archive_document`, `restore_document`, `get_archive_by_id`, and `search_archives`. These methods handle CRUD-like operations on archived documents.
+  - Each method interacts with the MongoDB database through a `get_db` function to fetch or modify data, encapsulating the database interaction logic.
 
-- **Deviations**:
-  - The pattern is not strictly adhered to in terms of having a separate repository class. Instead, the methods are grouped within `UnifiedAuthService`.
-  - Some methods (like `create_user_admin_link`) return detailed dictionaries containing both user and admin information, which might be considered an anti-pattern as it mixes data retrieval with business logic.
+- **Benefits:**
+  - **Encapsulation:** The service abstracts the underlying database operations, making it easier to switch storage mechanisms without changing the business logic.
+  - **Testability:** By separating data access from business logic, unit testing becomes more straightforward.
+  - **Maintainability:** Changes in database schema or access methods can be handled centrally within the repository.
 
-- **Appropriateness**:
-  - This pattern is appropriate for this context where multiple related operations need to interact with the same models. However, if more complex or specialized storage interactions are required, a dedicated repository class would be beneficial.
+- **Deviations:**
+  - The pattern is slightly deviated as it uses static methods instead of defining a separate `Repository` class. However, this approach still encapsulates data access logic effectively.
+  - The use of `get_db()` to fetch the database connection might not be ideal for larger applications where dependency injection or a more structured repository setup would be beneficial.
 
-This implementation effectively manages user-admin relationships while maintaining a clean separation of concerns within the service layer.
+- **Appropriateness:**
+  - This pattern is appropriate for smaller to medium-sized projects where the complexity of managing multiple repositories is manageable. For larger, more complex systems, a dedicated repository class with methods could provide better structure and maintainability.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 16:26*
+*Generated by CodeWorm on 2026-02-22 16:40*
