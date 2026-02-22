@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/schema.py
+**File:** backend/api/core/decorators/cache.py
 **Language:** python
-**Lines:** 1-98
+**Lines:** 1-194
 **Complexity:** 0.0
 
 ---
@@ -13,92 +13,112 @@
 
 ```python
 """
-Schema Validation Decorator
-/api/middleware/decorators/schema.py
+Caching decorators for route optimization
+/api/core/lib/cache.py
 """
 
+import os
+import time
+import redis
 import json
 import logging
-import contextlib
-from typing import Any
+from settings import Cache, Redis
 from functools import wraps
-from flask import request, g
+from flask import current_app
 from collections.abc import Callable
-from pydantic import BaseModel, ValidationError
-from werkzeug.exceptions import (
-    UnsupportedMediaType,
-    BadRequest,
-)
+from typing import Any, TypeVar, cast
 
 
 logger = logging.getLogger(__name__)
 
+cache_storage: dict[str, Any] = {}
+cache_timestamps: dict[str, float] = {}
 
-def schema(
-    model: type[BaseModel]
-) -> Callable[[Callable[...,
-                        Any]],
-              Callable[...,
-                       Any]]:
+_redis_conn: redis.StrictRedis | None = None
+
+T = TypeVar("T")
+
+
+def get_redis_connection() -> redis.StrictRedis | None:
     """
-    Pydantic schema validation decorator.
+    Get Redis connection using Flask app's shared Redis client
     """
-    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(f)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+    try:
+        return current_app.extensions.get("redis_client")
+    except Exception:
+        global _redis_conn
+        if _redis_conn is None and redis:
             try:
-                data = None
-                content_type = request.content_type or ""
+                REDIS_PASSWORD: str | None = os.getenv("REDIS_PASSWORD")
+                _redis_conn = redis.StrictRedis(
+                    host = Redis.DEFAULT_HOST,
+                    port = Redis.DEFAULT_PORT,
+                    db = Redis.DEFAULT_DB,
+                    password = REDIS_PASSWORD,
+                    decode_responses = True,
+                    socket_connect_timeout = Redis.SOCKET_CONNECT_TIMEOUT,
+                    socket_timeout = Redis.SOCKET_TIMEOUT
+                )
+                _redis_conn.ping()
+            except Exception:
+                _redis_conn = None
+        return _redis_conn
 
-                if content_type.startswith('application/json'):
-                    data = request.get_json()
-                elif content_type.startswith(
-                    ('application/x-www-form-urlencoded',
-                     'multipart/form-data')):
-                    data = {}
-                    for key, value in request.form.items():
-                        try:
-                            data[key] = json.loads(value
-                                                   ) if value.startswith(
-                                                       ('{',
-                                                        '[')
-                                                   ) else value
-                        except (json.JSONDecodeError, ValueError):
-                            data[key] = value
-                else:
-                    with contextlib.suppress(UnsupportedMediaType):
-                        data = request.get_json(silent = True)
 
-                    if not data and request.form:
-                        data = dict(request.form)
-                    elif not data:
-                        data = dict(request.args)
+def redis_cache_set(
+    key: str,
+    value: Any,
+    ttl: int = Redis.DEFAULT_CACHE_TTL_SECONDS
+) -> None:
+    """
+    Set value in Redis cache with TTL
+    """
+    conn: redis.StrictRedis | None = get_redis_connection()
+    if conn:
+        try:
+            serialized: str = json.dumps(value, default = str)
+            conn.setex(key, ttl, serialized)
+        except Exception as e:
+            logger.warning("Failed to set cache for key %s: %s", key, e)
 
-                if data is None:
-                    data = {}
 
-                validated_data: BaseModel = model(**data)
+def redis_cache_get(key: str) -> Any:
+    """
+    Get value from Redis cache
+    """
+    conn: redis.StrictRedis | None = get_redis_connection()
+    if conn:
+        try:
+            data: bytes | None = conn.get(key)
+            if data:
+                return json.loads(data)
+            return None
+        except Exception as e:
+            logger.warning("Failed to get cache for key %s: %s", key, e)
+            return None
+    return None
 
-                g.validated = validated_data.model_dump()
-                g.validated_model = validated_data
 
-            except ValidationError as e:
-                errors: dict[str, str] = {}
-                for error in e.errors():
-                    field: str = ".".join(str(x) for x in error["loc"])
-                    errors[field] = error["msg"]
+def cached_route(
+    cache_duration_seconds: int = Cache.
+    DEFAULT_ROUTE_CACHE_DURATION_SECONDS,
+) -> Callable[[Callable[...,
+                        T]],
+              Callable[...,
+                       T]]:
+    """
+    Decorator to cache route responses
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            cache_key: str = f"{func.__name__}_{str(args)}_{str(sorted(kwargs.items()))}"
 
-                return {"error": "Validation failed", "errors": errors}, 400
-            except Exception as e:
-                if isinstance(e, UnsupportedMediaType):
-                    return {
-                        "error": "Invalid content type",
-                        "message": "Content-Type must be application/json"
-                    }, 400
-                if isinstance(e, BadRequest):
-                    return {"error": "Invalid JSON", "message": "Request body must be valid JSON"}, 400
+            now: float = time.time()
 
-    
+            if (cache_key in cache_storage
+                    and cache_key in cache_timestamps and now -
+                    
 ```
 
 ---
@@ -109,20 +129,27 @@ def schema(
 
 **Pattern Used:** Decorator Pattern
 
-The `schema` decorator function in the provided code implements the **Decorator Pattern** to validate incoming request data using Pydantic models. The core implementation involves a higher-order function that takes a model class as an argument and returns another function (decorator) which wraps the original function (`f`). This wrapper function handles JSON parsing, form data processing, and validation against the provided Pydantic model.
+**Implementation:**
+The decorator pattern is implemented through the `cached_route` function, which wraps a route handler with caching logic. This function returns another decorator that caches the result of the decorated function based on a unique cache key derived from the function's arguments and name.
+
+```python
+def cached_route(
+    cache_duration_seconds: int = Cache.DEFAULT_ROUTE_CACHE_DURATION_SECONDS,
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    ...
+```
 
 **Benefits:**
-- **Modularity:** Decorators allow for clean separation of concerns by encapsulating cross-cutting concerns like validation.
-- **Reusability:** The `schema` decorator can be applied to multiple functions without duplicating code.
-- **Flexibility:** Easily switch or extend the validation logic by modifying the decorator.
+- **Decoupling:** The caching logic is decoupled from the route handler, making it easier to manage and modify.
+- **Performance Optimization:** Caching reduces the number of database queries or API calls by storing results in memory or Redis.
 
 **Deviations:**
-- The implementation includes custom error handling for specific HTTP errors (`UnsupportedMediaType`, `BadRequest`), which is not a strict deviation but adds context-specific behavior.
-- The use of `contextlib.suppress` to handle `UnsupportedMediaType` exceptions without raising them immediately, allowing the validation process to continue.
+- The `cached_route` decorator uses a dictionary (`cache_storage`) for local caching, whereas typical implementations might use a more robust cache system like Redis directly.
+- There is no explicit expiration handling within the local cache; it relies on Redis TTL.
 
 **Appropriateness:**
-This pattern is highly appropriate for web APIs where request data needs to be validated before processing. It ensures that all endpoints adhere to a consistent validation mechanism, improving code maintainability and reducing boilerplate code. However, it might not be suitable for scenarios requiring complex or dynamic validation logic that cannot be encapsulated in a simple decorator.
+This pattern is appropriate when you need to cache route responses to improve performance and reduce database load. It's especially useful in web applications where certain routes are frequently accessed with similar parameters. However, for more complex caching scenarios requiring distributed caching or fine-grained control, a dedicated caching library like Redis might be more suitable.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 16:18*
+*Generated by CodeWorm on 2026-02-21 20:43*
