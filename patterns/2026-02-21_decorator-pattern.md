@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/cache.py
+**File:** backend/api/core/decorators/load.py
 **Language:** python
-**Lines:** 1-194
+**Lines:** 1-41
 **Complexity:** 0.0
 
 ---
@@ -13,112 +13,46 @@
 
 ```python
 """
-Caching decorators for route optimization
-/api/core/lib/cache.py
+Load Decorator - For populating Flask g object
+/api/middleware/decorators/load.py
 """
 
-import os
-import time
-import redis
-import json
 import logging
-from settings import Cache, Redis
+from typing import Any
 from functools import wraps
-from flask import current_app
 from collections.abc import Callable
-from typing import Any, TypeVar, cast
 
 
 logger = logging.getLogger(__name__)
 
-cache_storage: dict[str, Any] = {}
-cache_timestamps: dict[str, float] = {}
 
-_redis_conn: redis.StrictRedis | None = None
-
-T = TypeVar("T")
-
-
-def get_redis_connection() -> redis.StrictRedis | None:
+def load(*loaders: Callable):
     """
-    Get Redis connection using Flask app's shared Redis client
+    Load decorator for populating Flask g object.
     """
-    try:
-        return current_app.extensions.get("redis_client")
-    except Exception:
-        global _redis_conn
-        if _redis_conn is None and redis:
-            try:
-                REDIS_PASSWORD: str | None = os.getenv("REDIS_PASSWORD")
-                _redis_conn = redis.StrictRedis(
-                    host = Redis.DEFAULT_HOST,
-                    port = Redis.DEFAULT_PORT,
-                    db = Redis.DEFAULT_DB,
-                    password = REDIS_PASSWORD,
-                    decode_responses = True,
-                    socket_connect_timeout = Redis.SOCKET_CONNECT_TIMEOUT,
-                    socket_timeout = Redis.SOCKET_TIMEOUT
-                )
-                _redis_conn.ping()
-            except Exception:
-                _redis_conn = None
-        return _redis_conn
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            for loader in loaders:
+                try:
+                    loader()
+                except Exception as e:
+                    logger.debug(
+                        "Loader failed in %s: %s",
+                        loader.__name__,
+                        str(e)
+                    )
+                    raise
+
+            return f(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
-def redis_cache_set(
-    key: str,
-    value: Any,
-    ttl: int = Redis.DEFAULT_CACHE_TTL_SECONDS
-) -> None:
-    """
-    Set value in Redis cache with TTL
-    """
-    conn: redis.StrictRedis | None = get_redis_connection()
-    if conn:
-        try:
-            serialized: str = json.dumps(value, default = str)
-            conn.setex(key, ttl, serialized)
-        except Exception as e:
-            logger.warning("Failed to set cache for key %s: %s", key, e)
+G = load
 
-
-def redis_cache_get(key: str) -> Any:
-    """
-    Get value from Redis cache
-    """
-    conn: redis.StrictRedis | None = get_redis_connection()
-    if conn:
-        try:
-            data: bytes | None = conn.get(key)
-            if data:
-                return json.loads(data)
-            return None
-        except Exception as e:
-            logger.warning("Failed to get cache for key %s: %s", key, e)
-            return None
-    return None
-
-
-def cached_route(
-    cache_duration_seconds: int = Cache.
-    DEFAULT_ROUTE_CACHE_DURATION_SECONDS,
-) -> Callable[[Callable[...,
-                        T]],
-              Callable[...,
-                       T]]:
-    """
-    Decorator to cache route responses
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> T:
-            cache_key: str = f"{func.__name__}_{str(args)}_{str(sorted(kwargs.items()))}"
-
-            now: float = time.time()
-
-            if (cache_key in cache_storage
-                    and cache_key in cache_timestamps and now -
-                    
 ```
 
 ---
@@ -129,27 +63,27 @@ def cached_route(
 
 **Pattern Used:** Decorator Pattern
 
-**Implementation:**
-The decorator pattern is implemented through the `cached_route` function, which wraps a route handler with caching logic. This function returns another decorator that caches the result of the decorated function based on a unique cache key derived from the function's arguments and name.
+The `load` function in the provided code implements a decorator to populate the Flask global object (`g`). It wraps a function `f` and executes multiple loaders before calling it.
 
-```python
-def cached_route(
-    cache_duration_seconds: int = Cache.DEFAULT_ROUTE_CACHE_DURATION_SECONDS,
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    ...
-```
+1. **Implementation:**
+   - The `load` function takes one or more loader functions as arguments.
+   - Each loader is called within the wrapper function, which logs any exceptions that occur during execution.
 
-**Benefits:**
-- **Decoupling:** The caching logic is decoupled from the route handler, making it easier to manage and modify.
-- **Performance Optimization:** Caching reduces the number of database queries or API calls by storing results in memory or Redis.
+2. **Benefits:**
+   - **Modularity:** Loaders can be added or removed easily by modifying the `loaders` argument.
+   - **Centralized Logic:** All loading logic is centralized in one decorator, making it easier to manage and maintain.
+   - **Error Handling:** Exceptions from loaders are logged and re-raised, ensuring that any issues are noticed.
 
-**Deviations:**
-- The `cached_route` decorator uses a dictionary (`cache_storage`) for local caching, whereas typical implementations might use a more robust cache system like Redis directly.
-- There is no explicit expiration handling within the local cache; it relies on Redis TTL.
+3. **Deviations:**
+   - The pattern uses a `Callable` type hint for the loader functions, which is appropriate but could be more specific if the exact signature of these functions were known.
+   - The decorator itself is named `load`, and it's also aliased as `G`. This might lead to confusion; typically, decorators are named descriptively.
 
-**Appropriateness:**
-This pattern is appropriate when you need to cache route responses to improve performance and reduce database load. It's especially useful in web applications where certain routes are frequently accessed with similar parameters. However, for more complex caching scenarios requiring distributed caching or fine-grained control, a dedicated caching library like Redis might be more suitable.
+4. **Appropriateness:**
+   - This pattern is suitable for scenarios where multiple setup tasks need to be performed before a function executes.
+   - It works well in Flask applications where the global object (`g`) needs to be populated with various pieces of information from different sources or services.
+
+This decorator pattern provides a clean and flexible way to manage pre-execution logic, making the code more modular and easier to maintain.
 
 ---
 
-*Generated by CodeWorm on 2026-02-21 20:43*
+*Generated by CodeWorm on 2026-02-21 21:30*
