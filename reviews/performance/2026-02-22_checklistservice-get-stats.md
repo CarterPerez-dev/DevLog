@@ -1,0 +1,145 @@
+# ChecklistService.get_stats
+
+**Type:** Performance Analysis
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/life_manager/facets/checklist/service.py
+**Language:** python
+**Lines:** 178-229
+**Complexity:** 14.0
+
+---
+
+## Source Code
+
+```python
+async def get_stats(session: AsyncSession) -> ChecklistStatsResponse:
+        """
+        Compute streak, per-item completion rates, and year heatmap
+        """
+        today = date.today()
+        year_start = date(today.year, 1, 1)
+
+        heatmap_rows = await ChecklistLogRepository.get_heatmap_data(
+            session, year_start, today
+        )
+        heatmap = [
+            HeatmapDay(
+                date=row.log_date,
+                completed_count=int(row.completed_count or 0),
+                total_count=int(row.total_count or 0),
+            )
+            for row in heatmap_rows
+        ]
+
+        heatmap_by_date = {h.date: h for h in heatmap}
+        streak = 0
+        check_date = today
+        while check_date >= year_start:
+            day = heatmap_by_date.get(check_date)
+            if day and day.total_count > 0 and day.completed_count == day.total_count:
+                streak += 1
+                check_date -= timedelta(days=1)
+            else:
+                break
+
+        rate_rows = await ChecklistLogRepository.get_item_completion_rates(session)
+        active_items = await ChecklistItemRepository.get_active(session)
+        item_map = {i.id: i.title for i in active_items}
+
+        item_stats = [
+            ItemStat(
+                item_id=row.item_id,
+                title=item_map.get(row.item_id, ""),
+                completion_rate=round(
+                    (int(row.completed or 0) / int(row.total)) if int(row.total) > 0 else 0.0,
+                    4,
+                ),
+            )
+            for row in rate_rows
+            if row.item_id in item_map
+        ]
+
+        return ChecklistStatsResponse(
+            streak=streak,
+            item_stats=item_stats,
+            heatmap=heatmap,
+        )
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(n^2)\) due to the nested iteration in `get_item_completion_rates` and the while loop, where \(n\) is the number of rows returned by these queries.
+
+**Space Complexity:** The space complexity is \(O(m + k)\), where \(m\) is the number of heatmap rows and \(k\) is the number of active items. This is due to storing `heatmap`, `item_map`, and `item_stats`.
+
+**Bottlenecks or Inefficiencies:**
+1. **N+1 Query Pattern:** The function makes two separate database queries (`get_heatmap_data` and `get_item_completion_rates`) which can lead to performance issues, especially if the number of rows is large.
+2. **Redundant Operations:** The while loop iterates over dates from today back to year start, even though it breaks early when a streak is found.
+
+**Optimization Opportunities:**
+1. **Batch Queries:** Use `selectinload` or `joinedload` in SQLAlchemy to load related data in one query.
+2. **Early Breaks:** Optimize the while loop by breaking as soon as the streak is found, reducing unnecessary iterations.
+
+```python
+async def get_stats(session: AsyncSession) -> ChecklistStatsResponse:
+    today = date.today()
+    year_start = date(today.year, 1, 1)
+
+    heatmap_rows = await ChecklistLogRepository.get_heatmap_data(
+        session, year_start, today
+    )
+    heatmap = [
+        HeatmapDay(
+            date=row.log_date,
+            completed_count=int(row.completed_count or 0),
+            total_count=int(row.total_count or 0),
+        )
+        for row in heatmap_rows
+    ]
+    
+    heatmap_by_date = {h.date: h for h in heatmap}
+    streak = 0
+    check_date = today
+    while check_date >= year_start:
+        day = heatmap_by_date.get(check_date)
+        if day and day.total_count > 0 and day.completed_count == day.total_count:
+            streak += 1
+            check_date -= timedelta(days=1)
+        else:
+            break
+
+    rate_rows = await ChecklistLogRepository.get_item_completion_rates(session, year_start, today)  # Batch query
+    active_items = await ChecklistItemRepository.get_active(session)
+
+    item_map = {i.id: i.title for i in active_items}
+    item_stats = [
+        ItemStat(
+            item_id=row.item_id,
+            title=item_map.get(row.item_id, ""),
+            completion_rate=round(
+                (int(row.completed or 0) / int(row.total)) if int(row.total) > 0 else 0.0,
+                4,
+            ),
+        )
+        for row in rate_rows
+        if row.item_id in item_map
+    ]
+
+    return ChecklistStatsResponse(
+        streak=streak,
+        item_stats=item_stats,
+        heatmap=heatmap,
+    )
+```
+
+**Resource Usage Concerns:**
+- Ensure proper use of context managers to handle database sessions.
+- Close any unclosed connections or file handles if used.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 07:08*
