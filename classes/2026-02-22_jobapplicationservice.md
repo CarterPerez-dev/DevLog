@@ -1,0 +1,152 @@
+# JobApplicationService
+
+**Type:** Class Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/life_manager/facets/career/job_app_tracker/service.py
+**Language:** python
+**Lines:** 37-222
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class JobApplicationService:
+    """
+    Service for job application operations
+    """
+    @staticmethod
+    async def get_application(
+        session: AsyncSession,
+        user_id: UUID,
+        application_id: UUID,
+    ) -> JobApplicationResponse:
+        """
+        Get a single job application by ID
+        """
+        application = await JobApplicationRepository.get_by_id(
+            session,
+            application_id
+        )
+        if not application:
+            raise JobApplicationNotFound(application_id)
+        if application.user_id != user_id:
+            raise PermissionDenied()
+        return JobApplicationResponse.model_validate(application)
+
+    @staticmethod
+    async def get_applications(
+        session: AsyncSession,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> JobApplicationListResponse:
+        """
+        Get all job applications for a user
+        """
+        applications = await JobApplicationRepository.get_by_user(
+            session,
+            user_id,
+            skip,
+            limit
+        )
+        total = await JobApplicationRepository.count_by_user(
+            session,
+            user_id
+        )
+        return JobApplicationListResponse(
+            items = [
+                JobApplicationResponse.model_validate(a)
+                for a in applications
+            ],
+            total = total,
+        )
+
+    @staticmethod
+    async def get_by_status(
+        session: AsyncSession,
+        user_id: UUID,
+        status: ApplicationStatus,
+    ) -> JobApplicationListResponse:
+        """
+        Get job applications filtered by status
+        """
+        applications = await JobApplicationRepository.get_by_status(
+            session,
+            user_id,
+            status
+        )
+        return JobApplicationListResponse(
+            items = [
+                JobApplicationResponse.model_validate(a)
+                for a in applications
+            ],
+            total = len(applications),
+        )
+
+    @staticmethod
+    async def get_by_outcome(
+        session: AsyncSession,
+        user_id: UUID,
+        outcome: Outcome,
+    ) -> JobApplicationListResponse:
+        """
+        Get job applications filtered by outcome
+        """
+        applications = await JobApplicationRepository.get_by_outcome(
+            session,
+            user_id,
+            outcome
+        )
+        return JobApplicationListResponse(
+            items = [
+                JobApplicationResponse.model_validate(a)
+                for a in applications
+            ],
+            total = len(applications),
+        )
+
+    @staticmethod
+    async def get_pending_followups(
+        session: AsyncSession,
+        user_id: UUID,
+    ) -> JobApplicationListResponse:
+        """
+        Get applications needing follow-up
+        """
+        applications = await JobApplicationRepository.get_pending_followups(
+            session,
+            user_id
+        )
+        return JobApplicationLi
+```
+
+---
+
+## Class Documentation
+
+### JobApplicationService Documentation
+
+**Class Responsibility and Purpose:**
+The `JobApplicationService` class is responsible for managing job application operations within the system, including fetching, filtering, creating, updating, and deleting applications. It ensures that only authorized users can perform actions on their own applications.
+
+**Public Interface (Key Methods):**
+- **get_application**: Retrieves a single job application by ID.
+- **get_applications**: Fetches all job applications for a user with pagination support.
+- **get_by_status**: Filters job applications based on status.
+- **get_by_outcome**: Filters job applications based on outcome.
+- **get_pending_followups**: Identifies applications needing follow-up actions.
+- **create_application**: Creates a new job application.
+- **update_application**: Updates an existing job application.
+- **delete_application**: Deletes a job application.
+
+**Design Patterns Used:**
+The class leverages the **Factory Method Pattern** implicitly through its static methods, which handle different operations without tightly coupling them. It also uses **Repository Pattern** by delegating data retrieval and manipulation to `JobApplicationRepository`.
+
+**How it Fits in the Architecture:**
+`JobApplicationService` acts as a high-level service layer that interacts with the database via `JobApplicationRepository`. This separation ensures that business logic is encapsulated within the service, while the repository handles data access. The service methods are designed to be stateless and focus on performing specific operations, making them easier to test and maintain.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 02:19*
