@@ -1,0 +1,128 @@
+# CodeAnalyzer.analyze_file
+
+**Type:** Performance Analysis
+**Repository:** CodeWorm
+**File:** codeworm/analysis/analyzer.py
+**Language:** python
+**Lines:** 88-168
+**Complexity:** 13.0
+
+---
+
+## Source Code
+
+```python
+def analyze_file(self,
+                     scanned_file: ScannedFile) -> Iterator[AnalysisCandidate]:
+        """
+        Analyze a single file and yield documentation candidates
+        """
+        try:
+            source = scanned_file.path.read_text(encoding = "utf-8")
+        except Exception:
+            return
+
+        extractor = CodeExtractor(source, scanned_file.language)
+        complexity_results = self.complexity_analyzer.analyze_source(
+            source,
+            str(scanned_file.path),
+        )
+        complexity_map = {m.name: m for m in complexity_results}
+
+        git_repo = self._get_git_repo(scanned_file.path.parent)
+        if git_repo:
+            self.scorer.git_repo = git_repo
+
+        for parsed_func in extractor.extract_functions():
+            if self._should_skip_function(parsed_func):
+                continue
+
+            complexity = complexity_map.get(parsed_func.name)
+            if not complexity:
+                for name, metrics in complexity_map.items():
+                    if name.endswith(f".{parsed_func.name}"):
+                        complexity = metrics
+                        break
+
+            git_stats = self.scorer.get_git_stats(
+                scanned_file.path,
+                parsed_func.start_line,
+                parsed_func.end_line,
+            )
+
+            if complexity:
+                interest = self.scorer.score(
+                    complexity,
+                    git_stats,
+                    parsed_func.decorators,
+                    parsed_func.is_async,
+                    parsed_func.source,
+                )
+            else:
+                interest = InterestScore(
+                    total = 20,
+                    complexity_score = 0,
+                    length_score = 0,
+                    nesting_score = 0,
+                    parameter_score = 0,
+                    churn_score = 0,
+                    novelty_score = 0,
+                )
+
+            snippet = CodeSnippet(
+                repo = scanned_file.repo_name,
+                file_path = scanned_file.path,
+                function_name = parsed_func.name,
+                class_name = parsed_func.class_name,
+                language = scanned_file.language,
+                source = parsed_func.source,
+                start_line = parsed_func.start_line,
+                end_line = parsed_func.end_line,
+                complexity = complexity.cyclomatic_complexity
+                if complexity else 0,
+                nesting_depth = complexity.max_nesting_depth if complexity else 0,
+                parameter_count = complexity.parameter_count if complexity else 0,
+                interest_score = interest.total,
+            )
+
+            yield AnalysisCandidate(
+                snippet = snippet,
+                parsed_function = parsed_func,
+                complexity = complexity,
+                git_stats = git_stats,
+                interest_score = interest,
+                scanned_file = scanned_file,
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The time complexity of `analyze_file` is O(n * m), where n is the number of functions in the file, and m is the complexity of operations like scoring and extracting functions. The primary bottleneck is the nested loops and the potential for repeated lookups in `complexity_map`.
+
+**Space Complexity:** The space complexity is O(n) due to storing `complexity_results` and `git_stats`. However, the use of `CodeSnippet` and `AnalysisCandidate` can lead to significant memory overhead if many functions are analyzed.
+
+### Bottlenecks or Inefficiencies
+
+1. **Redundant Lookups:** The code performs a lookup in `complexity_map` multiple times for each function.
+2. **Unnecessary Iterations:** The nested loop structure, especially the iteration over `complexity_results`, can be optimized.
+3. **Blocking Calls:** Reading the file content and calling `self.scorer.get_git_stats` are blocking operations.
+
+### Optimization Opportunities
+
+1. **Memoization/Caching:** Cache results of complex operations like scoring to avoid redundant calculations.
+2. **Reduce Redundant Lookups:** Use a more efficient data structure, such as a dictionary with multiple keys, to reduce the number of lookups.
+3. **Asynchronous Calls:** Convert blocking calls to asynchronous ones if possible, using `asyncio` or `aiohttp`.
+
+### Resource Usage Concerns
+
+1. **File Handle Management:** Ensure that file handles are properly managed and closed when no longer needed.
+2. **Memory Leaks:** Optimize the use of `CodeSnippet` and `AnalysisCandidate` to avoid unnecessary memory usage.
+
+By addressing these issues, you can significantly improve the performance and efficiency of your code analysis process.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 00:52*
