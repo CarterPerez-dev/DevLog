@@ -1,0 +1,138 @@
+# StatusOverlay
+
+**Type:** Code Evolution
+**Repository:** angelamos-operations
+**File:** CarterOS-Client/src/aspects/assistant/facets/angela/components/StatusOverlay/StatusOverlay.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: 3894239b
+Message: angela-3d implementation - in prog open wake
+Author: CarterPerez-dev
+File: CarterOS-Client/src/aspects/assistant/facets/angela/components/StatusOverlay/StatusOverlay.tsx
+Change type: new file
+
+Diff:
+@@ -0,0 +1,132 @@
++// ===================
++// © AngelaMos | 2026
++// StatusOverlay.tsx
++// ===================
++
++import { useState } from 'react'
++import styles from './StatusOverlay.module.scss'
++import type { AngelaStatus } from '../../types'
++
++interface StatusOverlayProps {
++  status: AngelaStatus
++  transcript: string
++  response: string
++  error: string
++  onTrigger: () => void
++  onStop: () => void
++  onMute: () => void
++}
++
++const STATUS_LABELS: Record<AngelaStatus, string> = {
++  initializing: 'Starting...',
++  idle: 'Ready',
++  listening: 'Listening',
++  processing: 'Processing',
++  thinking: 'Thinking',
++  speaking: 'Speaking',
++  error: 'Error',
++}
++
++export function StatusOverlay({ status, transcript, response, error, onTrigger, onStop, onMute }: StatusOverlayProps) {
++  const [minimized, setMinimized] = useState(false)
++  const [hidden, setHidden] = useState(false)
++
++  if (hidden) {
++    return (
++      <button
++        className={styles.showButton}
++        onClick={() => setHidden(false)}
++        title="Show Angela status"
++      >
++        <span className={styles.showDot} />
++      </button>
++    )
++  }
++
++  const isActive = status === 'listening' || status === 'processing' || status === 'thinking' || status === 'speaking'
++  const canTrigger = status === 'idle'
++
++  return (
++    <div className={`${styles.overlay} ${minimized ? styles.minimized : ''}`}>
++      <div className={styles.header}>
++        <button
++          className={`${styles.statusButton} ${canTrigger ? styles.clickable : ''}`}
++          onClick={canTrigger ? onTrigger : undefined}
++          disabled={!canTrigger}
++          title={canTrigger ? 'Click to activate' : undefined}
++        >
++          <span className={`${styles.statusDot} ${styles[status]} ${isActive ? styles.pulse : ''}`} />
++          <span className={styles.statusLabel}>{STATUS_LABELS[status]}</span>
++        </button>
++
++        <div className={styles.controls}>
++          {status === 'speaking' && (
++            <button
++              className={`${styles.controlButton} ${styles.muteButton}`}
++              onClick={onMute}
++              title="Mute (skip audio)"
++            >
++              🔇
++            </button>
++          )}
++          {isActive && (
++            <button
++              className={`${styles.controlButton} ${styles.stopButton}`}
++              onClick={onStop}
++              title="Stop everything"
++            >
++              ■
++            </button>
++          )}
++          <button
++            className={styles.controlButton}
++            onClick={() => setMinimized(!minimized)}
++            title={minimized ? 'Expand' : 'Minimize'}
++          >
++            {minimized ? '+' : '−'}
++          </button>
++          <button
++            className=
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+A new file `StatusOverlay.tsx` was added, implementing a component to display Angela's status and related controls. The component uses React hooks like `useState` for state management and conditionally renders different UI elements based on the current status.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance user interaction with Angela by providing real-time feedback about her operational state. It allows users to trigger actions, mute audio, stop processes, minimize or hide the overlay, and view recent interactions.
+
+**Impact on Behavior:**
+The `StatusOverlay` component significantly improves the user interface for managing Angela's operations. Users can now see Angela’s current status (e.g., listening, processing) and interact with her more effectively through buttons that perform actions like triggering commands, stopping processes, or muting audio.
+
+**Risks or Concerns:**
+- **State Management:** The use of multiple state variables (`minimized`, `hidden`) could lead to potential bugs if not managed carefully.
+- **Performance:** If the component is used frequently, it might impact performance due to repeated re-renders based on status changes.
+- **Error Handling:** While error handling is present, additional checks for edge cases (e.g., when both `transcript` and `response` are missing) could improve robustness.
+
+Overall, this change enhances user experience by providing a dynamic and interactive interface for managing Angela's operations.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 15:19*
