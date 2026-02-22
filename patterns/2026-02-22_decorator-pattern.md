@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/admin/utils/decorators/response.py
+**File:** backend/api/core/decorators/throttle.py
 **Language:** python
-**Lines:** 1-41
+**Lines:** 1-127
 **Complexity:** 0.0
 
 ---
@@ -13,46 +13,105 @@
 
 ```python
 """
-Pydantic Response Decorator
-/api/admin/utils/response.py
+AI Throttle Decorator
+Decorator for AI endpoints that applies throttling and guardrails
+/api/core/decorators/throttle.py
 """
 
+import logging
+from typing import Any
 from functools import wraps
-from pydantic import BaseModel
+from flask import g, jsonify
+from collections.abc import Callable
+
+from ..limiters.throttle_helpers import (
+    AI_OPERATION_CONFIG,
+    DEFAULT_LIMITS,
+    extract_input_text,
+    limit_input_length,
+    check_token_limit,
+    log_ai_request,
+)
 
 
-def R(schema_class: type[BaseModel]):
+logger = logging.getLogger(__name__)
+
+
+def ai_throttle(
+    operation_type: str,
+    *,
+    input_field: str | None = None,
+    custom_limits: dict[str,
+                        int] | None = None,
+    model: str | None = None,
+    log_usage: bool = True,
+    streaming: bool = False,
+):
     """
-    Response schema decorator for Pydantic models
+    Decorator for AI endpoints with throttling, token limits and usage tracking
     """
-    def decorator(f):
+    def decorator(f: Callable) -> Callable:
         @wraps(f)
-        def wrapper(*args, **kwargs):
-            result = f(*args, **kwargs)
+        def decorated_function(*args: Any, **kwargs: Any) -> Any:
+            config: dict[str,
+                         Any] = AI_OPERATION_CONFIG.get(
+                             operation_type,
+                             DEFAULT_LIMITS.copy()
+                         )
+            if isinstance(config, dict):
+                config = config.copy()
 
-            if isinstance(result, tuple):
-                data, status_code = result
-                if isinstance(data, dict):
-                    validated = schema_class(**data)
-                    return validated.model_dump(mode = 'json'), status_code
-                return result
+            if custom_limits:
+                config.update(custom_limits)
 
-            if isinstance(result, dict):
-                validated = schema_class(**result)
-                return validated.model_dump(mode = 'json')
+            ai_model: str = model or config.get("model", "gpt-4o")
 
-            if isinstance(result, BaseModel):
-                if isinstance(result, schema_class):
-                    return result.model_dump(mode = 'json')
-                validated = schema_class(**result.model_dump())
-                return validated.model_dump(mode = 'json')
+            user_id: str | None = getattr(g, "user_id", None)
 
-            return result
+            input_text: str | None = extract_input_text(input_field)
+            if not input_text:
+                return jsonify({"error": "No input text provided"}), 400
 
-        return wrapper
+            limited_text: str | None = limit_input_length(
+                input_text,
+                operation_type = operation_type,
+                custom_max = config.get("max_chars")
+            )
 
-    return decorator
+            is_within_limit: bool
+            estimated_tokens: int
+            is_within_limit, estimated_tokens = check_token_limit(
+                limited_text,
+                operation_type=operation_type,
+                custom_max=config.get("max_tokens"),
+            )
 
+            if not is_within_limit:
+                max_tokens: int = config.get(
+                    "max_tokens",
+                    DEFAULT_LIMITS["max_tokens"]
+                )
+                error_msg: str = (
+                    f"Input exceeds maximum token limit. "
+                    f"Estimated: {estimated_tokens} tokens, Maximum: {max_tokens} tokens. "
+                    f"Please use shorter input."
+                )
+
+                if streaming:
+
+                    def error_generator():
+                        yield error_msg
+
+                    return error_generator()
+
+                return jsonify({"error": error_msg, "type": "token_limit_exceeded"}), 400
+
+            log_id: str | None = None
+            if log_usage:
+                try:
+                    log_id = log_ai_request(
+                        user_id = user_id,
+                        op
 ```
 
 ---
@@ -63,20 +122,24 @@ def R(schema_class: type[BaseModel]):
 
 **Pattern Used:** Decorator Pattern
 
-The `R` decorator in the provided code wraps a function to ensure that its return value, if it's a dictionary or an instance of a Pydantic model, gets validated and returned as JSON. This implementation follows the Decorator pattern by enhancing the functionality of the decorated function without modifying its structure.
+The `ai_throttle` decorator in this code implements the **Decorator Pattern**, which allows behavior to be added to an individual object, either statically or dynamically, without affecting the structure of other objects.
 
-**Benefits:**
-- **Encapsulation:** The decorator encapsulates validation logic, making it reusable across multiple functions.
-- **Flexibility:** It can handle different types of return values (tuple, dict, or Pydantic model) and validate them accordingly.
-- **Consistency:** Ensures that all responses adhere to the specified schema, promoting consistency in API outputs.
+- **Implementation**: The `ai_throttle` function returns a decorator that wraps another function (`f`). This inner decorator (`decorator`) then adds functionality (throttling and logging) before calling the original function.
+  
+- **Benefits**:
+  - **Modularity**: The decorator can be reused across different AI endpoints without modifying their core logic.
+  - **Flexibility**: Custom limits and models can be specified dynamically, enhancing adaptability.
+  - **Maintainability**: Centralized throttling and logging logic simplifies maintenance.
 
-**Deviations:**
-- The decorator checks for multiple conditions (`tuple`, `dict`, `BaseModel`) and handles each case differently. This is a deviation from the standard single responsibility principle of decorators, which typically wrap a function with minimal changes.
-- The use of `@wraps(f)` ensures that the metadata (name, docstring) of the original function is preserved.
+- **Deviations**:
+  - The decorator sets attributes on the decorated function (`g.ai_input`, `g.ai_model`, etc.), which is not typical of standard decorators but helps with state management within the application context.
+  - It uses a custom error generator for streaming responses, diverging from traditional return values.
 
-**Appropriateness:**
-This pattern is appropriate when you need to add cross-cutting concerns like validation or formatting to multiple functions without modifying their core logic. It's particularly useful in APIs where consistent response formats are essential. However, it might be overkill for simple functions with straightforward return types.
+- **Appropriateness**:
+  - This pattern is suitable when you need to add cross-cutting concerns like logging and throttling across multiple functions without modifying their core logic. It's particularly useful in web frameworks where such behaviors are common.
+
+This implementation effectively encapsulates the functionality of AI endpoint management, making it a good fit for this context.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 07:01*
+*Generated by CodeWorm on 2026-02-22 17:22*
