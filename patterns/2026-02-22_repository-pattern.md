@@ -1,0 +1,145 @@
+# repository_pattern
+
+**Type:** Pattern Analysis
+**Repository:** CertGames-Core
+**File:** backend/api/core/auth/unified_auth.py
+**Language:** python
+**Lines:** 1-177
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+Unified Authentication System - Connects User and AdminUser models
+/api/core/auth/unified_auth.py
+"""
+
+from typing import Any
+from api.admin.roles.models import AdminRole
+from api.domains.account.models.User import User
+from api.admin.models.users.AdminUser import AdminUser
+from api.core.validation.exceptions import NotFoundError
+from api.domains.account.services.auth import AuthService
+
+
+class UnifiedAuthService:
+    """
+    Dual role authentication between User and AdminUser models
+    """
+    @staticmethod
+    def create_user_admin_link(
+        user_email: str,
+        admin_role: AdminRole = AdminRole.VIEWER,
+        created_by: str | None = None
+    ) -> dict[str,
+              Any]:
+        """
+        Create an admin account linked to existing user via shared email
+        """
+        user = User.objects(email = user_email.lower()).first()
+        if not user:
+            raise NotFoundError(f"User with email {user_email} not found")
+
+        existing_admin = AdminUser.objects(email = user_email.lower()
+                                           ).first()
+        if existing_admin:
+            return {
+                "user_id": str(user.id),
+                "admin_id": str(existing_admin.id),
+                "was_created": False
+            }
+
+        admin_user = AdminUser.create_admin(
+            email = user.email,
+            role = admin_role,
+            created_by = created_by or "unified_auth_system"
+        )
+
+        if user.username and not admin_user.name:
+            admin_user.name = user.username
+            admin_user.save()
+
+        user.is_admin = True
+        user.save()
+
+        return {
+            "user_id": str(user.id),
+            "admin_id": str(admin_user.id),
+            "user_email": user.email,
+            "admin_role": admin_role.value,
+            "was_created": True
+        }
+
+    @staticmethod
+    def create_admin_user_link(
+        admin_email: str,
+        username: str,
+        password: str,
+        **user_kwargs
+    ) -> dict[str,
+              Any]:
+        """
+        Create a user account linked to existing admin via shared email
+        """
+        admin = AdminUser.objects(email = admin_email.lower()).first()
+        if not admin:
+            raise NotFoundError(
+                f"Admin with email {admin_email} not found"
+            )
+
+        existing_user = User.objects(email = admin_email.lower()).first()
+        if existing_user:
+            return {
+                "user_id": str(existing_user.id),
+                "admin_id": str(admin.id),
+                "was_created": False
+            }
+
+        user = AuthService.create_user(
+            username = username,
+            email = admin.email,
+            password = password,
+            is_admin = True,
+            **user_kwargs
+        )
+
+        if not user:
+            raise NotFoundError("Failed to create user account")
+
+        return {
+            "user_id": str(user.id),
+            "admin_id": str(admin.id),
+            "u
+```
+
+---
+
+## Pattern Analysis
+
+### Pattern Analysis
+
+**Pattern Used: Repository Pattern**
+
+The `UnifiedAuthService` class in the provided code implements a form of the **Repository Pattern**, which abstracts data access and manipulation logic. This pattern is used to encapsulate storage, including query operations.
+
+- **Implementation**: The `UnifiedAuthService` contains static methods for creating and retrieving user-admin linkages, checking admin access, and upgrading or revoking admin roles. Each method interacts with models (`User`, `AdminUser`) through their respective database queries.
+  
+- **Benefits**:
+  - **Encapsulation**: Abstracts the underlying data storage logic, making it easier to switch between different databases or storage mechanisms if needed.
+  - **Testability**: Facilitates unit testing by isolating business logic from specific database interactions.
+
+- **Deviations**:
+  - The pattern is not strictly adhered to in terms of having a separate repository class. Instead, the methods are grouped within `UnifiedAuthService`.
+  - Some methods (like `create_user_admin_link`) return detailed dictionaries containing both user and admin information, which might be considered an anti-pattern as it mixes data retrieval with business logic.
+
+- **Appropriateness**:
+  - This pattern is appropriate for this context where multiple related operations need to interact with the same models. However, if more complex or specialized storage interactions are required, a dedicated repository class would be beneficial.
+
+This implementation effectively manages user-admin relationships while maintaining a clean separation of concerns within the service layer.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 16:26*
