@@ -1,0 +1,140 @@
+# BulkUploadService.create_bulk_upload
+
+**Type:** Performance Analysis
+**Repository:** vuemantics
+**File:** backend/services/bulk_upload_service.py
+**Language:** python
+**Lines:** 97-237
+**Complexity:** 13.0
+
+---
+
+## Source Code
+
+```python
+async def create_bulk_upload(
+        user_id: UUID,
+        files: list[UploadFile],
+    ) -> BulkUploadResult:
+        """
+        Create and queue a bulk upload batch
+
+        Args:
+            user_id: User's UUID
+            files: List of files to upload
+
+        Returns:
+            BulkUploadResult with batch info
+
+        Process:
+        1. Validate bulk upload request
+        2. Create batch record
+        3. Save each file to storage
+        4. Create upload records linked to batch
+        5. Queue batch for background processing
+        6. Return batch ID and results
+        """
+        # Validate bulk upload
+        BulkUploadService._validate_bulk_upload(files)
+
+        total_size = sum(file.size or 0 for file in files)
+        logger.info(
+            f"Creating bulk upload for user {user_id}: "
+            f"{len(files)} files, {total_size / (1024 * 1024):.2f} MB total"
+        )
+
+        batch = await UploadBatch.create(
+            user_id = user_id,
+            total_uploads = len(files),
+        )
+
+        logger.info(f"Created batch {batch.id} with {len(files)} uploads")
+
+        upload_ids = []
+        failed_files = []
+
+        for file in files:
+            try:
+                if not file.filename:
+                    failed_files.append(
+                        {
+                            "filename": "unknown",
+                            "error": "No filename provided",
+                        }
+                    )
+                    continue
+
+                upload_id = uuid4()
+
+                file_content = await file.read()
+                file_size = len(file_content)
+
+                await file.seek(0)
+
+                file_type, extension = await storage_service.validate_file(
+                    filename = file.filename,
+                    mime_type = file.content_type or "application/octet-stream",
+                    file_size = file_size,
+                )
+
+                file_path = await storage_service.save_upload(
+                    file_content = file.file,
+                    user_id = user_id,
+                    upload_id = upload_id,
+                    extension = extension,
+                )
+
+                upload = await Upload.create(
+                    user_id = user_id,
+                    batch_id = batch.id,
+                    filename = file.filename,
+                    file_path = file_path,
+                    file_type = file_type,
+                    file_size = file_size,
+                    mime_type = file.content_type or "application/octet-stream",
+                    metadata = {
+                        "original_filename": file.filename,
+                        "upload_source": "bulk",
+                        "batch_id": str(batch.id),
+                    },
+                    upload_id = upload_id,
+                )
+
+                upload_ids.append(str(upload.id))
+                logger.debug(
+                    f"Created upload {upload.id} in batch {batch.id}"
+  
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The time complexity is primarily driven by the `for` loop iterating over each file, which has a cost of \(O(n)\), where \(n\) is the number of files. The validation and storage operations inside the loop are also costly but are nested within this loop.
+
+**Space Complexity:** The space complexity is \(O(n + m)\) where \(n\) is the number of files (for storing `upload_ids` and `failed_files`) and \(m\) is the number of uploads created. This can be optimized by reducing unnecessary storage.
+
+### Bottlenecks or Inefficiencies
+
+1. **Redundant Operations:** The `file.seek(0)` call after reading the file content is redundant since the file pointer is already at the start.
+2. **Logging Overhead:** Frequent logging statements, especially inside loops, can introduce significant overhead.
+3. **Exception Handling:** Multiple exception handlers can lead to performance degradation due to repeated error handling logic.
+
+### Optimization Opportunities
+
+1. **Remove Redundant Operations:** Remove `file.seek(0)` after reading the file content.
+2. **Batch Logging:** Aggregate logs and emit them in batches instead of logging on every iteration.
+3. **Reduce Exception Handling Overhead:** Consolidate exception handling logic to reduce redundancy.
+
+### Resource Usage Concerns
+
+- **File Handles:** Ensure that files are properly closed using context managers or `finally` blocks to avoid resource leaks.
+- **Database Operations:** Use transactions where possible to minimize the number of database round trips and improve performance.
+
+By addressing these issues, you can significantly enhance the efficiency and scalability of your bulk upload service.
+
+---
+
+*Generated by CodeWorm on 2026-02-21 21:45*
