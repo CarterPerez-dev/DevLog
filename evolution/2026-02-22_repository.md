@@ -1,9 +1,9 @@
 # repository
 
 **Type:** Code Evolution
-**Repository:** fullstack-template
-**File:** stacks/go-react/go-backend/internal/auth/repository.go
-**Language:** go
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/analytics/facets/data_input/repository.py
+**Language:** python
 **Lines:** 1-1
 **Complexity:** 0.0
 
@@ -11,130 +11,83 @@
 
 ## Source Code
 
-```go
-Commit: bf95949c
-Message: go backend to react-go stack
+```python
+Commit: dae6cf01
+Message: add checklist tool
 Author: CarterPerez-dev
-File: stacks/go-react/go-backend/internal/auth/repository.go
-Change type: new file
+File: CarterOS-Server/src/aspects/analytics/facets/data_input/repository.py
+Change type: modified
 
 Diff:
-@@ -0,0 +1,236 @@
-+// AngelaMos | 2026
-+// repository.go
-+
-+package auth
-+
-+import (
-+	"context"
-+	"database/sql"
-+	"errors"
-+	"fmt"
-+	"time"
-+
-+	"github.com/carterperez-dev/templates/go-backend/internal/core"
-+)
-+
-+type Repository interface {
-+	Create(ctx context.Context, token *RefreshToken) error
-+	FindByHash(ctx context.Context, tokenHash string) (*RefreshToken, error)
-+	FindByID(ctx context.Context, id string) (*RefreshToken, error)
-+	MarkAsUsed(ctx context.Context, id, replacedByID string) error
-+	RevokeByID(ctx context.Context, id string) error
-+	RevokeByFamilyID(ctx context.Context, familyID string) error
-+	RevokeAllForUser(ctx context.Context, userID string) error
-+	GetActiveSessionsForUser(
-+		ctx context.Context,
-+		userID string,
-+	) ([]RefreshToken, error)
-+	DeleteExpired(ctx context.Context) (int64, error)
-+}
-+
-+type repository struct {
-+	db core.DBTX
-+}
-+
-+func NewRepository(db core.DBTX) Repository {
-+	return &repository{db: db}
-+}
-+
-+func (r *repository) Create(ctx context.Context, token *RefreshToken) error {
-+	query := `
-+		INSERT INTO refresh_tokens (
-+			id, user_id, token_hash, family_id, expires_at,
-+			user_agent, ip_address
-+		) VALUES (
-+			$1, $2, $3, $4, $5, $6, $7
-+		)
-+		RETURNING created_at`
-+
-+	err := r.db.GetContext(ctx, &token.CreatedAt, query,
-+		token.ID,
-+		token.UserID,
-+		token.TokenHash,
-+		token.FamilyID,
-+		token.ExpiresAt,
-+		token.UserAgent,
-+		token.IPAddress,
-+	)
-+	if err != nil {
-+		return fmt.Errorf("create refresh token: %w", err)
-+	}
-+
-+	return nil
-+}
-+
-+func (r *repository) FindByHash(
-+	ctx context.Context,
-+	tokenHash string,
-+) (*RefreshToken, error) {
-+	query := `
-+		SELECT
-+			id, user_id, token_hash, family_id, expires_at, created_at,
-+			is_used, used_at, revoked_at, replaced_by_id, user_agent, ip_address
-+		FROM refresh_tokens
-+		WHERE token_hash = $1`
-+
-+	var token RefreshToken
-+	err := r.db.GetContext(ctx, &token, query, tokenHash)
-+	if errors.Is(err, sql.ErrNoRows) {
-+		return nil, fmt.Errorf("find refresh token: %w", core.ErrNotFound)
-+	}
-+	if err != nil {
-+		return nil, fmt.Errorf("find refresh token: %w", err)
-+	}
-+
-+	return &token, nil
-+}
-+
-+func (r *repository) FindByID(
-+	ctx context.Context,
-+	id string,
-+) (*RefreshToken, error) {
-+	query := `
-+		SELECT
-+			id, user_id, token_hash, family_id, expires_at, created_at,
-+			is_used, used_at, revoked_at, replaced_by_id, user_agent, ip_address
-+		FROM refresh_tokens
-+		WHERE id = $1`
-+
-+	var token RefreshToken
-+	err := r.db.GetContext(ctx, &token, query, id)
-+	if errors.Is(err, sql.ErrNoRows) {
-+		return nil, fmt.Errorf("find refresh token: %w", core.ErrNotFound)
-+	}
-+	if err != nil {
-+		return nil, fmt.Errorf("find refresh token: %w", err)
-+	}
-+
-+	return &token, nil
-+}
-+
-+func (r *repository) MarkAsUsed(
-+	ctx context.Context,
-+	id, replacedByID string,
-+) error {
-+	
+@@ -5,7 +5,6 @@ repository.py
+ 
+ from collections.abc import Sequence
+ from datetime import date
+-from uuid import UUID
+ 
+ from sqlalchemy import select, or_
+ from sqlalchemy.ext.asyncio import AsyncSession
+@@ -31,9 +30,10 @@ class TikTokVideoRepository(BaseRepository[TikTokVideo]):
+         Get videos within a rank range
+         """
+         result = await session.execute(
+-            select(TikTokVideo)
+-            .where(TikTokVideo.rank >= min_rank, TikTokVideo.rank <= max_rank)
+-            .order_by(TikTokVideo.rank)
++            select(TikTokVideo).where(
++                TikTokVideo.rank >= min_rank,
++                TikTokVideo.rank <= max_rank
++            ).order_by(TikTokVideo.rank)
+         )
+         return result.scalars().all()
+ 
+@@ -48,12 +48,10 @@ class TikTokVideoRepository(BaseRepository[TikTokVideo]):
+         Get videos posted within a date range
+         """
+         result = await session.execute(
+-            select(TikTokVideo)
+-            .where(
++            select(TikTokVideo).where(
+                 TikTokVideo.date_posted >= start_date,
+                 TikTokVideo.date_posted <= end_date
+-            )
+-            .order_by(TikTokVideo.date_posted.desc())
++            ).order_by(TikTokVideo.date_posted.desc())
+         )
+         return result.scalars().all()
+ 
+@@ -67,9 +65,8 @@ class TikTokVideoRepository(BaseRepository[TikTokVideo]):
+         Get videos with minimum view count
+         """
+         result = await session.execute(
+-            select(TikTokVideo)
+-            .where(TikTokVideo.views >= min_views)
+-            .order_by(TikTokVideo.views.desc())
++            select(TikTokVideo).where(TikTokVideo.views >= min_views
++                                      ).order_by(TikTokVideo.views.desc())
+         )
+         return result.scalars().all()
+ 
+@@ -84,16 +81,14 @@ class TikTokVideoRepository(BaseRepository[TikTokVideo]):
+         """
+         search_term = f"%{query}%"
+         result = await session.execute(
+-            select(TikTokVideo)
+-            .where(
++            select(TikTokVideo).where(
+                 or_(
+                     TikTokVideo.hook.ilike(search_term),
+                     TikTokVideo.description.ilike(search_term),
+                     TikTokVideo.cta.ilike(search_term),
+                     TikTokVideo.full_transcription.ilike(search_term),
+                 )
+-            )
+-            .order_by(TikTokVideo.rank)
++            ).order_by(TikTokVideo.rank)
+         )
+         return result.scalars().all()
+ 
+
 ```
 
 ---
@@ -144,19 +97,17 @@ Diff:
 ### Change Analysis
 
 **What was Changed:**
-A new file `repository.go` was added to the Go backend, defining a `Repository` interface and its implementation for managing refresh tokens. The implementation includes methods like `Create`, `FindByHash`, `MarkAsUsed`, `RevokeByID`, etc., which handle CRUD operations on refresh tokens.
+The code changes primarily involve removing and reformatting the use of `UUID` imports and slightly restructuring the SQL queries within the `TikTokVideoRepository` class. Specifically, lines 31-32, 48-49, 65-67, and 81-83 were modified to improve readability and maintain consistency.
 
-**Why it Was Likely Changed:**
-This change likely aims to centralize token management logic in the backend, improving modularity and separation of concerns between frontend (React) and backend services. The introduction of a repository pattern ensures that all database interactions are encapsulated within this interface, making the codebase more maintainable and testable.
+**Why it was Likely Changed:**
+This change likely aims to clean up the codebase by removing unnecessary imports (`UUID`) and improving the structure of SQL queries. These changes enhance readability and adhere to Pythonic practices, making the code more maintainable and easier to understand for future contributors.
 
 **Impact on Behavior:**
-The new methods provide a structured way to interact with refresh tokens, ensuring consistency in how they are created, retrieved, used, revoked, and deleted. This impacts the overall security and session management of the application by providing robust mechanisms for token lifecycle management.
+The behavior of the repository methods remains unchanged. The removal of `UUID` imports does not affect functionality since it was not used in these methods. The restructuring of SQL queries maintains the same logic but with improved formatting, ensuring that conditions are clearly defined before being passed to the `select` statement.
 
 **Risks or Concerns:**
-While this change enhances code organization, it introduces dependencies on the `core.DBTX` interface, which must be properly implemented elsewhere in the project. Additionally, error handling is crucial; the use of custom errors like `core.ErrNotFound` should be consistent and well-defined to avoid runtime issues.
-
-Overall, this change is a refactor that aligns with best practices for Go development, focusing on clear interfaces and robust data management.
+There is a minor risk if other parts of the codebase rely on `UUID` imports, which would need to be addressed separately. However, this change does not introduce any functional risks and only improves code quality.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 13:53*
+*Generated by CodeWorm on 2026-02-22 22:22*
