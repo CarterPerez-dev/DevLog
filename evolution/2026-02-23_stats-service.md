@@ -1,0 +1,131 @@
+# stats_service
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/ai-threat-detection/backend/app/services/stats_service.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 7f35fbd8
+Message: feat: complete Phase 1 — rule-based detection pipeline, API, Docker E2E
+
+Phase 1 delivers end-to-end threat detection from nginx log ingestion
+through rule-based scoring to REST API and WebSocket alerts.
+
+- API layer: /threats, /stats, /models/status, /ws/alerts, /health, /ready
+- Alert dispatcher with Redis pub/sub + PostgreSQL persistence
+- Typer CLI: vigil serve, config, health
+- Integration tests (tailer -> pipeline -> DB round-trip)
+- Docker E2E verified: dev.compose.yml stack with all services healthy
+- Linting clean: ruff, mypy strict (0 issues), pylint 10/10
+- 75 tests passing across 8 test modules
+Author: CarterPerez-dev
+File: PROJECTS/advanced/ai-threat-detection/backend/app/services/stats_service.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,82 @@
++"""
++©AngelaMos | 2026
++stats_service.py
++"""
++
++from datetime import datetime, timedelta, UTC
++
++from sqlalchemy import func, select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from app.models.threat_event import ThreatEvent
++from app.schemas.stats import (
++    IPStatEntry,
++    PathStatEntry,
++    SeverityBreakdown,
++    StatsResponse,
++)
++
++_RANGE_MAP: dict[str, timedelta] = {
++    "1h": timedelta(hours=1),
++    "6h": timedelta(hours=6),
++    "24h": timedelta(hours=24),
++    "7d": timedelta(days=7),
++    "30d": timedelta(days=30),
++}
++
++
++async def get_stats(
++    session: AsyncSession,
++    time_range: str = "24h",
++) -> StatsResponse:
++    """
++    Compute aggregate threat statistics for a given time window.
++    """
++    delta = _RANGE_MAP.get(time_range, timedelta(hours=24))
++    cutoff = datetime.now(UTC) - delta
++
++    base = select(ThreatEvent).where(ThreatEvent.created_at >= cutoff)  # type: ignore[arg-type]
++
++    total_q = select(func.count()).select_from(base.subquery())
++    total = (await session.execute(total_q)).scalar_one()
++
++    sev_q = (
++        select(ThreatEvent.severity, func.count())  # type: ignore[call-overload]
++        .where(ThreatEvent.created_at >= cutoff)
++        .group_by(ThreatEvent.severity)
++    )
++    sev_rows = (await session.execute(sev_q)).all()
++    sev_map = {row[0]: row[1] for row in sev_rows}
++
++    threats_detected = sev_map.get("HIGH", 0) + sev_map.get("MEDIUM", 0)
++
++    ip_q = (
++        select(ThreatEvent.source_ip, func.count().label("cnt"))  # type: ignore[call-overload]
++        .where(ThreatEvent.created_at >= cutoff)
++        .group_by(ThreatEvent.source_ip)
++        .order_by(func.count().desc())
++        .limit(10)
++    )
++    ip_rows = (await session.execute(ip_q)).all()
++
++    path_q = (
++        select(ThreatEvent.request_path, func.count().label("cnt"))  # type: ignore[call-overload]
++        .where(ThreatEvent.created_at >= cutoff)
++        .group_by(ThreatEvent.request_path)
++        .order_by(func.count().desc())
++        .limit(10)
++    )
++    path_rows = (await session.execute(path_q)).all()
++
++    return StatsResponse(
++        time_range=time_range,
++        total_requests=total,
++        t
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:** A new file `stats_service.py` was added to the project, introducing a service for computing and returning aggregate threat statistics. The file includes functions to calculate total requests, threats detected, severity breakdowns, top source IPs, and top attacked paths over specified time ranges.
+
+**Why it was Likely Changed:** This change likely addresses the need for detailed analytics on threat events processed by the backend system. By providing a comprehensive set of statistical data, the service enables better monitoring and understanding of security incidents, which is crucial for effective threat detection and response.
+
+**Impact on Behavior:** The addition of this service enhances the API layer's functionality, allowing users to retrieve various types of statistics related to threat events. This will improve the system’s ability to provide insights into ongoing security operations, helping administrators make informed decisions based on real-time data.
+
+**Risks or Concerns:** While the implementation is thorough and well-structured, there are a few potential risks:
+1. **Performance Impact:** Querying the database for large datasets (e.g., top source IPs and paths) could be resource-intensive.
+2. **Time Range Handling:** The default time range of 24 hours might not always provide relevant insights depending on the threat patterns or system load.
+3. **Error Handling:** Although not explicitly mentioned, proper error handling should be considered to manage cases where database queries fail.
+
+Overall, this change significantly improves the backend's analytical capabilities without introducing major risks.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 07:22*
