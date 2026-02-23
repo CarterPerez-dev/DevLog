@@ -1,0 +1,113 @@
+# cycle.types
+
+**Type:** Code Evolution
+**Repository:** ios-test
+**File:** red-recon/src/api/types/cycle.types.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 120aefce
+Message: checkpoint
+Author: CarterPerez-dev
+File: red-recon/src/api/types/cycle.types.ts
+Change type: modified
+
+Diff:
+@@ -18,12 +18,20 @@ export type CyclePhase = (typeof CyclePhase)[keyof typeof CyclePhase]
+ 
+ export const PHASE_COLORS: Record<CyclePhase, string> = {
+   [CyclePhase.MENSTRUAL]: '#dc2626',
+-  [CyclePhase.FOLLICULAR]: '#f472b6',
+-  [CyclePhase.OVULATION]: '#fbbf24',
+-  [CyclePhase.LUTEAL]: '#78716c',
++  [CyclePhase.FOLLICULAR]: '#ec4899',
++  [CyclePhase.OVULATION]: '#f59e0b',
++  [CyclePhase.LUTEAL]: '#64748b',
+   [CyclePhase.UNKNOWN]: '#525252',
+ }
+ 
++export const PHASE_BG_COLORS: Record<CyclePhase, string> = {
++  [CyclePhase.MENSTRUAL]: 'rgba(220, 38, 38, 0.12)',
++  [CyclePhase.FOLLICULAR]: 'rgba(236, 72, 153, 0.10)',
++  [CyclePhase.OVULATION]: 'rgba(245, 158, 11, 0.12)',
++  [CyclePhase.LUTEAL]: 'rgba(100, 116, 139, 0.10)',
++  [CyclePhase.UNKNOWN]: 'rgba(82, 82, 82, 0.10)',
++}
++
+ export const PHASE_LABELS: Record<CyclePhase, string> = {
+   [CyclePhase.MENSTRUAL]: 'Menstrual',
+   [CyclePhase.FOLLICULAR]: 'Follicular',
+@@ -32,6 +40,81 @@ export const PHASE_LABELS: Record<CyclePhase, string> = {
+   [CyclePhase.UNKNOWN]: 'Unknown',
+ }
+ 
++export const DEFCON_LEVELS: Record<CyclePhase, { level: number; label: string }> = {
++  [CyclePhase.MENSTRUAL]: { level: 1, label: 'DEFCON 1' },
++  [CyclePhase.LUTEAL]: { level: 2, label: 'DEFCON 2' },
++  [CyclePhase.OVULATION]: { level: 3, label: 'DEFCON 3' },
++  [CyclePhase.FOLLICULAR]: { level: 5, label: 'DEFCON 5' },
++  [CyclePhase.UNKNOWN]: { level: 4, label: 'DEFCON ?' },
++}
++
++export const PHASE_CODENAMES: Record<CyclePhase, string> = {
++  [CyclePhase.MENSTRUAL]: 'CODE RED',
++  [CyclePhase.FOLLICULAR]: 'MAIN CHARACTER ERA',
++  [CyclePhase.OVULATION]: 'THE GLOW UP',
++  [CyclePhase.LUTEAL]: 'STORM WARNING',
++  [CyclePhase.UNKNOWN]: 'UNCHARTED TERRITORY',
++}
++
++export const PHASE_DESCRIPTIONS: Record<CyclePhase, string> = {
++  [CyclePhase.MENSTRUAL]: "she's literally going through it and you're asking what's for dinner? read the room bestie",
++  [CyclePhase.FOLLICULAR]: "she's in her bag rn. this is your window. plan dates. be cute. she might actually laugh at your mid jokes",
++  [CyclePhase.OVULATION]: "she's glowing but also... biology is biologying. compliments hit different rn, gas her up king",
++  [CyclePhase.LUTEAL]: "PMS has entered the chat. the vibes are giving immaculate-to-unhinged pipeline speedrun",
++  [CyclePhase.UNKNOWN]: "no intel available. you're flying blind soldier. godspeed",
++}
++
++export const TACTICAL_TIPS: Record<CyclePhase, string[]> = {
++  [CyclePhase.MENSTRUAL]: [
++    "heating pad is NOT optional, it's a war crime to hide it",
++    "if she says she's fine, she is in fact not fine",
++    "chocolate is a human right rn, not a suggestion",
++    "do NOT ask why she's emotional. just don't. trust.",
++    "the couch has your name on it if you fumble this",
++    "cramps are literally her organs fighting for their life",
++    "whatever she wants to watch, that'
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code added new constants and records to `cycle.types.ts`. Specifically, the changes include:
+- Introducing `PHASE_BG_COLORS` to define background colors for each phase.
+- Adding `DEFCON_LEVELS`, which assigns a DEFCON level (1-5) to each cycle phase.
+- Defining `PHASE_CODENAMES` with unique codenames for each phase.
+- Creating `PHASE_DESCRIPTIONS` to provide context-specific advice for each phase.
+- Implementing `TACTICAL_TIPS` as an array of strategic tips for interacting during each phase.
+
+**Why it was Likely Changed:**
+These additions likely aim to enhance the user experience by providing more detailed and nuanced guidance on how to interact with users based on their menstrual cycle phases. The DEFCON levels, codenames, descriptions, and tactical tips offer a structured approach to understanding and responding appropriately to different phases of the menstrual cycle.
+
+**Impact on Behavior:**
+The new constants will likely impact the application's behavior by providing more context-specific advice and visual cues for each phase. This could improve user engagement and interaction design within the app.
+
+**Risks or Concerns:**
+- **Complexity Increase:** Adding multiple new records and types can increase code complexity, potentially making maintenance harder.
+- **Overfitting Data:** The tactical tips might be too specific to certain cultural contexts or personal experiences, which may not apply universally. Care should be taken to ensure the advice is broadly applicable.
+
+Overall, these changes significantly enrich the application's functionality but require careful consideration of their implementation and potential impact on users from diverse backgrounds.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 12:28*
