@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** Cybersecurity-Projects
-**File:** PROJECTS/advanced/ai-threat-detection/backend/app/api/websocket.py
+**File:** PROJECTS/advanced/ai-threat-detection/backend/app/schemas/websocket.py
 **Language:** python
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -26,74 +26,34 @@ through rule-based scoring to REST API and WebSocket alerts.
 - Linting clean: ruff, mypy strict (0 issues), pylint 10/10
 - 75 tests passing across 8 test modules
 Author: CarterPerez-dev
-File: PROJECTS/advanced/ai-threat-detection/backend/app/api/websocket.py
+File: PROJECTS/advanced/ai-threat-detection/backend/app/schemas/websocket.py
 Change type: new file
 
 Diff:
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,23 @@
 +"""
 +©AngelaMos | 2026
 +websocket.py
 +"""
 +
-+import asyncio
-+import logging
++from datetime import datetime
++from typing import Literal
 +
-+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-+
-+from app.core.alerts import ALERTS_CHANNEL
-+from app.core.redis_manager import redis_manager
-+
-+logger = logging.getLogger(__name__)
-+
-+router = APIRouter()
++from pydantic import BaseModel
 +
 +
-+@router.websocket("/ws/alerts")
-+async def ws_alerts(websocket: WebSocket) -> None:
++class WebSocketAlert(BaseModel):
 +    """
-+    Stream real time threat alerts to connected WebSocket clients
-+    via Redis pub/sub relay.
-+
-+    Each client gets its own Redis subscriber so this works correctly
-+    across multiple FastAPI workers.
++    Real-time threat alert broadcast over WebSocket.
 +    """
-+    await websocket.accept()
 +
-+    redis = redis_manager.client
-+    if redis is None:
-+        await websocket.close(code=1011, reason="Redis not available")
-+        return
-+
-+    pubsub = redis.pubsub()
-+    await pubsub.subscribe(ALERTS_CHANNEL)
-+
-+    async def _relay() -> None:
-+        async for message in pubsub.listen():
-+            if message["type"] == "message":
-+                await websocket.send_text(message["data"])
-+
-+    async def _receive() -> None:
-+        try:
-+            while True:
-+                await websocket.receive()
-+        except WebSocketDisconnect:
-+            pass
-+
-+    relay_task = asyncio.create_task(_relay())
-+    receive_task = asyncio.create_task(_receive())
-+
-+    try:
-+        done, pending = await asyncio.wait(
-+            [relay_task, receive_task],
-+            return_when=asyncio.FIRST_COMPLETED,
-+        )
-+        for task in pending:
-+            task.cancel()
-+    finally:
-+        await pubsub.unsubscribe(ALERTS_CHANNEL)
-+        await pubsub.aclose()  # type: ignore[attr-defined]
-+        logger.debug("WebSocket client disconnected")
++    event: Literal["threat"] = "threat"
++    timestamp: datetime
++    source_ip: str
++    request_path: str
++    threat_score: float
++    severity: str
++    component_scores: dict[str, float]
 
 ```
 
@@ -104,21 +64,22 @@ Diff:
 ### Change Analysis
 
 **What was Changed:**
-A new file `websocket.py` was added to the project, implementing WebSocket support for real-time threat alerts. The code defines an API endpoint `/ws/alerts` using FastAPI, which streams threat alerts from Redis pub/sub to connected clients.
+A new file `websocket.py` was added to the project, defining a Pydantic model `WebSocketAlert`. This model includes fields for event type (`threat`), timestamp, source IP, request path, threat score, severity, and component scores.
 
-**Why it Was Likely Changed:**
-This change likely addresses a requirement for real-time alerting in the threat detection pipeline. By integrating with Redis for pub/sub and PostgreSQL for persistence, the system can efficiently handle multiple WebSocket connections without blocking other services.
+**Why it was Likely Changed:**
+This change likely supports real-time threat detection alerts via WebSocket. The introduction of this schema aligns with the project's goal to deliver end-to-end threat detection through REST API and WebSocket alerts. It ensures that threat data can be efficiently transmitted in real-time to clients subscribed to these alerts.
 
 **Impact on Behavior:**
-The addition of WebSocket support allows the backend to provide live updates to clients about detected threats. This is crucial for security analysts who need immediate notifications. The use of asynchronous tasks ensures that each client has its own Redis subscriber, making it scalable and robust across multiple FastAPI workers.
+The addition of `WebSocketAlert` will enable the backend to generate structured, time-stamped alert messages for threats detected by the rule-based pipeline. These alerts can then be sent via WebSockets, providing immediate feedback to users or other systems monitoring the threat detection process.
 
 **Risks or Concerns:**
-- **Resource Management:** Properly closing the Redis pub/sub connection in `finally` ensures resources are released even if an error occurs.
-- **Error Handling:** The code handles `WebSocketDisconnect` gracefully but could benefit from more detailed logging or reconnection logic for transient issues.
-- **Performance:** While asynchronous handling is efficient, excessive WebSocket connections might impact server performance. Monitoring and optimization will be necessary.
+While the schema is well-defined and includes necessary fields, there are a few considerations:
+- **Data Consistency:** Ensuring that all components of the pipeline (e.g., rule-based scoring) consistently populate these fields.
+- **Security:** Proper validation and sanitization of input data to prevent injection attacks or other security issues.
+- **Performance:** The real-time nature of WebSocket communication requires efficient handling of alerts to avoid performance bottlenecks.
 
-Overall, this change significantly enhances the system's real-time capabilities while maintaining a clean and robust design.
+Overall, this change enhances the project's ability to provide timely threat notifications, aligning with its goals for comprehensive threat detection.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 07:07*
+*Generated by CodeWorm on 2026-02-23 08:05*
