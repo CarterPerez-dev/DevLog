@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/unified.py
+**File:** backend/api/core/decorators/secure.py
 **Language:** python
-**Lines:** 1-198
+**Lines:** 1-302
 **Complexity:** 0.0
 
 ---
@@ -13,104 +13,101 @@
 
 ```python
 """
-Unified API Endpoint Decorator
-/api/core/decorators/unified.py
+Enterprise Security Decorator
+/api/core/decorators/secure.py
 """
 
 import time
-import traceback
+import logging
 from typing import Any
 from functools import wraps
-from flask import g, request
+from datetime import datetime, UTC
+from flask import g, request, make_response, Response
 from collections.abc import Callable
 
 from ..services.logging import AuditLogger
-from ..auth.auth_required import (
-    auth_required as _auth_required,
+from ..services.security import SecurityService
+from ..limiters.shared_rate_limiter import SharedRateLimiterBase
+from .guards import (
+    RateGuard,
+    PatternGuard,
+    RequestSizeGuard,
+    TracingGuard,
 )
-from ..auth.subscription_required import (
-    subscription_required as _subscription_required,
-)
-from ...domains.progression.services.streak_ops import StreakService
-from ...domains.progression.services.progression_ops import ProgressionService
 
 
-def api_endpoint(
-    *,
-    auth: bool = True,
-    subscription: bool = False,
-    audit: bool = True,
-    audit_action: str | None = None,
-    audit_data: dict | None = None,
-    json_body: bool | None = None,
-) -> Callable[[Callable[...,
-                        Any]],
-              Callable[...,
-                       Any]]:
+logger = logging.getLogger(__name__)
+
+
+class SecureRateLimiter(SharedRateLimiterBase):
     """
-    Unified decorator for API endpoints combining common middleware.
+    Rate limiter for @secure decorator
     """
+    def __init__(self, rate_guard: RateGuard, endpoint_key: str) -> None:
+        """
+        Initialize with RateGuard config
+        """
+        limits = rate_guard.to_dict()
+        super().__init__(endpoint_key, limits)
+
+
+def secure(*guards: Any) -> Callable[[Callable[...,
+                                               Any]],
+                                     Callable[...,
+                                              Any]]:
+    """
+    Security decorator combining rate limiting, pattern detection,
+    size validation, and behavior tracking.
+    """
+    rate_guard = None
+    pattern_guard = None
+    size_guard = RequestSizeGuard()
+    tracing_guard = TracingGuard()
+
+    for guard in guards:
+        if isinstance(guard, RateGuard):
+            rate_guard = guard
+        elif isinstance(guard, PatternGuard):
+            pattern_guard = guard
+        elif isinstance(guard, RequestSizeGuard):
+            size_guard = guard
+        elif isinstance(guard, TracingGuard):
+            tracing_guard = guard
+        else:
+            raise ValueError(f"Unknown guard type: {type(guard).__name__}")
+
+    if not rate_guard:
+        raise ValueError("RateGuard is required for @secure decorator")
+    if not pattern_guard:
+        raise ValueError("PatternGuard is required for @secure decorator")
+
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
         def decorated_function(*args: Any, **kwargs: Any) -> Any:
-            """
-            Used as @api_endpoint - audit | auth | subscription | json body
-            """
-            start_time: float = time.time()
-            if json_body is None:
-                expects_json: bool = request.method in [
-                    "POST",
-                    "PUT",
-                    "PATCH"
-                ]
-            else:
-                expects_json = json_body
+            start_time = time.time()
 
-            if expects_json:
-                try:
-                    g.json = request.get_json(
-                        force = True,
-                        silent = True
-                    ) or {}
-                except Exception:
-                    g.json = {}
-            else:
-                g.json = {}
+            g.security_guards = {
+                "rate": str(rate_guard),
+                "pattern": str(pattern_guard),
+                "size": str(size_guard),
+                "tracing": str(tracing_guard),
+            }
 
-            if auth:
+            size_exceeded, size_reason = SecurityService.check_request_size(
+                max_body=size_guard.max_body_bytes,
+                max_params=size_guard.max_params
+            )
+            if size_exceeded:
+                _log_security_event("size_limit_exceeded", size_reason)
+                return {"error": size_reason, "type": "request_size_error"}, 413
 
-                @_auth_required
-                def _temp_auth_check() -> None:
-                    pass
+            security_analysis = SecurityService.analyze_request(
+                security_level = pattern_guard.level,
+                context = pattern_guard.context
+            )
 
-                auth_result = _temp_auth_check()
-                if auth_result is not None:
-
-                    return auth_result
-
-            if subscription:
-
-                @_subscription_required
-                def _temp_sub_check() -> None:
-                    pass
-
-                sub_result = _temp_sub_check()
-                if sub_result is not None:
-                    return sub_result
-
-            if auth and hasattr(g, 'user') and g.user:
-                try:
-                    streak_result = StreakService.update_streak(g.user)
-                    if streak_result["streak_updated"]:
-                        daily_reward = StreakService.calculate_daily_reward(
-                            streak_result["current_streak"]
-                        )
-                        ProgressionService.update_xp_and_coins(
-                            g.user,
-                            daily_reward["xp"],
-                            daily_reward["coins"]
-                        )
-          
+            if security_analysis["suspicious"]:
+   
 ```
 
 ---
@@ -121,25 +118,20 @@ def api_endpoint(
 
 **Pattern Used:** Decorator Pattern
 
-The `api_endpoint` decorator combines multiple middleware functionalities such as authentication, subscription validation, logging, and JSON body handling into a single unified decorator. This implementation uses Python's `functools.wraps` to preserve the metadata of the decorated function.
+The `secure` decorator in the provided code combines multiple security guards (rate limiting, pattern detection, request size validation, and behavior tracking) to secure API endpoints. This implementation uses a decorator that wraps around functions, applying various security checks before allowing execution.
 
-**Implementation Details:**
-- The `api_endpoint` takes various parameters like `auth`, `subscription`, `audit`, etc., which control whether specific middleware should be applied.
-- It wraps the original function with a nested decorator, allowing for conditional execution based on these parameters.
-- Middleware functions (like `_temp_auth_check` and `_temp_sub_check`) are temporarily defined within the decorator to ensure they only run when needed.
+#### Benefits:
+- **Modularity**: The decorator can be easily extended by adding more `guards` without modifying the core logic.
+- **Reusability**: Security guards like `RateGuard`, `PatternGuard`, and `RequestSizeGuard` can be reused across different decorators or functions.
+- **Centralized Security Management**: All security checks are encapsulated within a single decorator, making it easier to manage and audit.
 
-**Benefits:**
-1. **Modularity:** The ability to selectively enable or disable middleware components makes the code more modular and easier to maintain.
-2. **Reusability:** A single decorator can handle multiple common tasks, reducing redundancy in API endpoint definitions.
-3. **Flexibility:** Different types of endpoints (e.g., public vs. private) can be easily configured by adjusting the parameters.
+#### Deviations:
+- The implementation uses type hints for flexibility but does not strictly enforce types in the guards. This allows passing any object as long as its type matches one of the expected guards.
+- The `SecureRateLimiter` class is initialized with specific guard configurations, which adds a layer of complexity to ensure required guards are present.
 
-**Deviations:**
-- The use of temporary functions (`_temp_auth_check` and `_temp_sub_check`) to conditionally apply middleware is a deviation from the standard decorator pattern, which typically applies middleware directly.
-- The handling of `g.json` and error logging involves additional context management that isn't strictly part of the core decorator functionality.
-
-**Appropriateness:**
-This pattern is highly appropriate for APIs where common functionalities like authentication and logging need to be applied consistently across multiple endpoints. It provides a clean, maintainable way to manage these concerns without cluttering each endpoint definition with boilerplate code.
+#### Appropriateness:
+This pattern is appropriate for scenarios where multiple security checks need to be applied consistently across different functions or endpoints. It provides a clean and maintainable way to enforce security policies without cluttering the main logic of the application. However, it might introduce some overhead due to the additional layers of abstraction and validation.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 19:08*
+*Generated by CodeWorm on 2026-02-22 20:15*
