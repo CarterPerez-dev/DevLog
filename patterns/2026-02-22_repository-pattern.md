@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/services/archive/archive_service.py
+**File:** backend/api/domains/progression/services/achievement_ops.py
 **Language:** python
-**Lines:** 1-234
+**Lines:** 1-321
 **Complexity:** 0.0
 
 ---
@@ -13,141 +13,131 @@
 
 ```python
 """
-Universal Archive Service
-/api/core/services/archive/archive_service.py
+Achievement Service
+/api/domains/progression/services/achievement_ops.py
 """
 
-from bson import ObjectId
-from typing import Any, cast
-from mongoengine import get_db
+import logging
+from typing import Any
+from datetime import datetime, UTC
+import redis
 
-from api.core.validation.exceptions import (
-    NotFoundError,
-    ValidationError,
-    BusinessRuleError,
+from api.core.decorators.cache import (
+    redis_cache_get,
+    redis_cache_set,
+    get_redis_connection,
 )
-from .Archive import Archive, ArchiveReason
+from api.domains.account.models.User import User
+from settings import Redis
+
+from ..models.Achievement import (
+    Achievement,
+    UserAchievement,
+)
+from .progression_ops import ProgressionService
 
 
-class ArchiveService:
+class AchievementService:
     """
-    Static methods for archiving/restoring documents from any collection
+    Service class for Achievement model operations
     """
-    @staticmethod
-    def archive_document(
-        collection_name: str,
-        document_id: str | ObjectId,
-        reason: ArchiveReason,
-        archived_by: str | ObjectId,
-        additional_data: dict[str,
-                              Any] | None = None
-    ) -> dict[str,
-              Any]:
-        """
-        Archive a document by moving it from its original collection to archives
-        """
-        if not collection_name or not document_id or not reason or not archived_by:
-            raise ValidationError(
-                "Missing required parameters for archiving"
-            )
 
-        doc_id = ObjectId(document_id) if isinstance(
-            document_id,
-            str
-        ) else document_id
-        admin_id = ObjectId(archived_by) if isinstance(
-            archived_by,
-            str
-        ) else archived_by
-
-        db = get_db()
-
-        original_doc = db[collection_name].find_one({"_id": doc_id})
-        if not original_doc:
-            raise NotFoundError(
-                f"Document not found in {collection_name}",
-                str(doc_id)
-            )
-
-        archive_data = {
-            "originalId": doc_id,
-            "originalCollection": collection_name,
-            "archivedBy": admin_id,
-            "reason": reason.value,
-            "originalData": original_doc
-        }
-
-        if additional_data:
-            archive_data["originalData"]["_archive_metadata"
-                                         ] = additional_data
-
-        archive = Archive(**archive_data)
-        archive.save()
-
-        db[collection_name].delete_one({"_id": doc_id})
-
-        return {
-            "archive_id": str(archive.id),
-            "original_id": str(doc_id),
-            "collection": collection_name,
-            "reason": reason.value,
-            "archived_at": archive.archivedAt.isoformat(),
-        }
+    CACHE_KEY_ALL_ACHIEVEMENTS = "achievements:all"
+    CACHE_TTL_SECONDS = Redis.ACHIEVEMENTS_CACHE_TTL_SECONDS
 
     @staticmethod
-    def restore_document(
-        archive_id: str | ObjectId,
-        restored_by: str | ObjectId
-    ) -> dict[str,
-              Any]:
+    def get_all() -> list[Achievement]:
         """
-        Restore an archived document back to its original collection
+        Get all achievements with Redis caching (1-hour TTL)
         """
-        arch_id = ObjectId(archive_id) if isinstance(
-            archive_id,
-            str
-        ) else archive_id
+        logger = logging.getLogger(__name__)
 
-        archive = Archive.objects(id = arch_id).first()
-        if not archive:
-            raise NotFoundError("Archive record", str(arch_id))
+        try:
+            cached_data = redis_cache_get(
+                AchievementService.CACHE_KEY_ALL_ACHIEVEMENTS
+            )
+            if cached_data:
+                logger.debug(
+                    "Retrieved %d achievements from cache",
+                    len(cached_data)
+                )
+                achievements = []
+                for ach_data in cached_data:
+                    cleaned_data = {
+                        k: v
+                        for k, v in ach_data.items()
+                        if k != '_id'
+                    }
+                    achievement = Achievement(**cleaned_data)
+                    if '_id' in ach_data and ach_data['_id']:
+                        achievement.id = ach_data['_id']
+                    achievements.append(achievement)
+                return achievements
+        except (redis.RedisError, ValueError, KeyError) as e:
+            logger.warning(
+                "Failed to retrieve achievements from cache: %s",
+                e
+            )
 
-        db = get_db()
+        logger.debug("Cache miss - fetching achievements from database")
+        achievements = list(Achievement.objects())
 
-        original_data = archive.originalData.copy()
+        try:
+            cache_data = []
+            for ach in achievements:
+                ach_dict = ach.to_mongo().to_dict()
+                ach_dict['_id'] = str(ach.id) if ach.id else None
+                cache_data.append(ach_dict)
 
-        if "_archive_metadata" in original_data:
-            del original_data["_archive_metadata"]
+            redis_cache_set(
+                AchievementService.CACHE_KEY_ALL_ACHIEVEMENTS,
+                cache_data,
+                AchievementService.CACHE_TTL_SECONDS
+            )
+            logger.debug(
+                "Cached %d achievements for %d seconds",
+                len(achievements),
+                AchievementService.CACHE_TTL_SECONDS
+            )
+        except (redis.RedisError, ValueError, TypeError) as e:
+            logger.warning("Failed to cache achievements: %s", e)
 
-        exis
+        return achievements
+
+    @staticmethod
+    def get_by_achievement_id(achievement_id: str) -> Achievement | None:
+        """
+        Get achievement by achievementId field
+        """
+        return Achievement.objects(achie
 ```
 
 ---
 
 ## Pattern Analysis
 
-### Analysis of Repository Pattern in `ArchiveService`
+### Pattern Analysis
 
-**Pattern Used:** **Repository Pattern**
+**Pattern Used: Repository Pattern**
 
-The repository pattern is implemented through static methods within the `ArchiveService` class, which abstracts data access operations for archiving and restoring documents.
+The `AchievementService` class in the provided code implements a version of the **Repository Pattern**, which abstracts data access operations and encapsulates them within a service layer.
 
-- **Implementation:**
-  - The service provides static methods like `archive_document`, `restore_document`, `get_archive_by_id`, and `search_archives`. These methods handle CRUD-like operations on archived documents.
-  - Each method interacts with the MongoDB database through a `get_db` function to fetch or modify data, encapsulating the database interaction logic.
+- **Implementation**: The `AchievementService` contains methods for retrieving, counting, and checking the existence of achievements. These methods interact with the database through the `Achievement` model.
+  
+- **Benefits**:
+  - **Encapsulation**: The service layer abstracts data access logic, making it easier to switch between different data sources (e.g., from a database to an API).
+  - **Cache Management**: The class integrates caching mechanisms using Redis, reducing database load and improving performance.
 
-- **Benefits:**
-  - **Encapsulation:** The service abstracts the underlying database operations, making it easier to switch storage mechanisms without changing the business logic.
-  - **Testability:** By separating data access from business logic, unit testing becomes more straightforward.
-  - **Maintainability:** Changes in database schema or access methods can be handled centrally within the repository.
+- **Deviations**:
+  - The pattern is slightly modified by including static methods for simplicity.
+  - Cache invalidation (`invalidate_cache`) is handled within the service layer itself, which might be more appropriate in a larger application where responsibilities are distributed across multiple services.
 
-- **Deviations:**
-  - The pattern is slightly deviated as it uses static methods instead of defining a separate `Repository` class. However, this approach still encapsulates data access logic effectively.
-  - The use of `get_db()` to fetch the database connection might not be ideal for larger applications where dependency injection or a more structured repository setup would be beneficial.
+- **Appropriateness**:
+  - This pattern is suitable for this context as it provides a clean separation between business logic and data access. It also supports caching to enhance performance, making it ideal for applications with frequent read operations.
+  - However, in more complex systems, the repository might be better implemented using dependency injection or interfaces to facilitate easier testing and mocking.
 
-- **Appropriateness:**
-  - This pattern is appropriate for smaller to medium-sized projects where the complexity of managing multiple repositories is manageable. For larger, more complex systems, a dedicated repository class with methods could provide better structure and maintainability.
+This pattern is particularly appropriate when you need a robust way to manage data access while keeping your business logic clean and maintainable.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 16:40*
+*Generated by CodeWorm on 2026-02-22 21:04*
