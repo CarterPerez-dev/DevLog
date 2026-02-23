@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** angela
-**File:** internal/pyproject/parser_test.go
+**File:** internal/requirements/parser_test.go
 **Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,154 +15,134 @@
 Commit: ea4cc501
 Message: Create canonical module source location - release v1.0.0
 Author: CarterPerez-dev
-File: internal/pyproject/parser_test.go
+File: internal/requirements/parser_test.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,122 @@
 +// ©AngelaMos | 2026
 +// parser_test.go
 +
-+package pyproject
++package requirements
 +
 +import (
++	"os"
++	"path/filepath"
 +	"testing"
 +)
 +
-+//nolint:gocognit,funlen
-+func TestParseDependency(t *testing.T) {
++func TestParseFile(t *testing.T) {
 +	t.Parallel()
 +
-+	tests := []struct {
-+		name    string
-+		input   string
-+		wantPkg string
-+		wantSpc string
-+		extras  []string
-+		markers string
-+	}{
-+		{
-+			name:    "simple with lower bound",
-+			input:   "requests>=2.28.0",
-+			wantPkg: "requests",
-+			wantSpc: ">=2.28.0",
-+		},
-+		{
-+			name:    "range constraint",
-+			input:   "django>=3.2,<4.0",
-+			wantPkg: "django",
-+			wantSpc: ">=3.2,<4.0",
-+		},
-+		{
-+			name:    "extras",
-+			input:   "flask[async]>=2.0",
-+			wantPkg: "flask",
-+			wantSpc: ">=2.0",
-+			extras:  []string{"async"},
-+		},
-+		{
-+			name:    "multiple extras",
-+			input:   "requests[security, socks]>=2.28.0",
-+			wantPkg: "requests",
-+			wantSpc: ">=2.28.0",
-+			extras:  []string{"security", "socks"},
-+		},
-+		{
-+			name:    "markers",
-+			input:   `pandas>=1.5; python_version>='3.8'`,
-+			wantPkg: "pandas",
-+			wantSpc: ">=1.5",
-+			markers: "python_version>='3.8'",
-+		},
-+		{
-+			name:    "bare name no version",
-+			input:   "numpy",
-+			wantPkg: "numpy",
-+			wantSpc: "",
-+		},
-+		{
-+			name:    "exact pin",
-+			input:   "black==23.7.0",
-+			wantPkg: "black",
-+			wantSpc: "==23.7.0",
-+		},
-+		{
-+			name:    "compatible release",
-+			input:   "setuptools~=68.0",
-+			wantPkg: "setuptools",
-+			wantSpc: "~=68.0",
-+		},
-+		{
-+			name:    "not equal",
-+			input:   "urllib3!=2.0.0",
-+			wantPkg: "urllib3",
-+			wantSpc: "!=2.0.0",
-+		},
-+		{
-+			name:    "whitespace around",
-+			input:   "  click >= 8.0.0  ",
-+			wantPkg: "click",
-+			wantSpc: ">= 8.0.0",
-+		},
++	content := `# Core deps
++django>=3.2.0
++requests==2.28.1
++flask>=2.0,<3.0
++numpy  # pinned
++click[extra]>=8.0.0; python_version>="3.8"
++
++# Options to skip
++-r other.txt
++-e ./local-pkg
++--index-url https://pypi.org/simple/
++`
++
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
++
++	deps, err := ParseFile(path)
++	if err != nil {
++		t.Fatalf("ParseFile: %v", err)
 +	}
 +
-+	for _, tt := range tests {
-+		t.Run(tt.name, func(t *testing.T) {
-+			t.Parallel()
++	if len(deps) != 5 {
++		t.Fatalf("len = %d, want 5", len(deps))
++	}
 +
-+			dep := ParseDependency(tt.input, "")
++	tests := []struct {
++		name string
++		spec string
++	}{
++		{"django", ">=3.2.0"},
++		{"requests", "==2.28.1"},
++		{"flask", ">=2.0,<3.0"},
++		{"numpy", ""},
++		{"click", ">=8.0.0"},
++	}
 +
-+			if dep.Name != tt.wantPkg {
-+				t.Errorf(
-+					"Name = %q, want %q", dep.Name, tt.wantPkg,
-+				)
-+			}
-+			if dep.Spec != tt.wantSpc {
-+				t.Errorf(
-+					"Spec = %q, want %q", dep.Spec, tt.wantSpc,
-+				)
-+			}
-+			if tt.markers != "" && dep.Markers != tt.markers {
-+				t.Errorf(
-+					"Markers = %q, want %q",
-+					dep.Markers, tt.markers,
-+				)
-+			}
-+			if len(tt.extras) > 0 {
-+				if len(dep.Extras) != len(tt.extras) {
-+					t.Fatalf(
-+						"Extras = %v, want %v",
-+						dep.Extras, tt.extras,
-+					)
-+				}
-+				for i, e := range tt.extras {
-+					if dep.Extras[i] != e {
-+						t.Errorf(
-+							"Extras[%d] = %q, want %q",
-+							i, dep.Extras[i], e,
-+						)
-+					}
-+				}
-+			}
-+		})
++	for i, tt := range tests {
++		if deps[i].Name != tt.name {
++			t.Errorf("deps[%d].Name = %q, want %q", i, deps[i].Name, tt.name)
++		}
++		if deps[i].Spec != tt.spec {
++			t.Errorf("deps[%d].Spec = %q, want %q", i, deps[i].Spec, tt.spec)
++		}
 +	}
 +}
 +
-+func TestExtractMinVersion(t *testing.T) {
++func TestParseFileExtras(t *testing.T) {
 +	t.Parallel()
 +
-+	tests := []struct {
-+		spec string
-+		want string
-+	}{
-+		{">=2.28.0", "2.28.0"},
-+		{">=3.2,<4.0", "3.2"},
-+		{"==23.7.0", "23.7.0"},
-+		{"==3.2.*", "3.2"},
-+		{"~=68.0", "68.0"},
-+		{"!=2.0", ""},
-+		{">1.0", ""},
++	content := "requests[security,socks]>=2.28.0\n"
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
 +
++	deps, err := ParseFile(path)
++	if err != nil {
++		t.Fatalf("ParseFile: %v", err)
++	}
++
++	if len(deps) != 1 {
++		t.Fatalf("len = %d, want 1", len(deps))
++	}
++
++	if len(deps[0].Extras) != 2 {
++		t.Fatalf("extras len = %d, want 2", len(deps[0].Extras))
++	}
++	if deps[0].Extras[0] != "security" || deps[0].Extras[1] != "socks" {
++		t.Errorf("extras = %v, want [security socks]", deps[0].Extras)
++	}
++}
++
++func TestParseFileMarkers(t *testing.T) {
++	t.Parallel()
++
++	content := "pywin32>=300; sys_platform==\"win32\"\n"
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
++
++	deps, err := ParseFile(path)
++	if err != nil {
++		t.Fatalf("ParseFile: %v", err)
++	}
++
++	if deps[0].Markers != `sys_platform=="win32"` {
++		t.Errorf("markers = %q, want sys_platform==\"win32\"", deps[0].Markers)
++	}
++}
++
++func TestParseFileEmpty(t *testing.T) {
++	t.Parallel()
++
++	content := "# just comments\n\n-r other.txt\n"
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
++
++	_, err := ParseFile(path)
++	if err == nil {
++		t.Error("expected error for empty requirements")
++	}
++}
++
++func TestParseFileNotFound(t *testing.T) {
++	t.Parallel()
++
++	_, err := ParseFile("/nonexistent/requirements.txt")
++	if err == nil {
++		t.Error("expected error for missing file")
++	}
++}
+
 ```
 
 ---
@@ -171,20 +151,18 @@ Diff:
 
 ### Change Analysis
 
-**What was Changed:**
-A new test file `parser_test.go` was added to the `pyproject` package, containing 159 lines of code. The file includes two test functions: `TestParseDependency` and `TestExtractMinVersion`. These tests cover various scenarios for parsing dependency specifications in a PyProject format.
+**What was Changed:** 
+The commit introduces four new test functions in `parser_test.go` to validate the `ParseFile` function of the `requirements` package. These tests cover various scenarios including parsing standard dependencies, extras, markers, and handling empty or non-existent files.
 
 **Why it Was Likely Changed:**
-This change likely aims to ensure robust testing of the dependency parsing functionality within the `pyproject` package. By adding comprehensive test cases, the developer ensures that all possible dependency formats are correctly handled and parsed.
+This change likely aims to ensure that the parser correctly handles different types of requirements file contents, thereby improving the robustness and reliability of the `ParseFile` function. The introduction of these tests helps in maintaining a high standard of code quality by covering edge cases and typical use cases.
 
 **Impact on Behavior:**
-The addition of these tests will help maintain the correctness of the dependency parser over time. They cover a wide range of scenarios including simple versions, ranges, extras, markers, and special operators like `==` and `~=`. This ensures that the parser behaves as expected across different input formats.
+The new test functions will now be run during testing to validate that the parser behaves as expected under various conditions, such as parsing dependencies with markers or extras, handling comments and directives like `-r` and `--index-url`, and correctly reporting errors for non-existent files. This ensures that the requirements parser is thoroughly tested.
 
 **Risks or Concerns:**
-While these tests are comprehensive, they may introduce some risks if not all edge cases are covered. Additionally, maintaining a large number of test cases can make the codebase harder to navigate. However, given the complexity and variability of dependency specifications in PyProject files, this is a necessary step for robust testing.
-
-Overall, this change significantly enhances the quality and reliability of the `pyproject` package's dependency parsing functionality.
+While these tests are beneficial, there's a risk that they might not cover all possible edge cases in real-world scenarios. Additionally, ensuring that the test content accurately reflects actual use cases will be crucial to maintaining their effectiveness.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 14:18*
+*Generated by CodeWorm on 2026-02-23 14:33*
