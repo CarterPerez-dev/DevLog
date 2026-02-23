@@ -12,86 +12,22 @@
 ## Source Code
 
 ```typescript
-Commit: 3894239b
-Message: angela-3d implementation - in prog open wake
+Commit: dae6cf01
+Message: add checklist tool
 Author: CarterPerez-dev
 File: CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useWakeWord.ts
-Change type: new file
+Change type: modified
 
 Diff:
-@@ -0,0 +1,72 @@
-+// ===================
-+// © AngelaMos | 2026
-+// useWakeWord.ts
-+// ===================
-+
-+import { useEffect, useRef, useCallback } from 'react'
-+import { createWakeWordEngine } from '../lib/porcupine'
-+import { AudioRecorder } from '../lib/audio'
-+import { logger } from '../lib/debug'
-+
-+type WakeWordEngine = Awaited<ReturnType<typeof createWakeWordEngine>>
-+
-+interface UseWakeWordResult {
-+  wakeWordRef: React.MutableRefObject<WakeWordEngine | null>
-+  recorderRef: React.MutableRefObject<AudioRecorder | null>
-+  setWakeWordCallback: (callback: () => void) => void
-+}
-+
-+export function useWakeWord(
-+  onReady: () => void,
-+  onError: (error: Error) => void
-+): UseWakeWordResult {
-+  const wakeWordRef = useRef<WakeWordEngine | null>(null)
-+  const recorderRef = useRef<AudioRecorder | null>(null)
-+  const callbackRef = useRef<(() => void) | null>(null)
-+
-+  const setWakeWordCallback = useCallback((callback: () => void) => {
-+    callbackRef.current = callback
-+    if (wakeWordRef.current) {
-+      wakeWordRef.current.onWakeWord = callback
-+    }
-+  }, [])
-+
-+  useEffect(() => {
-+    let mounted = true
-+
-+    const init = async () => {
-+      try {
-+        recorderRef.current = new AudioRecorder()
-+        await recorderRef.current.initialize()
-+        logger.page.log('AudioRecorder ready')
-+
-+        const wakeWord = await createWakeWordEngine()
-+        wakeWordRef.current = wakeWord
-+
-+        if (callbackRef.current) {
-+          wakeWord.onWakeWord = callbackRef.current
-+        }
-+
-+        await wakeWord.start()
-+        logger.page.log('Wake word listening')
-+
-+        if (mounted) onReady()
-+      } catch (err) {
-+        logger.page.error('Init error:', err)
-+        if (mounted) {
-+          onError(err instanceof Error ? err : new Error('Init failed'))
-+        }
-+      }
-+    }
-+
-+    init()
-+
-+    return () => {
-+      mounted = false
-+      wakeWordRef.current?.dispose()
-+      recorderRef.current?.dispose()
-+    }
-+  }, [onReady, onError])
-+
-+  return { wakeWordRef, recorderRef, setWakeWordCallback }
-+}
+@@ -4,7 +4,7 @@
+ // ===================
+ 
+ import { useEffect, useRef, useCallback } from 'react'
+-import { createWakeWordEngine } from '../lib/porcupine'
++import { createWakeWordEngine } from '../lib/wakeword'
+ import { AudioRecorder } from '../lib/audio'
+ import { logger } from '../lib/debug'
+ 
 
 ```
 
@@ -99,24 +35,26 @@ Diff:
 
 ## Code Evolution
 
-### Change Analysis
+### Change Analysis for `useWakeWord.ts`
 
 **What was Changed:**
-A new file `useWakeWord.ts` was added, implementing a hook for handling wake word detection using the Porcupine library. The hook initializes an audio recorder and a wake word engine, sets up callbacks, and manages their lifecycle.
+In the file `CarterOS-Client/src/aspects/assistant/facets/angela/hooks/useWakeWord.ts`, line 5 was modified to change the import statement from `createWakeWordEngine` from the `porcupine` library to `wakeword`. No other changes were made in this snippet.
 
-**Why it was Likely Changed:**
-This change likely aims to integrate voice-activated commands into the AngelaOS client by providing a reusable mechanism for detecting specific wake words (e.g., "Angela"). This is crucial for enabling hands-free interaction with the assistant.
+**Why it Was Likely Changed:**
+This change likely indicates a refactoring or update of the wake word engine implementation. The transition from `porcupine` to `wakeword` might be due to:
+- A new, more efficient or feature-rich library.
+- Internal renaming or restructuring of the codebase.
 
 **Impact on Behavior:**
-The introduction of `useWakeWord` allows components to listen for wake words and execute predefined actions when detected. It ensures that audio recording and wake word detection are properly initialized, disposed of, and error-handled.
+The impact is minimal since only the import statement was changed. However, any functionality dependent on wake word detection will now use the updated engine provided by `wakeword`. This could introduce changes in how wake words are detected and processed.
 
 **Risks or Concerns:**
-- **Resource Management:** Proper disposal of the audio recorder and wake word engine is critical to avoid memory leaks.
-- **Error Handling:** The hook should handle errors more granularly to provide better debugging information. For instance, distinguishing between initialization failures and runtime issues could be beneficial.
-- **Performance:** Continuous audio recording might impact battery life on mobile devices; thus, efficient management of the recording state is essential.
+- **Compatibility:** Ensure that the new `wakeword` library is compatible with existing code.
+- **Documentation:** Verify if there are any differences in API usage between `porcupine` and `wakeword`.
+- **Testing:** Thoroughly test wake word detection to ensure no regressions.
 
-Overall, this change enhances the assistant's functionality by enabling voice commands, but careful testing and optimization are necessary to ensure smooth operation.
+Overall, this change appears to be a refactoring aimed at potentially improving the wake word engine.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 15:29*
+*Generated by CodeWorm on 2026-02-22 23:10*
