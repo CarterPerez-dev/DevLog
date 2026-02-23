@@ -1,0 +1,186 @@
+# capabilities
+
+**Type:** Code Evolution
+**Repository:** docksec
+**File:** internal/proc/capabilities.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 5a7c48c4
+Message: Initial release
+Author: CarterPerez-dev
+File: internal/proc/capabilities.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,283 @@
++/*
++CarterPerez-dev | 2025
++capabilities.go
++*/
++
++package proc
++
++import (
++	"fmt"
++
++	"github.com/CarterPerez-dev/docksec/internal/finding"
++	"github.com/CarterPerez-dev/docksec/internal/rules"
++)
++
++type CapabilitySet struct {
++	Effective   uint64
++	Permitted   uint64
++	Inheritable uint64
++	Bounding    uint64
++	Ambient     uint64
++}
++
++var capabilityBits = map[int]string{
++	0:  "CAP_CHOWN",
++	1:  "CAP_DAC_OVERRIDE",
++	2:  "CAP_DAC_READ_SEARCH",
++	3:  "CAP_FOWNER",
++	4:  "CAP_FSETID",
++	5:  "CAP_KILL",
++	6:  "CAP_SETGID",
++	7:  "CAP_SETUID",
++	8:  "CAP_SETPCAP",
++	9:  "CAP_LINUX_IMMUTABLE",
++	10: "CAP_NET_BIND_SERVICE",
++	11: "CAP_NET_BROADCAST",
++	12: "CAP_NET_ADMIN",
++	13: "CAP_NET_RAW",
++	14: "CAP_IPC_LOCK",
++	15: "CAP_IPC_OWNER",
++	16: "CAP_SYS_MODULE",
++	17: "CAP_SYS_RAWIO",
++	18: "CAP_SYS_CHROOT",
++	19: "CAP_SYS_PTRACE",
++	20: "CAP_SYS_PACCT",
++	21: "CAP_SYS_ADMIN",
++	22: "CAP_SYS_BOOT",
++	23: "CAP_SYS_NICE",
++	24: "CAP_SYS_RESOURCE",
++	25: "CAP_SYS_TIME",
++	26: "CAP_SYS_TTY_CONFIG",
++	27: "CAP_MKNOD",
++	28: "CAP_LEASE",
++	29: "CAP_AUDIT_WRITE",
++	30: "CAP_AUDIT_CONTROL",
++	31: "CAP_SETFCAP",
++	32: "CAP_MAC_OVERRIDE",
++	33: "CAP_MAC_ADMIN",
++	34: "CAP_SYSLOG",
++	35: "CAP_WAKE_ALARM",
++	36: "CAP_BLOCK_SUSPEND",
++	37: "CAP_AUDIT_READ",
++	38: "CAP_PERFMON",
++	39: "CAP_BPF",
++	40: "CAP_CHECKPOINT_RESTORE",
++}
++
++var capabilityNames = func() map[string]int {
++	m := make(map[string]int, len(capabilityBits))
++	for bit, name := range capabilityBits {
++		m[name] = bit
++	}
++	return m
++}()
++
++func (c *CapabilitySet) HasCapability(name string) bool {
++	bit, ok := capabilityNames[name]
++	if !ok {
++		return false
++	}
++	return (c.Effective & (1 << bit)) != 0
++}
++
++func (c *CapabilitySet) HasPermitted(name string) bool {
++	bit, ok := capabilityNames[name]
++	if !ok {
++		return false
++	}
++	return (c.Permitted & (1 << bit)) != 0
++}
++
++func (c *CapabilitySet) HasBounding(name string) bool {
++	bit, ok := capabilityNames[name]
++	if !ok {
++		return false
++	}
++	return (c.Bounding & (1 << bit)) != 0
++}
++
++func (c *CapabilitySet) HasAmbient(name string) bool {
++	bit, ok := capabilityNames[name]
++	if !ok {
++		return false
++	}
++	return (c.Ambient & (1 << bit)) != 0
++}
++
++func (c *CapabilitySet) ListEffective() []string {
++	return c.listCaps(c.Effective)
++}
++
++func (c *CapabilitySet) ListPermitted() []string {
++	return c.listCaps(c.Permitted)
++}
++
++func (c *CapabilitySet) ListBounding() []string {
++	return c.listCaps(c.Bounding)
++}
++
++func (c *CapabilitySet) ListAmbient() []string {
++	return c.listCaps(c.Ambient)
++}
++
++func (c *CapabilitySet) ListInheritable() []string {
++	return c.listCaps(c.Inheritable)
++}
++
++func (c *CapabilitySet) listCaps(mask uint64) []string {
++	var caps []string
++	for bit, name := range capabilityBits {
++		if (mask & (1 << bit)) != 0 {
++			caps = append(caps, name)
++		}
++	}
++	return caps
++}
++
++f
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `internal/proc/capabilities.go`
+
+**What was Changed:**
+The file introduces a new Go package named `proc` with a `CapabilitySet` struct to manage Linux capabilities. It includes methods to check and list specific capabilities, determine the severity of capability sets, count bits in masks, and parse hexadecimal strings representing capability masks.
+
+**Why it was Likely Changed:**
+This change likely aims to provide a structured way to handle and analyze Linux process capabilities within the `docksec` project. The introduction of these functions helps in identifying dangerous or critical capabilities, which is crucial for security assessments.
+
+**Impact on Behavior:**
+The new package allows for more granular control over capability management. Functions like `HasDangerousCapabilities`, `GetCriticalCapabilities`, and `GetCapabilitiesBySeverity` enable detailed analysis based on predefined rules. This can significantly enhance the project's ability to detect potential security issues related to process capabilities.
+
+**Risks or Concerns:**
+While this change introduces useful functionality, there are a few risks:
+- **Error Handling:** The `ParseCapabilityMask` function does not handle errors gracefully; it returns an error but doesn't provide context.
+- **Dependence on External Rules:** Functions like `IsDangerousCapability`, `IsCriticalCapability`, and `GetCapabilitySeverity` rely on external rules, which must be correctly implemented to avoid false positives or negatives.
+
+Overall, this change is a significant step towards robust capability management in the project.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 15:55*
