@@ -1,0 +1,165 @@
+# exceptions
+
+**Type:** Code Evolution
+**Repository:** social-media-notes
+**File:** backend/app/core/exceptions.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 8c757802
+Message: easy peasy
+Author: CarterPerez-dev
+File: backend/app/core/exceptions.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,227 @@
++"""
++ⒸAngelaMos | 2025
++exceptions.py
++"""
++
++from typing import Any
++
++
++class BaseAppException(Exception):
++    """
++    Base exception for all application specific errors
++    """
++    def __init__(
++        self,
++        message: str,
++        status_code: int = 500,
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        self.message = message
++        self.status_code = status_code
++        self.extra = extra or {}
++        super().__init__(self.message)
++
++
++class ResourceNotFound(BaseAppException):
++    """
++    Raised when a requested resource does not exist
++    """
++    def __init__(
++        self,
++        resource: str,
++        identifier: str | int,
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        super().__init__(
++            message = f"{resource} with id '{identifier}' not found",
++            status_code = 404,
++            extra = extra,
++        )
++        self.resource = resource
++        self.identifier = identifier
++
++
++class ConflictError(BaseAppException):
++    """
++    Raised when an operation conflicts with existing state
++    """
++    def __init__(
++        self,
++        message: str,
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        super().__init__(
++            message = message,
++            status_code = 409,
++            extra = extra
++        )
++
++
++class ValidationError(BaseAppException):
++    """
++    Raised when input validation fails outside of Pydantic
++    """
++    def __init__(
++        self,
++        message: str,
++        field: str | None = None,
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        super().__init__(
++            message = message,
++            status_code = 422,
++            extra = extra
++        )
++        self.field = field
++
++
++class AuthenticationError(BaseAppException):
++    """
++    Raised when authentication fails
++    """
++    def __init__(
++        self,
++        message: str = "Authentication failed",
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        super().__init__(
++            message = message,
++            status_code = 401,
++            extra = extra
++        )
++
++
++class TokenError(AuthenticationError):
++    """
++    Raised for JWT token specific errors
++    """
++    def __init__(
++        self,
++        message: str = "Invalid or expired token",
++        extra: dict[str,
++                    Any] | None = None,
++    ) -> None:
++        super().__init__(message = message, extra = extra)
++
++
++class TokenRevokedError(TokenError):
++    """
++    Raised when a revoked token is used
++    """
++    def __init__(self, extra: dict[str, Any] | None = None) -> None:
++        super().__init__(message = "Token has been revoked", extra 
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `exceptions.py`
+
+**What was Changed**: A new file named `exceptions.py` was added, introducing a comprehensive set of custom exception classes in Python. The changes include defining base and derived exceptions with specific error messages, status codes, and extra fields.
+
+**Why it Was Likely Changed**: This change likely aims to standardize error handling across the application by providing clear, structured ways to handle various types of errors. It follows best practices for modular code design, making error management more explicit and maintainable.
+
+**Impact on Behavior**: The introduction of these exceptions will affect how errors are handled in the application. For instance:
+- `ResourceNotFound` and `UserNotFound` provide specific messages indicating that a requested resource or user was not found.
+- `ConflictError`, `EmailAlreadyExists`, and `TokenRevokedError` handle conflicts and specific error scenarios with appropriate status codes.
+- `AuthenticationError`, `InvalidCredentials`, and related exceptions manage authentication-related issues.
+
+**Risks or Concerns**: While this is a positive change, there are a few potential risks:
+1. **Overhead**: Adding many exception classes might introduce overhead in the codebase if not used efficiently.
+2. **Consistency**: Ensuring all parts of the application use these custom exceptions consistently will be important to maintain uniform error handling.
+
+Overall, this change enhances the robustness and clarity of error management in the `social-media-notes` repository.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 17:49*
