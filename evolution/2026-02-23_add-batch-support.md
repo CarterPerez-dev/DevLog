@@ -1,0 +1,139 @@
+# add_batch_support
+
+**Type:** Code Evolution
+**Repository:** vuemantics
+**File:** backend/migrations/add_batch_support.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 4d33b24a
+Message: feat: dramatiq - bulkupload
+Author: CarterPerez-dev
+File: backend/migrations/add_batch_support.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,130 @@
++"""
++ⒸAngelaMos | 2026
++Migration: Add batch support to uploads table
++
++docker exec -it vuemantics-dev-backend uv run python -m migrations.add_batch_support
++"""
++
++import sys
++import asyncio
++import logging
++from pathlib import Path
++
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import database
++
++
++logger = logging.getLogger(__name__)
++
++
++async def upgrade():
++    """
++    Add batch_id column to uploads table for bulk upload support.
++    """
++    logger.info("Starting migration: add batch support")
++
++    try:
++        # Create upload_batches table first (if running migration in isolation)
++        await database.db.execute(
++            """
++            CREATE TABLE IF NOT EXISTS upload_batches (
++                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++                user_id UUID NOT NULL,
++                status VARCHAR(50) NOT NULL DEFAULT 'pending',
++                total_uploads INTEGER NOT NULL DEFAULT 0,
++                processed_uploads INTEGER NOT NULL DEFAULT 0,
++                successful_uploads INTEGER NOT NULL DEFAULT 0,
++                failed_uploads INTEGER NOT NULL DEFAULT 0,
++                error_message TEXT,
++                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
++                started_at TIMESTAMP WITH TIME ZONE,
++                completed_at TIMESTAMP WITH TIME ZONE,
++                updated_at TIMESTAMP WITH TIME ZONE
++            );
++            """
++        )
++        logger.info("Ensured upload_batches table exists")
++
++        await database.db.execute(
++            """
++            CREATE INDEX IF NOT EXISTS idx_upload_batches_user_id ON upload_batches(user_id);
++            """
++        )
++        logger.info("Created index for upload_batches.user_id")
++
++        await database.db.execute(
++            """
++            CREATE INDEX IF NOT EXISTS idx_upload_batches_status ON upload_batches(status);
++            """
++        )
++        logger.info("Created index for upload_batches.status")
++
++        # Add batch_id column to uploads table
++        await database.db.execute(
++            """
++            ALTER TABLE uploads
++            ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES upload_batches(id) ON DELETE SET NULL;
++            """
++        )
++        logger.info("Added batch_id column to uploads table")
++
++        await database.db.execute(
++            """
++            CREATE INDEX IF NOT EXISTS idx_uploads_batch_id ON uploads(batch_id);
++            """
++        )
++        logger.info("Created index for uploads.batch_id")
++
++        logger.info("Migration completed successfully")
++
++    except Exception as e:
++        logger.error(f"Migration failed: {e}")
++        raise
++
++
++async def downgrade():
++    """
++    Remove batch support from uploads table.
++    """
++    logger.info("Star
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit `feat: dramatiq - bulkupload` introduces a new migration script in the file `backend/migrations/add_batch_support.py`. This script adds support for batch uploads by modifying the `uploads` and `upload_batches` tables. It includes creating necessary indexes, adding a `batch_id` column to the `uploads` table, and handling both upgrade and downgrade operations.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance the system's ability to handle bulk uploads more efficiently by grouping related upload records under a single batch. This is particularly useful for tracking progress, managing errors, and optimizing database queries.
+
+**Impact on Behavior:**
+The addition of `batch_id` allows for better organization and management of large-scale file uploads. The new indexes improve query performance when filtering or aggregating data based on batches. Users will now have a more structured way to handle bulk operations, which can lead to improved application responsiveness and scalability.
+
+**Risks or Concerns:**
+- **Data Integrity:** Dropping the `batch_id` column in the downgrade operation could potentially lose important batch-related information if not handled carefully.
+- **Rollback Complexity:** The rollback process does not drop the `upload_batches` table, which might leave orphaned data. This should be monitored to ensure no unintended consequences.
+
+Overall, this change is a feature enhancement that improves the system's ability to manage bulk uploads efficiently while introducing some risks that need careful management during rollbacks.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 09:54*
