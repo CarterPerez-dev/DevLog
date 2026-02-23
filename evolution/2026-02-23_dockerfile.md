@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** docksec
-**File:** internal/analyzer/dockerfile.go
+**File:** internal/parser/dockerfile.go
 **Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,130 +15,180 @@
 Commit: 5a7c48c4
 Message: Initial release
 Author: CarterPerez-dev
-File: internal/analyzer/dockerfile.go
+File: internal/parser/dockerfile.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,387 @@
+@@ -0,0 +1,206 @@
 +/*
-+AngelaMos | 2025
++CarterPerez-dev | 2025
 +dockerfile.go
 +*/
 +
-+package analyzer
++package parser
 +
 +import (
-+	"context"
++	"fmt"
++	"io"
 +	"os"
 +	"strings"
 +
-+	"github.com/CarterPerez-dev/docksec/internal/benchmark"
-+	"github.com/CarterPerez-dev/docksec/internal/config"
-+	"github.com/CarterPerez-dev/docksec/internal/finding"
-+	"github.com/CarterPerez-dev/docksec/internal/rules"
 +	"github.com/moby/buildkit/frontend/dockerfile/parser"
 +)
 +
-+// DockerfileAnalyzer performs static analysis on Dockerfiles to detect
-+// security issues like missing USER instructions, ADD with URLs, hardcoded
-+// secrets, and curl-to-shell patterns per CIS Docker Benchmark Section 4.
-+type DockerfileAnalyzer struct {
-+	path string
++type DockerfileAST struct {
++	Path     string
++	Root     *parser.Node
++	Stages   []Stage
++	Commands []Command
 +}
 +
-+// NewDockerfileAnalyzer creates a new analyzer for the specified Dockerfile path.
-+func NewDockerfileAnalyzer(path string) *DockerfileAnalyzer {
-+	return &DockerfileAnalyzer{path: path}
++type Stage struct {
++	Name      string
++	BaseName  string
++	BaseTag   string
++	StartLine int
++	EndLine   int
++	Commands  []Command
 +}
 +
-+// Name returns the identifier for this analyzer, prefixed with "dockerfile:".
-+func (a *DockerfileAnalyzer) Name() string {
-+	return "dockerfile:" + a.path
++type Command struct {
++	Instruction string
++	Arguments   []string
++	Original    string
++	StartLine   int
++	EndLine     int
++	Stage       int
 +}
 +
-+// Analyze parses the Dockerfile AST and checks instructions for security
-+// misconfigurations.
-+func (a *DockerfileAnalyzer) Analyze(
-+	ctx context.Context,
-+) (finding.Collection, error) {
-+	file, err := os.Open(a.path)
++func ParseDockerfile(path string) (*DockerfileAST, error) {
++	file, err := os.Open(path)
 +	if err != nil {
-+		return nil, err
++		return nil, fmt.Errorf("opening dockerfile: %w", err)
 +	}
 +	defer func() { _ = file.Close() }()
 +
-+	result, err := parser.Parse(file)
-+	if err != nil {
-+		return nil, err
-+	}
-+
-+	target := finding.Target{
-+		Type: finding.TargetDockerfile,
-+		Name: a.path,
-+	}
-+
-+	var findings finding.Collection
-+
-+	findings = append(findings, a.checkUserInstruction(target, result.AST)...)
-+	findings = append(findings, a.checkHealthcheck(target, result.AST)...)
-+	findings = append(findings, a.checkAddInstruction(target, result.AST)...)
-+	findings = append(findings, a.checkSecrets(target, result.AST)...)
-+	findings = append(findings, a.checkLatestTag(target, result.AST)...)
-+	findings = append(findings, a.checkCurlPipe(target, result.AST)...)
-+	findings = append(findings, a.checkSudo(target, result.AST)...)
-+
-+	return findings, nil
++	return ParseDockerfileReader(path, file)
 +}
 +
-+func (a *DockerfileAnalyzer) checkUserInstruction(
-+	target finding.Target,
-+	ast *parser.Node,
-+) finding.Collection {
-+	var findings finding.Collection
++func ParseDockerfileReader(path string, r io.Reader) (*DockerfileAST, error) {
++	result, err := parser.Parse(r)
++	if err != nil {
++		return nil, fmt.Errorf("parsing dockerfile: %w", err)
++	}
 +
-+	hasUser := false
-+	var lastFromLine int
++	ast := &DockerfileAST{
++		Path: path,
++		Root: result.AST,
++	}
 +
-+	for _, node := range ast.Children {
-+		switch strings.ToUpper(node.Value) {
-+		case "FROM":
-+			lastFromLine = node.StartLine
-+			hasUser = false
-+		case "USER":
-+			hasUser = true
-+			user := ""
-+			if node.Next != nil {
-+				user = node.Next.Value
-+			}
-+			if user == "root" || user == "0" {
-+				loc := &finding.Location{Path: a.path, Line: node.StartLine}
-+				f := finding.New("DS-USER-ROOT", "USER instruction sets root user", finding.SeverityMedium, target).
-+					WithDescription("Dockerfile explicitly sets USER to root, which should be avoided.").
-+					WithCategory(strin
++	ast.extractStructure()
++
++	return ast, nil
++}
++
++func (d *DockerfileAST) extractStructure() {
++	stageIndex := -1
++
++	for _, node := range d.Root.Children {
++		instruction := strings.ToUpper(node.Value)
++
++		cmd := Command{
++			Instruction: instruction,
++			Original:    node.Original,
++			StartLine:   node.StartLine,
++			EndLine:     node.EndLine,
++			Stage:       stageIndex,
++		}
++
++		for n := node.Next; n != nil; n = n.Next {
++			cmd.Arguments = append(cmd.Arguments, n.Value)
++		}
++
++		if instruction == "FROM" {
++			stageIndex++
++			stage := d.parseFromInstruction(node, stageIndex)
++			d.Stages = append(d.Stages, stage)
++			cmd.Stage = stageIndex
++		}
++
++		d.Commands = append(d.Commands, cmd)
++
++		if stageIndex >= 0 && stageIndex < len(d.Stages) {
++			d.Stages[stageIndex].Commands = append(
++				d.Stages[stageIndex].Commands,
++				cmd,
++			)
++			d.Stages[stageIndex].EndLine = node.EndLine
++		}
++	}
++}
++
++func (d *DockerfileAST) parseFromInstruction(
++	node *parser.Node,
++	index int,
++) Stage {
++	stage := Stage{
++		StartLine: node.StartLine,
++		EndLine:   node.EndLine,
++	}
++
++	if node.Next != nil {
++		imageRef := node.Next.Value
++		stage.BaseName, stage.BaseTag = parseImageReference(imageRef)
++	}
++
++	for n := node.Next; n != nil; n = n.Next {
++		if strings.ToUpper(n.Value) == "AS" && n.Next != nil {
++			stage.Name = n.Next.Value
++			break
++		}
++	}
++
++	if stage.Name == "" {
++		stage.Name = fmt.Sprintf("stage-%d", index)
++	}
++
++	return stage
++}
++
++func parseImageReference(ref string) (name, tag string) {
++	ref = strings.TrimSpace(ref)
++
++	if atIdx := strings.Index(ref, "@"); atIdx != -1 {
++		return ref[:atIdx], ref[atIdx:]
++	}
++
++	if colonIdx := strings.LastIndex(ref, ":"); colonIdx != -1 {
++		possibleTag := ref[colonIdx+1:]
++		if
 ```
 
 ---
 
 ## Code Evolution
 
-### Change Analysis for `internal/analyzer/dockerfile.go`
+### Change Analysis for Commit 5a7c48c4 in `internal/parser/dockerfile.go`
 
 **What was Changed:**
-The file `dockerfile.go` introduces a new analyzer, `DockerfileAnalyzer`, which performs static analysis on Dockerfiles to detect security issues as per the CIS Docker Benchmark Section 4. The code includes methods like `NewDockerfileAnalyzer`, `Name`, and `Analyze`. It also contains specific check functions for various Dockerfile instructions such as `USER`, `HEALTHCHECK`, `ADD`, `curl-to-shell` patterns, etc.
+- Introduced a new file, `dockerfile.go`, which defines the structure of Dockerfile parsing and analysis.
+- Added types for `DockerfileAST`, `Stage`, and `Command` to represent parsed Dockerfile data.
+- Implemented functions like `ParseDockerfile`, `extractStructure`, and various utility methods such as `GetInstructions`, `HasInstruction`, etc.
 
 **Why it was Likely Changed:**
-This change likely addresses the need to ensure Dockerfiles are secure by identifying common misconfigurations. The analysis is based on the CIS Docker Benchmark, which provides a set of security controls for Docker images. By implementing these checks, the analyzer helps in maintaining compliance with industry standards and improving overall security posture.
+The changes were likely made to provide a structured representation of Dockerfiles for further analysis or manipulation. This is common in security tools that need to understand the contents of Dockerfiles to identify potential vulnerabilities.
 
 **Impact on Behavior:**
-The `DockerfileAnalyzer` will now be able to scan Dockerfiles and generate findings related to potential security issues like hardcoded root users, disabled healthchecks, and other misconfigurations. This can help developers and security teams identify and mitigate risks early in the development process.
+- The new functions allow for easy querying and manipulation of parsed Dockerfile data.
+- `ParseDockerfile` provides a convenient way to load and parse Dockerfiles, while methods like `GetInstructions` enable specific command searches within the Dockerfile.
 
 **Risks or Concerns:**
-- The analyzer relies on the `parser.Parse` function from the `moby/buildkit/frontend/dockerfile/parser` package to parse Dockerfiles. If there are issues with this parser, it could lead to incorrect analysis results.
-- The checks for specific instructions (like `USER`, `HEALTHCHECK`) might miss edge cases or complex scenarios in Dockerfiles.
-- Ensuring that all relevant security controls from the CIS Benchmark are covered and up-to-date is crucial to avoid false negatives.
+- Error handling is basic; more robust error management could be added (e.g., logging detailed errors).
+- The current implementation assumes that all instructions are well-formed, which might not always be true. Additional validation logic would improve reliability.
+- The `DockerfileVisitor` interface introduces flexibility but requires implementing custom visitors for specific use cases.
 
-Overall, this change significantly enhances the security analysis capabilities of the `docksec` tool by adding a comprehensive Dockerfile analyzer.
+Overall, this change significantly enhances the tool's ability to analyze Dockerfiles by providing a structured data model and utility functions.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 15:29*
+*Generated by CodeWorm on 2026-02-23 15:50*
