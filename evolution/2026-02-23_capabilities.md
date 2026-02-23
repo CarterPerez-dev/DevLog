@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** docksec
-**File:** internal/proc/capabilities.go
+**File:** internal/rules/capabilities.go
 **Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,172 +15,130 @@
 Commit: 5a7c48c4
 Message: Initial release
 Author: CarterPerez-dev
-File: internal/proc/capabilities.go
+File: internal/rules/capabilities.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,322 @@
 +/*
-+CarterPerez-dev | 2025
++AngelaMos | 2025
 +capabilities.go
 +*/
 +
-+package proc
++package rules
 +
 +import (
-+	"fmt"
++	"strings"
 +
 +	"github.com/CarterPerez-dev/docksec/internal/finding"
-+	"github.com/CarterPerez-dev/docksec/internal/rules"
 +)
 +
-+type CapabilitySet struct {
-+	Effective   uint64
-+	Permitted   uint64
-+	Inheritable uint64
-+	Bounding    uint64
-+	Ambient     uint64
++type CapabilityInfo struct {
++	Severity    finding.Severity
++	Description string
 +}
 +
-+var capabilityBits = map[int]string{
-+	0:  "CAP_CHOWN",
-+	1:  "CAP_DAC_OVERRIDE",
-+	2:  "CAP_DAC_READ_SEARCH",
-+	3:  "CAP_FOWNER",
-+	4:  "CAP_FSETID",
-+	5:  "CAP_KILL",
-+	6:  "CAP_SETGID",
-+	7:  "CAP_SETUID",
-+	8:  "CAP_SETPCAP",
-+	9:  "CAP_LINUX_IMMUTABLE",
-+	10: "CAP_NET_BIND_SERVICE",
-+	11: "CAP_NET_BROADCAST",
-+	12: "CAP_NET_ADMIN",
-+	13: "CAP_NET_RAW",
-+	14: "CAP_IPC_LOCK",
-+	15: "CAP_IPC_OWNER",
-+	16: "CAP_SYS_MODULE",
-+	17: "CAP_SYS_RAWIO",
-+	18: "CAP_SYS_CHROOT",
-+	19: "CAP_SYS_PTRACE",
-+	20: "CAP_SYS_PACCT",
-+	21: "CAP_SYS_ADMIN",
-+	22: "CAP_SYS_BOOT",
-+	23: "CAP_SYS_NICE",
-+	24: "CAP_SYS_RESOURCE",
-+	25: "CAP_SYS_TIME",
-+	26: "CAP_SYS_TTY_CONFIG",
-+	27: "CAP_MKNOD",
-+	28: "CAP_LEASE",
-+	29: "CAP_AUDIT_WRITE",
-+	30: "CAP_AUDIT_CONTROL",
-+	31: "CAP_SETFCAP",
-+	32: "CAP_MAC_OVERRIDE",
-+	33: "CAP_MAC_ADMIN",
-+	34: "CAP_SYSLOG",
-+	35: "CAP_WAKE_ALARM",
-+	36: "CAP_BLOCK_SUSPEND",
-+	37: "CAP_AUDIT_READ",
-+	38: "CAP_PERFMON",
-+	39: "CAP_BPF",
-+	40: "CAP_CHECKPOINT_RESTORE",
-+}
++// Capabilities maps all Linux capabilities to their security implications
++// Organized by capability number (0-40) from include/uapi/linux/capability.h
++var Capabilities = map[string]CapabilityInfo{
++	// CAP 0 - File Ownership
++	"CAP_CHOWN": {
++		Severity:    finding.SeverityMedium,
++		Description: "Change file ownership. Can take ownership of any file, bypassing normal permission checks.",
++	},
 +
-+var capabilityNames = func() map[string]int {
-+	m := make(map[string]int, len(capabilityBits))
-+	for bit, name := range capabilityBits {
-+		m[name] = bit
-+	}
-+	return m
-+}()
++	// CAP 1 - DAC Override
++	"CAP_DAC_OVERRIDE": {
++		Severity:    finding.SeverityHigh,
++		Description: "Bypass file read, write, and execute permission checks. Complete filesystem access.",
++	},
 +
-+func (c *CapabilitySet) HasCapability(name string) bool {
-+	bit, ok := capabilityNames[name]
-+	if !ok {
-+		return false
-+	}
-+	return (c.Effective & (1 << bit)) != 0
-+}
++	// CAP 2 - DAC Read Search
++	"CAP_DAC_READ_SEARCH": {
++		Severity:    finding.SeverityHigh,
++		Description: "Bypass file read permission checks and directory read/execute checks. Read any file.",
++	},
 +
-+func (c *CapabilitySet) HasPermitted(name string) bool {
-+	bit, ok := capabilityNames[name]
-+	if !ok {
-+		return false
-+	}
-+	return (c.Permitted & (1 << bit)) != 0
-+}
++	// CAP 3 - File Owner Override
++	"CAP_FOWNER": {
++		Severity:    finding.SeverityHigh,
++		Description: "Bypass permission checks on operations requiring file owner UID match. Modify any file metadata.",
++	},
 +
-+func (c *CapabilitySet) HasBounding(name string) bool {
-+	bit, ok := capabilityNames[name]
-+	if !ok {
-+		return false
-+	}
-+	return (c.Bounding & (1 << bit)) != 0
-+}
++	// CAP 4 - File Set-ID
++	"CAP_FSETID": {
++		Severity:    finding.SeverityMedium,
++		Description: "Don't clear set-user-ID and set-group-ID bits when a file is modified. Preserve SUID/SGID.",
++	},
 +
-+func (c *CapabilitySet) HasAmbient(name string) bool {
-+	bit, ok := capabilityNames[name]
-+	if !ok {
-+		return false
-+	}
-+	return (c.Ambient & (1 << bit)) != 0
-+}
++	// CAP 5 - Kill Processes
++	"CAP_KILL": {
++		Severity:    finding.SeverityMedium,
++		Description: "Send signals to arbitrary processes. Bypass permission checks for kill().",
++	},
 +
-+func (c *CapabilitySet) ListEffective() []string {
-+	return c.listCaps(c.Effective)
-+}
++	// CAP 6 - Set GID
++	"CAP_SETGID": {
++		Severity:    finding.SeverityHigh,
++		Description: "Make arbitrary manipulations of process GIDs. Privilege escalation risk via group changes.",
++	},
 +
-+func (c *CapabilitySet) ListPermitted() []string {
-+	return c.listCaps(c.Permitted)
-+}
++	// CAP 7 - Set UID
++	"CAP_SETUID": {
++		Severity:    finding.SeverityHigh,
++		Description: "Make arbitrary manipulations of process UIDs. Direct privilege escalation to root.",
++	},
 +
-+func (c *CapabilitySet) ListBounding() []string {
-+	return c.listCaps(c.Bounding)
-+}
++	// CAP 8 - Set Process Capabilities
++	"CAP_SETPCAP": {
++		Severity:    finding.SeverityHigh,
++		Description: "Modify process capabilities. Can grant new capabilities to self or child processes.",
++	},
 +
-+func (c *CapabilitySet) ListAmbient() []string {
-+	return c.listCaps(c.Ambient)
-+}
++	// CAP 9 - Linux Immutable
++	"CAP_LINUX_IMMUTABLE": {
++		Severity:    finding.SeverityMedium,
++		Description: "Set the immutable and append-only file attributes. Can prevent file modification/deletion.",
++	},
 +
-+func (c *CapabilitySet) ListInheritable() []string {
-+	return c.listCaps(c.Inheritable)
-+}
++	// CAP 10 - Bind Privileged Ports
++	"CAP_NET_BIND_SERVICE": {
++		Severity:    finding.SeverityLow,
++		Description: "Bind to privileged ports (below 1024). Required for most server applications.",
++	},
 +
-+func (c *CapabilitySet) listCaps(mask uint64) []string {
-+	var caps []string
-+	for bit, name := range capabilityBits {
-+		if (mask & (1 << bit)) != 0 {
-+			caps = append(caps, name)
-+		}
-+	}
-+	return caps
-+}
++	// CAP 11 - Network Broadcast
++	"CAP_NET_BROADCAST": {
++		Severity:    finding.SeverityLow,
++		Description: "Send broadcast packets and listen to multicast. Can flood network segments.",
++	},
 +
-+f
++	// CAP 12 - 
 ```
 
 ---
 
 ## Code Evolution
 
-### Change Analysis for `internal/proc/capabilities.go`
+### Change Analysis for `capabilities.go`
 
 **What was Changed:**
-The file introduces a new Go package named `proc` with a `CapabilitySet` struct to manage Linux capabilities. It includes methods to check and list specific capabilities, determine the severity of capability sets, count bits in masks, and parse hexadecimal strings representing capability masks.
+The file `internal/rules/capabilities.go` was added, introducing a new Go struct `CapabilityInfo` and a map `Capabilities`. The map contains 21 entries, each mapping a Linux capability name to an instance of `CapabilityInfo`, which includes severity and description fields.
 
 **Why it was Likely Changed:**
-This change likely aims to provide a structured way to handle and analyze Linux process capabilities within the `docksec` project. The introduction of these functions helps in identifying dangerous or critical capabilities, which is crucial for security assessments.
+This change likely aims to provide a comprehensive list of Linux capabilities with their associated security implications. This is crucial for docksec's security analysis tools, enabling detailed assessments of potential vulnerabilities related to these capabilities.
 
 **Impact on Behavior:**
-The new package allows for more granular control over capability management. Functions like `HasDangerousCapabilities`, `GetCriticalCapabilities`, and `GetCapabilitiesBySeverity` enable detailed analysis based on predefined rules. This can significantly enhance the project's ability to detect potential security issues related to process capabilities.
+The introduction of this file enhances the security analysis by providing structured information about each capability. It allows the system to categorize findings based on severity and offer clear descriptions of the risks associated with each capability.
 
 **Risks or Concerns:**
-While this change introduces useful functionality, there are a few risks:
-- **Error Handling:** The `ParseCapabilityMask` function does not handle errors gracefully; it returns an error but doesn't provide context.
-- **Dependence on External Rules:** Functions like `IsDangerousCapability`, `IsCriticalCapability`, and `GetCapabilitySeverity` rely on external rules, which must be correctly implemented to avoid false positives or negatives.
+While the addition of detailed capability information is beneficial, there are a few potential concerns:
+- **Maintenance:** The map needs regular updates as new capabilities may be introduced in future Linux versions.
+- **Error Handling:** Ensure that the code handles cases where a capability name might not exist in the `Capabilities` map.
+- **Security Implications:** The descriptions should be accurate and up-to-date to avoid misinterpretation of risks.
 
-Overall, this change is a significant step towards robust capability management in the project.
+Overall, this change significantly improves the security analysis capabilities by providing clear, structured information on Linux capabilities.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 15:55*
+*Generated by CodeWorm on 2026-02-23 16:25*
