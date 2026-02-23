@@ -1,0 +1,148 @@
+# detector_test
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/secrets-scanner/internal/engine/detector_test.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 294169a2
+Message: feat: Complete Go secrets scanner - Portia
+Author: CarterPerez-dev
+File: PROJECTS/intermediate/secrets-scanner/internal/engine/detector_test.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,259 @@
++// ©AngelaMos | 2026
++// detector_test.go
++
++package engine
++
++import (
++	"regexp"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++
++	"github.com/CarterPerez-dev/portia/internal/rules"
++	"github.com/CarterPerez-dev/portia/pkg/types"
++)
++
++func testRegistry() *rules.Registry {
++	reg := rules.NewRegistry()
++	reg.Register(&types.Rule{
++		ID:          "test-aws-key",
++		Description: "AWS Access Key ID",
++		Severity:    types.SeverityCritical,
++		Keywords:    []string{"AKIA"},
++		Pattern: regexp.MustCompile(
++			`\b((?:AKIA)[0-9A-Z]{16})\b`,
++		),
++		SecretGroup: 1,
++		SecretType:  types.SecretTypeAPIKey,
++	})
++	reg.Register(&types.Rule{
++		ID:          "test-generic-password",
++		Description: "Generic Password",
++		Severity:    types.SeverityHigh,
++		Keywords:    []string{"password"},
++		Pattern: regexp.MustCompile(
++			`(?i)password\s*[:=]\s*['"]([^'"]{8,})['"]`,
++		),
++		SecretGroup: 1,
++		Entropy:     func() *float64 { f := 3.0; return &f }(),
++		SecretType:  types.SecretTypePassword,
++	})
++	reg.Register(&types.Rule{
++		ID:          "test-stripe-key",
++		Description: "Stripe Live Key",
++		Severity:    types.SeverityCritical,
++		Keywords:    []string{"sk_live_"},
++		Pattern: regexp.MustCompile(
++			`\b(sk_live_[a-zA-Z0-9]{24,})\b`,
++		),
++		SecretGroup: 1,
++		SecretType:  types.SecretTypeAPIKey,
++	})
++	return reg
++}
++
++func TestDetectAWSKey(t *testing.T) {
++	t.Parallel()
++	d := NewDetector(testRegistry())
++
++	chunk := types.Chunk{ //nolint:gosec
++		Content:   `aws_key = "AKIAIOSFODNN7EXAMPLE"`,
++		FilePath:  "config.py",
++		LineStart: 1,
++	}
++
++	findings := d.Detect(chunk)
++	require.Len(t, findings, 1)
++	assert.Equal(t, "test-aws-key", findings[0].RuleID)
++	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", findings[0].Secret) //nolint:gosec
++	assert.Equal(t, "config.py", findings[0].FilePath)
++	assert.Equal(t, 1, findings[0].LineNumber)
++	assert.Equal(t, types.SeverityCritical, findings[0].Severity)
++}
++
++func TestDetectStripeKey(t *testing.T) {
++	t.Parallel()
++	d := NewDetector(testRegistry())
++
++	chunk := types.Chunk{ //nolint:gosec
++		Content:   `STRIPE_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc`,
++		FilePath:  "env.sh",
++		LineStart: 10,
++	}
++
++	findings := d.Detect(chunk)
++	require.Len(t, findings, 1)
++	assert.Equal(t, "test-stripe-key", findings[0].RuleID)
++	assert.Equal(t,
++		"sk_live_4eC39HqLyjWDarjtT1zdp7dc",
++		findings[0].Secret,
++	)
++}
++
++func TestDetectPasswordWithEntropy(t *testing.T) {
++	t.Parallel()
++	d := NewDetector(testRegistry())
++
++	chunk := types.Chunk{
++		Content:   `password = "xK9mP2vL5nQ8jR3t"`,
++		FilePath:  "config.ini",
++		LineStart: 5,
++	}
++
++	findings := d.Detect(chunk)
++	require.Len(t, findings, 1)
++	assert.Equal(t, "test-generic-password", findings[0].RuleID)
++	assert.Grea
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed**: A new test file `detector_test.go` was added to the `internal/engine` package, containing multiple test functions for a secrets scanner detector. The tests cover various scenarios such as detecting specific patterns (AWS keys, Stripe keys, and generic passwords), handling entropy checks, filtering out placeholder text, and ensuring correct line number detection.
+
+**Why it Was Likely Changed**: This change was likely made to ensure comprehensive testing of the `detector` functionality in the secrets scanner project. The addition of these tests helps verify that the detector correctly identifies secret patterns based on predefined rules, handles different types of input content, and filters out false positives or irrelevant text.
+
+**Impact on Behavior**: These tests will now help maintain the reliability and accuracy of the secrets scanner by ensuring it can accurately detect critical secrets like AWS keys and Stripe API keys while filtering out placeholder texts. The entropy check ensures that only sufficiently complex passwords are flagged as potential secrets.
+
+**Risks or Concerns**: While these tests cover a wide range of scenarios, there is still a risk that edge cases might not be fully covered. Additionally, the use of `nolint:gosec` in some test chunks may indicate potential security concerns if such patterns are left unfiltered in production code. It's important to ensure that all test cases are thoroughly reviewed and that any sensitive data used in tests is appropriately sanitized or masked.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 20:47*
