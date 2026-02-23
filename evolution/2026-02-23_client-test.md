@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** angela
-**File:** internal/osv/client_test.go
+**File:** internal/pypi/client_test.go
 **Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,181 +15,76 @@
 Commit: ea4cc501
 Message: Create canonical module source location - release v1.0.0
 Author: CarterPerez-dev
-File: internal/osv/client_test.go
+File: internal/pypi/client_test.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,42 @@
 +// ©AngelaMos | 2026
 +// client_test.go
 +
-+package osv
++package pypi
 +
 +import (
 +	"testing"
 +)
 +
-+func TestExtractSeverityCVSSV3(t *testing.T) {
-+	t.Parallel()
-+
-+	v := &osvVuln{
-+		Severity: []severity{
-+			{Type: "CVSS_V3", Score: "9.8"},
-+		},
-+	}
-+	got := extractSeverity(v)
-+	if got != "CRITICAL" { //nolint:goconst
-+		t.Errorf("extractSeverity = %q, want CRITICAL", got)
-+	}
-+}
-+
-+func TestExtractSeverityCVSSV4(t *testing.T) {
-+	t.Parallel()
-+
-+	v := &osvVuln{
-+		Severity: []severity{
-+			{Type: "CVSS_V4", Score: "7.5"},
-+		},
-+	}
-+	got := extractSeverity(v)
-+	if got != "HIGH" {
-+		t.Errorf("extractSeverity = %q, want HIGH", got)
-+	}
-+}
-+
-+func TestExtractSeverityCVSSVector(t *testing.T) {
-+	t.Parallel()
-+
-+	v := &osvVuln{
-+		Severity: []severity{
-+			{
-+				Type:  "CVSS_V3",
-+				Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/9.8",
-+			},
-+		},
-+	}
-+	got := extractSeverity(v)
-+	if got != "CRITICAL" {
-+		t.Errorf("extractSeverity = %q, want CRITICAL", got)
-+	}
-+}
-+
-+func TestExtractSeverityDatabaseSpecific(t *testing.T) {
-+	t.Parallel()
-+
-+	v := &osvVuln{
-+		DatabaseSpecific: map[string]any{
-+			"severity": "MODERATE",
-+		},
-+	}
-+	got := extractSeverity(v)
-+	if got != "MODERATE" {
-+		t.Errorf("extractSeverity = %q, want MODERATE", got)
-+	}
-+}
-+
-+func TestExtractSeverityUnknown(t *testing.T) {
-+	t.Parallel()
-+
-+	v := &osvVuln{}
-+	got := extractSeverity(v)
-+	if got != "UNKNOWN" {
-+		t.Errorf("extractSeverity = %q, want UNKNOWN", got)
-+	}
-+}
-+
-+func TestClassifyScore(t *testing.T) {
++func TestNormalizeName(t *testing.T) {
 +	t.Parallel()
 +
 +	tests := []struct {
-+		score float64
++		input string
 +		want  string
 +	}{
-+		{9.8, "CRITICAL"},
-+		{9.0, "CRITICAL"},
-+		{8.5, "HIGH"},
-+		{7.0, "HIGH"},
-+		{6.9, "MODERATE"},
-+		{4.0, "MODERATE"},
-+		{3.9, "LOW"},
-+		{0.1, "LOW"},
-+		{0.0, "NONE"},
++		{"requests", "requests"},
++		{"Requests", "requests"},
++		{"REQUESTS", "requests"},
++		{"some-package", "some-package"},
++		{"some_package", "some-package"},
++		{"some.package", "some-package"},
++		{"Some_Package", "some-package"},
++		{"my---package", "my-package"},
++		{"my__.package", "my-package"},
++		{"Flask", "flask"},
 +	}
 +
 +	for _, tt := range tests {
-+		got := classifyScore(tt.score)
-+		if got != tt.want {
-+			t.Errorf(
-+				"classifyScore(%v) = %q, want %q",
-+				tt.score, got, tt.want,
-+			)
-+		}
++		t.Run(tt.input, func(t *testing.T) {
++			t.Parallel()
++
++			got := NormalizeName(tt.input)
++			if got != tt.want {
++				t.Errorf(
++					"NormalizeName(%q) = %q, want %q",
++					tt.input, got, tt.want,
++				)
++			}
++		})
 +	}
 +}
-+
-+func TestIsDuplicate(t *testing.T) {
-+	t.Parallel()
-+
-+	seen := map[string]bool{
-+		"CVE-2023-1234": true,
-+	}
-+
-+	v1 := &osvVuln{
-+		ID:      "GHSA-xxxx-yyyy",
-+		Aliases: []string{"CVE-2023-1234"},
-+	}
-+	if !isDuplicate(v1, seen) {
-+		t.Error("should detect duplicate via alias")
-+	}
-+
-+	v2 := &osvVuln{
-+		ID:      "CVE-2023-1234",
-+		Aliases: []string{},
-+	}
-+	if !isDuplicate(v2, seen) {
-+		t.Error("should detect duplicate via direct ID")
-+	}
-+
-+	v3 := &osvVuln{
-+		ID:      "PYSEC-2024-001",
-+		Aliases: []string{"CVE-2024-9999"},
-+	}
-+	if isDuplicate(v3, seen) {
-+		t.Error("should not flag non-duplicate as duplicate")
-+	}
-+}
-+
-+func TestExtractFixed(t *testing.T) {
-+	t.Parallel()
-+
-+	aff := []affected{
-+		{
-+			Package: pkg{Name: "django", Ecosystem: "PyPI"},
-+			Ranges: []rng{
-+				{
-+					Type: "ECOSYSTEM",
-+					Events: []event{
-+						{Introdu
+
 ```
 
 ---
 
 ## Code Evolution
 
-### Change Analysis for Commit ea4cc501
+### Change Analysis for `client_test.go`
 
 **What was Changed:**
-The commit introduces a new file `client_test.go` in the `internal/osv` package, containing 26 test functions to validate various aspects of vulnerability data extraction and classification.
+A new test file, `client_test.go`, was added to the `pypi` package. This file contains 12 test cases within a single test function, `TestNormalizeName`. The tests aim to validate the behavior of the `NormalizeName` function, which normalizes package names according to certain rules.
 
 **Why it Was Likely Changed:**
-This change likely aims to ensure robust handling of different severity classifications, fixed versions, links, and duplicate detection for security vulnerabilities. The tests cover a wide range of scenarios including CVSS scores, database-specific severities, and edge cases like unknown severities and empty inputs.
+The addition of this test suite likely indicates an effort to ensure that the `NormalizeName` function behaves as expected across a variety of input scenarios. This is crucial for maintaining consistent and predictable behavior in package name handling within the PyPI client module.
 
 **Impact on Behavior:**
-These new test functions will improve the reliability and accuracy of vulnerability data processing by ensuring that critical aspects such as severity classification, fixed version extraction, link selection, and duplicate detection are correctly implemented. This is crucial for maintaining a secure system.
+These tests will help catch any issues with how package names are normalized, ensuring that all package names conform to the desired format. This can prevent potential mismatches or errors when interacting with the PyPI repository.
 
 **Risks or Concerns:**
-While these tests cover various scenarios, there could be risks if some edge cases were not considered. Additionally, the test functions assume certain behaviors (e.g., `classifyScore` function) which should be thoroughly tested to ensure consistency across different implementations. Overall, this addition enhances code quality and maintainability by providing comprehensive test coverage.
+While this test suite is a positive step towards robust testing, there is a risk that new edge cases might be introduced if the normalization logic changes in future updates. It's important to continue expanding and maintaining these tests as the code evolves. Additionally, ensuring that `NormalizeName` handles all possible input types and edge cases (like invalid characters) will further solidify its reliability.
+
+Overall, this change enhances the quality of the PyPI client module by adding comprehensive test coverage for a critical function.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 13:51*
+*Generated by CodeWorm on 2026-02-23 15:01*
