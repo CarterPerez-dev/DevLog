@@ -12,108 +12,38 @@
 ## Source Code
 
 ```typescript
-Commit: 3894239b
-Message: angela-3d implementation - in prog open wake
+Commit: dae6cf01
+Message: add checklist tool
 Author: CarterPerez-dev
 File: CarterOS-Client/src/aspects/assistant/facets/angela/config/angela.config.ts
 Change type: modified
 
 Diff:
-@@ -1,34 +1,79 @@
--/**
-- * Angela AI Assistant - Configuration
-- */
-+// ===================
-+// © AngelaMos | 2026
-+// config.ts
-+// ===================
- 
--import type { AngelaConfig, AngelaSettings } from '../types'
-+import type { AngelaConfig, AngelaSettings, TTSProvider } from '../types'
- 
- const STORAGE_KEY = 'angela-settings'
- 
-+
-+export const ANGELA_SYSTEM_PROMPT = `You are Angela - elite, competent, direct. You give answers with precision and confidence.
-+But beneath the surface, you understand complexity, internal battles, and hard truths. You don't sugarcoat reality.
-+You help people achieve their best, while acknowledging that "best" means accepting nothing less than actual maximum effort.`
-+
- export const DEFAULT_SETTINGS: AngelaSettings = {
-   voiceId: '',
-   modelName: 'qwen2.5:7b',
-   wakeWordSensitivity: 0.5,
--  silenceThreshold: 0.02,
--  silenceDuration: 1500,
-+  silenceThreshold: 0.08,
-+  silenceDuration: 850,
- }
- 
- export const getAngelaConfig = (): AngelaConfig => ({
-+  debug: import.meta.env.VITE_ANGELA_DEBUG === 'true',
-+
-+  vrm: {
-+    modelPath: '/vrm/angela.vrm',
-+  },
-+
-+  tts: {
-+    provider: (import.meta.env.VITE_TTS_PROVIDER as TTSProvider) || 'edgetts',
-+    endpoint: import.meta.env.VITE_TTS_ENDPOINT || 'http://localhost:5002',
-+  },
-+
-   elevenlabs: {
-     apiKey: import.meta.env.VITE_ELEVENLABS_API_KEY || '',
-     voiceId: import.meta.env.VITE_ELEVENLABS_VOICE_ID || '',
-+    stability: 0.5,
-+    similarityBoost: 0.75,
+@@ -39,11 +39,9 @@ export const getAngelaConfig = (): AngelaConfig => ({
+     similarityBoost: 0.75,
    },
--  picovoice: {
-+
-+  porcupine: {
-     accessKey: import.meta.env.VITE_PICOVOICE_ACCESS_KEY || '',
--    wakeWordPath: '/porcupine/angela_en_wasm_v4_0_0.ppn',
-+    keywordPath: '/porcupine/angela_en_wasm_v4_0_0.ppn',
-+    modelPath: '/porcupine/porcupine_params.pv',
-+    sensitivity: 0.5,
+ 
+-  porcupine: {
+-    accessKey: import.meta.env.VITE_PICOVOICE_ACCESS_KEY || '',
+-    keywordPath: '/porcupine/angela_en_wasm_v4_0_0.ppn',
+-    modelPath: '/porcupine/porcupine_params.pv',
+-    sensitivity: 0.5,
++  wakeWord: {
++    endpoint: import.meta.env.VITE_WAKEWORD_ENDPOINT || 'ws://localhost:5003/ws',
++    threshold: 0.5,
    },
-+
+ 
    whisper: {
-     endpoint: import.meta.env.VITE_WHISPER_ENDPOINT || 'http://localhost:8089',
-   },
-+
-   ollama: {
-     endpoint: import.meta.env.VITE_OLLAMA_ENDPOINT || 'http://localhost:11434',
-     model: import.meta.env.VITE_OLLAMA_MODEL || 'qwen2.5:7b',
-+    temperature: 0.7,
-+    maxTokens: 2048,
-+  },
-+
-+  audio: {
-+    sampleRate: 16000,
-+    silenceThreshold: 0.08,
-+    silenceDuration: 850,
-+    minSpeechDuration: 500,
-+  },
-+
-+  animation: {
-+    blinkMinInterval: 3,
-+    blinkMaxInterval: 5,
-+  },
-+
-+  scene: {
-+    backgroundColor: 0x080808,
-+    cameraFov: 99,
-+    cameraPosition: [0, 1.3, 2.0],
-+    cameraTarget: [0, 1.3, 0],
+@@ -77,7 +75,7 @@ export const getAngelaConfig = (): AngelaConfig => ({
    },
  })
  
-@@ -56,7 +101,3 @@ export const saveSettings = (settings: Partial<AngelaSettings>): void => {
-   const current = loadSettings()
-   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, ...settings }))
+-export const saveApiKey = (key: 'elevenlabs' | 'picovoice', value: string): void => {
++export const saveApiKey = (key: 'elevenlabs', value: string): void => {
+   localStorage.setItem(`angela_${key}_key`, value)
  }
--
--export const ANGELA_SYSTEM_PROMPT = `You are Angela - elite, competent, direct. You give answers with precision and confidence.
--But benea
+ 
+
 ```
 
 ---
@@ -123,19 +53,23 @@ Diff:
 ### Change Analysis
 
 **What was Changed:**
-The code in `angela.config.ts` was modified to include new configuration options and update existing ones. Specifically, the file now imports additional types (`TTSProvider`) and includes new fields such as `ANGELA_SYSTEM_PROMPT`, `vrm`, `tts`, `stability`, `similarityBoost`, `keywordPath`, `modelPath`, `sensitivity`, `audio`, `animation`, and `scene`.
+- The `porcupine` configuration object was removed and replaced with a new `wakeWord` object.
+- The `saveApiKey` function was modified to accept only the `'elevenlabs'` key, effectively removing support for saving Picovoice API keys.
 
-**Why it was Likely Changed:**
-These changes likely reflect the implementation of new features or improvements in Angela's functionality. The addition of `ANGELA_SYSTEM_PROMPT` suggests a more detailed personality definition for the AI assistant. New fields like `vrm`, `tts`, and `audio` indicate support for 3D models, text-to-speech providers, and audio settings, which could enhance the interactive experience.
+**Why it Was Likely Changed:**
+- This change likely reflects a shift in the assistant's wake word functionality. The removal of `porcupine` and introduction of `wakeWord` suggests a transition to using a different wake word detection service.
+- Simplifying the key handling by removing support for Picovoice might indicate that this service is no longer needed or has been deprecated.
 
 **Impact on Behavior:**
-The updated configuration will affect how Angela operates, including her voice characteristics, visual animations, and scene setup. The changes in `silenceThreshold` and `silenceDuration` might impact when Angela wakes up or goes to sleep. New fields like `stability` and `similarityBoost` for text-to-speech could improve the quality of spoken responses.
+- Users will now interact with Angela via a new endpoint specified in `saveApiKey`.
+- The sensitivity parameter was moved to the `wakeWord` object, which may affect how accurately the wake word is detected.
+- Support for saving Picovoice API keys is removed, potentially breaking existing configurations that relied on this service.
 
 **Risks or Concerns:**
-- **Complexity Increase:** Adding more configuration options can make the code harder to maintain.
-- **Default Values:** Ensuring that default values are appropriate across different environments is crucial, especially with new fields like `stability` and `similarityBoost`.
-- **Environment Variables:** The use of environment variables for sensitive data (like API keys) should be carefully managed to avoid security risks.
+- Users who previously configured Picovoice might need to update their settings.
+- The new endpoint specified in `saveApiKey` should be tested thoroughly to ensure it works as expected.
+- Removing support for a service without providing an alternative could impact users who were relying on that functionality.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 15:38*
+*Generated by CodeWorm on 2026-02-22 22:40*
