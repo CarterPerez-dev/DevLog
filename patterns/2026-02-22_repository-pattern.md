@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/domains/referral/services/payout_ops.py
+**File:** backend/api/domains/account/services/auth.py
 **Language:** python
-**Lines:** 1-311
+**Lines:** 1-336
 **Complexity:** 0.0
 
 ---
@@ -13,109 +13,113 @@
 
 ```python
 """
-Payout Operations Service
-/api/domains/referral/services/payout_ops.py
-
-Wrapper around stripe-referral package payout service
+Auth Service - Auth, password reset, and temp registration operations
+/api/domains/account/services/auth.py
 """
 
-import os
-import stripe
-from typing import Any
+import bcrypt
+import mongoengine
 from flask import current_app
-
-from stripe_referral.services import PayoutService
-from stripe_referral.config.enums import PayoutStatus
-from stripe_referral.repositories.payout_repo import PayoutRepository
-from stripe_referral.repositories.referral_repo import ReferralTrackingRepository
-
-from api.core.database.referral_db import (
-    get_referral_db,
-    referral_db_session,
+from datetime import (
+    UTC,
+    datetime,
+    timedelta,
 )
 
-from api.domains.account.models.User import User
+from settings import Security
+from api.core.services.logging import AuditLogger
+from api.domains.shop.services.catalog_ops import CatalogService
+
+from ..models.User import User
+from ..models.PasswordReset import PasswordReset
+from ..models.TempRegistration import TempRegistration
+
+from ..middleware.schemas import username_validator
 
 
-class PayoutOperations:
+class AuthService:
     """
-    Service for payout operations
-    Supports both manual payouts and Stripe Connect (when enabled)
+    Service class for authentication operations
     """
     @staticmethod
-    def get_pending_payouts(user_id: str | None = None) -> list[dict[str,
-                                                                     Any]]:
+    def find_user_by_id(user_id: str) -> User | None:
         """
-        Get pending payouts (admin or specific user)
-
-        Args:
-            user_id: Filter by user, or None for all pending
-
-        Returns:
-            List of payout dicts
+        Find user by ID
         """
-        db = get_referral_db()
+        return User.objects(id = user_id).first()
+
+    @staticmethod
+    def find_user_by_email(email: str) -> User | None:
+        """
+        Find user by email (case-insensitive)
+        """
+        if not email:
+            return None
+        return User.objects(email = email.lower()).first()
+
+    @staticmethod
+    def find_user_by_username(username: str) -> User | None:
+        """
+        Find user by username (case-sensitive)
+        """
+        if not username:
+            return None
+        return User.objects(username = username).first()
+
+    @staticmethod
+    def find_user_by_identifier(identifier: str) -> User | None:
+        """
+        Find user by email or username for login
+        """
+        if not identifier:
+            return None
+        user: User | None = User.objects(username = identifier).first()
+        if not user:
+            user = User.objects(email = identifier.lower()).first()
+        return user
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """
+        Hash a password using bcrypt
+        """
+        password_bytes: bytes = password.encode("utf-8")
+        salt: bytes = bcrypt.gensalt()
+        hashed_bytes: bytes = bcrypt.hashpw(password_bytes, salt)
+        return hashed_bytes.decode("utf-8")
+
+    @staticmethod
+    def create_user(
+        username: str,
+        email: str,
+        password: str,
+        **extra_fields
+    ) -> User | None:
+        """
+        Create a new user with validation
+        """
         try:
-            payout_repo = PayoutRepository(db)
+            if not username or not email or not password:
+                return None
 
-            if user_id:
-                payouts = payout_repo.get_by_user(str(user_id))
-                payouts = [
-                    p for p in payouts
-                    if p.status == PayoutStatus.PENDING.value
-                ]
-            else:
-                payouts = list(payout_repo.get_all())
-                payouts = [
-                    p for p in payouts
-                    if p.status == PayoutStatus.PENDING.value
-                ]
+            validated_username = username_validator(username)
+            hashed_password: str = AuthService.hash_password(password)
+            normalized_email: str = email.lower()
 
-            return [
-                {
-                    "id":
-                    p.id,
-                    "user_id":
-                    p.user_id,
-                    "amount":
-                    p.amount,
-                    "currency":
-                    p.currency,
-                    "status":
-                    p.status,
-                    "adapter_type":
-                    p.adapter_type,
-                    "tracking_id":
-                    p.tracking_id,
-                    "created_at":
-                    p.created_at.isoformat() if p.created_at else None
-                } for p in payouts
-            ]
+            new_user: User = User(
+                username = validated_username,
+                email = normalized_email,
+                password = hashed_password,
+                **extra_fields
+            )
+            new_user.save()
 
-        finally:
-            db.close()
-
-    @staticmethod
-    def create_payouts_for_pending_trackings() -> dict[str, Any]:
-        """
-        Create payout records for all pending tracking entries
-        Works with manual adapter (no Stripe Connect required)
-
-        Returns:
-            {
-                "created": 5,
-                "skipped": 2,
-                "errors": []
-            }
-        """
-        with referral_db_session() as db:
-
-            tracking_repo = ReferralTrackingRepository(db)
-            payout_repo = PayoutRepository(db)
-
-            pending_trackings = tracking_repo.get_pending_payouts()
-
-            results = {"created": 0, "skipped": 0, "errors": [
+            AuditLogger.log_action(
+                "user_created",
+                user_id = str(new_user.id),
+                data = {
+                    "username": username,
+                   
 ```
 
 ---
@@ -124,28 +128,23 @@ class PayoutOperations:
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern
+**Pattern Used: Repository Pattern**
 
-The `PayoutOperations` class in the provided code implements the **Repository Pattern**, which abstracts data access logic and encapsulates database operations within a dedicated repository.
+The `AuthService` class in the provided code implements a form of the **Repository Pattern**, which encapsulates data access logic and abstracts it away from the business logic. This is evident through methods like `find_user_by_id`, `find_user_by_email`, and `create_user`.
 
-#### Implementation Details:
-- The `PayoutOperations` class uses two repositories: `PayoutRepository` and `ReferralTrackingRepository`. These repositories handle CRUD operations for payout records and referral tracking entries, respectively.
-- Methods like `get_by_user`, `get_all`, `create`, etc., are defined in the repository classes to interact with the database.
+- **Implementation**: The `AuthService` contains static methods for interacting with the database, such as finding users by ID or email, hashing passwords, and creating new users.
+- **Benefits**:
+  - **Decoupling**: It decouples business logic from data access, making it easier to switch between different storage mechanisms (e.g., MongoDB).
+  - **Testability**: By abstracting the database interaction, unit tests can focus on business logic rather than database operations.
+  - **Consistency**: Ensures consistent handling of user data across various methods.
 
-#### Benefits:
-1. **Encapsulation**: The repository pattern encapsulates data access logic, making it easier to switch between different storage mechanisms (e.g., from a relational database to an in-memory store).
-2. **Testability**: Repository methods can be easily mocked or stubbed for unit testing.
-3. **Decoupling**: It decouples the business logic from the persistence layer, allowing changes in the data access mechanism without affecting the service code.
+**Deviations from Standard Pattern**:
+- The pattern is not strictly followed in a separate repository class. Instead, it's embedded within `AuthService`. This could make the service harder to test and maintain if it grows larger.
+- Some methods like `hash_password` and `check_username_exists` are utility functions rather than data access operations.
 
-#### Deviations:
-- The `PayoutOperations` class directly interacts with the database session (`referral_db_session`) and closes it using a context manager (`finally` block). This is an unconventional use of the repository pattern, as repositories typically manage their own sessions.
-- The `create_payouts_for_pending_trackings` method uses `User.objects.first()` to fetch user data, which might not be part of the standard repository pattern.
-
-#### Appropriateness:
-The repository pattern is appropriate here because it abstracts database operations and makes the code more maintainable. However, managing the database session directly in the service class deviates from best practices. A more typical approach would involve the repository managing its own session or using a dependency injection framework to manage sessions.
-
-This pattern is generally suitable for applications where data access logic needs to be separated from business logic and can benefit significantly from abstraction and testability.
+**Appropriateness**:
+This pattern is appropriate for this context because it encapsulates database interactions, making the code more modular and easier to manage. However, for a more complex application, it might be beneficial to separate these concerns into dedicated repository classes or services.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 23:33*
+*Generated by CodeWorm on 2026-02-22 23:55*
