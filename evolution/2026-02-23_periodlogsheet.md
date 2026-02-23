@@ -1,0 +1,147 @@
+# PeriodLogSheet
+
+**Type:** Code Evolution
+**Repository:** ios-test
+**File:** red-recon/src/features/calendar/components/PeriodLogSheet.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: b886d0ad
+Message: feat(calendar): add period logging components
+
+Add feature module for calendar period logging:
+- FlowIntensitySelector: Light/Medium/Heavy flow picker
+- usePeriodForDate: Hook to find period for given date
+- PeriodLogSheet: Modal for creating/editing/deleting periods
+Author: CarterPerez-dev
+File: red-recon/src/features/calendar/components/PeriodLogSheet.tsx
+Change type: new file
+
+Diff:
+@@ -0,0 +1,395 @@
++/**
++ * @AngelaMos | 2026
++ * PeriodLogSheet.tsx
++ */
++
++import {
++  useCreatePeriodLog,
++  useDeletePeriodLog,
++  useUpdatePeriodLog,
++} from '@/api/hooks'
++import {
++  FlowIntensity,
++  type CalendarDay,
++  type PeriodLogCreate,
++  type PeriodLogUpdate,
++} from '@/api/types'
++import { haptics } from '@/shared/utils'
++import { colors } from '@/theme/tokens'
++import { Check, Trash2, X } from 'lucide-react-native'
++import type React from 'react'
++import { useCallback, useEffect, useState } from 'react'
++import { Modal, Pressable } from 'react-native'
++import { Stack, Text, TextArea, XStack, YStack } from 'tamagui'
++import { FlowIntensitySelector } from './FlowIntensitySelector'
++import { usePeriodForDate } from '../hooks/usePeriodForDate'
++
++export interface PeriodLogSheetProps {
++  visible: boolean
++  selectedDate: string
++  calendarDay: CalendarDay | null
++  onClose: () => void
++}
++
++function formatDisplayDate(dateStr: string): string {
++  const date = new Date(dateStr)
++  const options: Intl.DateTimeFormatOptions = {
++    weekday: 'long',
++    month: 'short',
++    day: 'numeric',
++  }
++  return date.toLocaleDateString('en-US', options)
++}
++
++export function PeriodLogSheet({
++  visible,
++  selectedDate,
++  calendarDay,
++  onClose,
++}: PeriodLogSheetProps): React.ReactElement {
++  const { period, isInPeriod, isStartDate } = usePeriodForDate(selectedDate)
++  const createPeriod = useCreatePeriodLog()
++  const updatePeriod = useUpdatePeriodLog()
++  const deletePeriod = useDeletePeriodLog()
++
++  const [flowIntensity, setFlowIntensity] = useState<FlowIntensity | null>(null)
++  const [notes, setNotes] = useState('')
++  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
++  const [showSuccess, setShowSuccess] = useState(false)
++
++  const isEditing = isInPeriod && period !== null
++  const isPredicted = calendarDay?.is_predicted_period ?? false
++
++  useEffect(() => {
++    if (visible && period) {
++      setFlowIntensity(period.flow_intensity)
++      setNotes(period.notes ?? '')
++    } else if (visible) {
++      setFlowIntensity(null)
++      setNotes('')
++    }
++    setShowDeleteConfirm(false)
++    setShowSuccess(false)
++  }, [visible, period])
++
++  useEffect(() => {
++    if (showSuccess) {
++      const timer = setTimeout(() => {
++        setShowSuccess(false)
++        onClose()
++      }, 1000)
++      return () => clearTimeout(timer)
++    }
++  }, [showSuccess, onClose])
++
++  const handleStartPeriod = useCallback(() => {
++    haptics.medium()
++
++    const data: PeriodLogCreate = {
++      start_date: selectedDate,
++   
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit introduces a new feature module for calendar period logging in the `red-recon` repository. Specifically, it adds three components:
+1. `FlowIntensitySelector`: A component to select flow intensity levels (Light, Medium, Heavy).
+2. `usePeriodForDate`: A custom hook to determine the period for a given date.
+3. `PeriodLogSheet`: A modal component for creating, editing, and deleting periods.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance user interaction with menstrual cycle tracking by providing more granular control over logging flow intensity and notes. The introduction of these components supports better data collection and management within the application.
+
+**Impact on Behavior:**
+The addition of `PeriodLogSheet` allows users to log their periods directly from a modal, making it easier to record detailed information about their menstrual cycles. Users can select flow intensities using `FlowIntensitySelector`, add notes, and manage period logs through start, update, or delete actions.
+
+**Risks or Concerns:**
+- **Complexity**: Introducing multiple new components may increase the complexity of the codebase.
+- **State Management**: Managing state across these components (e.g., flow intensity, notes) could lead to potential bugs if not handled carefully.
+- **Performance**: The use of hooks and API calls within `PeriodLogSheet` might impact performance, especially if the API responses are slow.
+
+Overall, this change significantly enhances the feature set for menstrual cycle tracking while introducing some risks that need careful management.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 11:45*
