@@ -1,0 +1,169 @@
+# integration_test
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/secrets-scanner/internal/engine/integration_test.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 294169a2
+Message: feat: Complete Go secrets scanner - Portia
+Author: CarterPerez-dev
+File: PROJECTS/intermediate/secrets-scanner/internal/engine/integration_test.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,374 @@
++// ©AngelaMos | 2026
++// integration_test.go
++
++package engine_test
++
++import (
++	"context"
++	"os"
++	"path/filepath"
++	"runtime"
++	"sort"
++	"testing"
++
++	"github.com/CarterPerez-dev/portia/internal/engine"
++	"github.com/CarterPerez-dev/portia/internal/rules"
++	"github.com/CarterPerez-dev/portia/internal/source"
++	"github.com/CarterPerez-dev/portia/pkg/types"
++)
++
++func testdataDir(t *testing.T) string {
++	t.Helper()
++	_, filename, _, ok := runtime.Caller(0)
++	if !ok {
++		t.Fatal("unable to determine test file location")
++	}
++	return filepath.Join(
++		filepath.Dir(filename), "..", "..", "testdata", "fixtures",
++	)
++}
++
++func setupPipeline(t *testing.T) (*engine.Pipeline, *rules.Registry) {
++	t.Helper()
++	reg := rules.NewRegistry()
++	rules.RegisterBuiltins(reg)
++	return engine.NewPipeline(reg), reg
++}
++
++func findByRuleID(
++	findings []types.Finding, ruleID string,
++) *types.Finding {
++	for i := range findings {
++		if findings[i].RuleID == ruleID {
++			return &findings[i]
++		}
++	}
++	return nil
++}
++
++func TestIntegrationFullScan(t *testing.T) {
++	dir := testdataDir(t)
++	if _, err := os.Stat(dir); os.IsNotExist(err) {
++		t.Skip("testdata/fixtures not found")
++	}
++
++	p, _ := setupPipeline(t)
++	src := source.NewDirectory(dir, 0, nil)
++
++	result, err := p.Run(context.Background(), src)
++	if err != nil {
++		t.Fatalf("pipeline run failed: %v", err)
++	}
++
++	if len(result.Findings) == 0 {
++		t.Fatal("expected findings, got none")
++	}
++
++	ruleIDs := make(map[string]bool)
++	for _, f := range result.Findings {
++		ruleIDs[f.RuleID] = true
++	}
++
++	expectedRules := []string{
++		"aws-access-key-id",
++		"stripe-live-secret",
++		"ssh-private-key-rsa",
++		"generic-password",
++	}
++
++	for _, id := range expectedRules {
++		if !ruleIDs[id] {
++			t.Errorf("expected finding for rule %q, not found", id)
++		}
++	}
++}
++
++func TestIntegrationAWSKeyDetection(t *testing.T) {
++	dir := testdataDir(t)
++	p, _ := setupPipeline(t)
++	src := source.NewDirectory(dir, 0, nil)
++
++	result, err := p.Run(context.Background(), src)
++	if err != nil {
++		t.Fatalf("pipeline run failed: %v", err)
++	}
++
++	f := findByRuleID(result.Findings, "aws-access-key-id")
++	if f == nil {
++		t.Fatal("aws-access-key-id finding not found")
++	}
++
++	if f.Severity != types.SeverityCritical {
++		t.Errorf("expected CRITICAL, got %s", f.Severity)
++	}
++
++	if f.FilePath != "config.py" {
++		t.Errorf("expected config.py, got %s", f.FilePath)
++	}
++}
++
++func TestIntegrationStripeKeyDetection(t *testing.T) {
++	dir := testdataDir(t)
++	p, _ := setupPipeline(t)
++	src := source.NewDirectory(dir, 0, nil)
++
++	result, err := p.Run(context.Background(), src)
++	if err != nil {
++		t.Fatalf("pipeline run failed: %v", err)
++	}
++
++	f := findByRuleID(result.Findings, "stripe-live-secret")
++	if f == nil {
++		t.Fatal("stripe-
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit `294169a2` introduces a new file `integration_test.go` in the `internal/engine` package, which contains several test functions to validate the functionality of the secrets scanner. The tests cover various scenarios including full scans and specific rule detections for different types of secrets (AWS access keys, Stripe live secrets, SSH private keys, generic passwords, and GitHub personal access tokens).
+
+**Why it was Likely Changed:**
+This change likely aims to ensure comprehensive testing coverage for the secrets scanner module. By adding these integration tests, the developers can verify that the scanner correctly identifies and categorizes different types of secret data according to predefined rules.
+
+**Impact on Behavior:**
+These tests will now be run automatically as part of the CI/CD pipeline, ensuring that any future changes do not break existing functionality. The tests check for specific findings in expected files with correct severities and entropies, which helps maintain the accuracy and reliability of the scanner.
+
+**Risks or Concerns:**
+While these tests are beneficial, they rely on test data being present in `testdata/fixtures`. If this directory is missing or contains incorrect data, the tests may fail. Additionally, the tests assume that certain rules (like "github-pat-classic" and "github-pat-fine") will always be detected, which might not hold if new rules are added without corresponding test cases.
+
+Overall, these changes significantly enhance the robustness of the secrets scanner by providing detailed validation through integration testing.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 20:56*
