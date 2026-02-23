@@ -1,0 +1,158 @@
+# repository
+
+**Type:** Code Evolution
+**Repository:** social-media-notes
+**File:** backend/app/auth/repository.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 8c757802
+Message: easy peasy
+Author: CarterPerez-dev
+File: backend/app/auth/repository.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,178 @@
++"""
++ⒸAngelaMos | 2025
++repository.py
++"""
++
++from uuid import UUID
++from datetime import UTC, datetime
++
++from sqlalchemy import select, update
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from .RefreshToken import RefreshToken
++from core.base_repository import BaseRepository
++
++
++class RefreshTokenRepository(BaseRepository[RefreshToken]):
++    """
++    Repository for RefreshToken model database operations
++    """
++    model = RefreshToken
++
++    @classmethod
++    async def get_by_hash(
++        cls,
++        session: AsyncSession,
++        token_hash: str,
++    ) -> RefreshToken | None:
++        """
++        Get refresh token by its hash
++        """
++        result = await session.execute(
++            select(RefreshToken).where(
++                RefreshToken.token_hash == token_hash
++            )
++        )
++        return result.scalars().first()
++
++    @classmethod
++    async def get_valid_by_hash(
++        cls,
++        session: AsyncSession,
++        token_hash: str,
++    ) -> RefreshToken | None:
++        """
++        Get valid (not revoked, not expired) refresh token by hash
++        """
++        result = await session.execute(
++            select(RefreshToken).where(
++                RefreshToken.token_hash == token_hash,
++                RefreshToken.is_revoked == False,
++                RefreshToken.expires_at > datetime.now(UTC),
++            )
++        )
++        return result.scalars().first()
++
++    @classmethod
++    async def create_token(
++        cls,
++        session: AsyncSession,
++        user_id: UUID,
++        token_hash: str,
++        family_id: UUID,
++        expires_at: datetime,
++        device_id: str | None = None,
++        device_name: str | None = None,
++        ip_address: str | None = None,
++    ) -> RefreshToken:
++        """
++        Create a new refresh token
++        """
++        token = RefreshToken(
++            user_id = user_id,
++            token_hash = token_hash,
++            family_id = family_id,
++            expires_at = expires_at,
++            device_id = device_id,
++            device_name = device_name,
++            ip_address = ip_address,
++        )
++        session.add(token)
++        await session.flush()
++        await session.refresh(token)
++        return token
++
++    @classmethod
++    async def revoke_token(
++        cls,
++        session: AsyncSession,
++        token: RefreshToken,
++    ) -> RefreshToken:
++        """
++        Revoke a single token
++        """
++        token.revoke()
++        await session.flush()
++        await session.refresh(token)
++        return token
++
++    @classmethod
++    async def revoke_family(
++        cls,
++        session: AsyncSession,
++        family_id: UUID,
++    ) -> int:
++        """
++        Revoke all tokens in a family (for replay attack response)
++
++        Returns count of revoked tokens
++  
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit introduces a new file `repository.py` in the `backend/app/auth` directory, implementing a repository pattern for managing `RefreshToken` model operations. The file includes several class methods to handle CRUD (Create, Read, Update, Delete) operations on refresh tokens.
+
+**Why it was Likely Changed:**
+This change likely aims to centralize and standardize database interactions related to refresh tokens, making the codebase more modular and easier to maintain. By following a repository pattern, the author ensures that all database operations are encapsulated within this class, improving separation of concerns.
+
+**Impact on Behavior:**
+The new methods provide functionality for creating, retrieving, revoking, and cleaning up refresh tokens. This will enable better management of user sessions and prevent security vulnerabilities like replay attacks. The `get_user_active_sessions` method helps in identifying active user sessions, while the `cleanup_expired` method ensures maintenance by removing expired tokens.
+
+**Risks or Concerns:**
+- **Database Integrity:** Ensuring that all changes to the database are properly committed and rolled back is crucial.
+- **Concurrency Issues:** Operations like revoking tokens should handle potential race conditions where multiple requests might attempt to revoke the same token simultaneously.
+- **Performance:** Frequent queries, especially `get_user_active_sessions`, could impact performance if not optimized.
+
+Overall, this change enhances security and maintainability but requires careful testing and consideration of edge cases.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 17:11*
