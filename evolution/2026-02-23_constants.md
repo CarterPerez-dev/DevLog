@@ -1,9 +1,9 @@
 # constants
 
 **Type:** Code Evolution
-**Repository:** docksec
-**File:** internal/config/constants.go
-**Language:** go
+**Repository:** social-media-notes
+**File:** backend/app/core/constants.py
+**Language:** python
 **Lines:** 1-1
 **Complexity:** 0.0
 
@@ -11,42 +11,33 @@
 
 ## Source Code
 
-```go
-Commit: 5a7c48c4
-Message: Initial release
+```python
+Commit: 8c757802
+Message: easy peasy
 Author: CarterPerez-dev
-File: internal/config/constants.go
+File: backend/app/core/constants.py
 Change type: new file
 
 Diff:
-@@ -0,0 +1,27 @@
-+/*
-+AngelaMos | 2025
-+constants.go
-+*/
+@@ -0,0 +1,18 @@
++"""
++ⒸAngelaMos | 2025
++constants.py
++"""
 +
-+package config
++EMAIL_MAX_LENGTH = 320
++PASSWORD_MIN_LENGTH = 8
++PASSWORD_MAX_LENGTH = 128
++PASSWORD_HASH_MAX_LENGTH = 1024
++FULL_NAME_MAX_LENGTH = 255
 +
-+import "time"
++TOKEN_HASH_LENGTH = 64
++DEVICE_ID_MAX_LENGTH = 255
++DEVICE_NAME_MAX_LENGTH = 100
++IP_ADDRESS_MAX_LENGTH = 45
 +
-+// Scanner configuration constants for concurrency, rate limiting, and timeouts.
-+const (
-+	MaxWorkers         = 50
-+	DefaultWorkerCount = 20
-+	RateLimitPerSecond = 50
-+	RateLimitBurst     = 50
-+
-+	DefaultTimeout    = 30 * time.Second
-+	InspectTimeout    = 10 * time.Second
-+	ConnectionTimeout = 5 * time.Second
-+
-+	MaxTotalFindings = 10000
-+
-+	SARIFMaxResults = 25000
-+
-+	MinEntropyForSecret = 4.5
-+	MinSecretLength     = 16
-+)
++API_VERSION = "v1"
++API_PREFIX = f"/{API_VERSION}"
 
 ```
 
@@ -54,24 +45,29 @@ Diff:
 
 ## Code Evolution
 
-### Change Analysis for `internal/config/constants.go`
+### Change Analysis
 
 **What was Changed:**
-The file `internal/config/constants.go` was added, introducing 27 constants related to scanner configuration. These include values for concurrency (`MaxWorkers`, `DefaultWorkerCount`), rate limiting (`RateLimitPerSecond`, `RateLimitBurst`), timeouts (`DefaultTimeout`, `InspectTimeout`, `ConnectionTimeout`), and thresholds for findings and entropy.
+The commit `8c757802` added a new file `constants.py` in the `backend/app/core/` directory. This file introduces several constant definitions for various lengths and API versioning.
+
+- **Line 3:** Added a docstring with copyright information.
+- **Lines 4-19:** Defined constants such as `EMAIL_MAX_LENGTH`, `PASSWORD_MIN_LENGTH`, `PASSWORD_MAX_LENGTH`, etc., along with `TOKEN_HASH_LENGTH`, `DEVICE_ID_MAX_LENGTH`, `DEVICE_NAME_MAX_LENGTH`, and `IP_ADDRESS_MAX_LENGTH`.
+- **Line 20:** Defined the API version string.
+- **Line 21:** Constructed an API prefix using the defined API version.
 
 **Why it was Likely Changed:**
-This change likely aims to centralize configuration settings, making them easier to manage and modify. By defining these constants in a single file, the codebase becomes more modular and maintainable. The values chosen are typical for security scanning tools, balancing concurrency with rate limiting to prevent overloading systems.
+This change likely aims to centralize configuration constants, making them easier to manage and update. By defining these values in a single file, the codebase can be more maintainable and consistent.
 
 **Impact on Behavior:**
-These changes will affect how the scanner operates. For example, `MaxWorkers` and `RateLimitPerSecond` control the number of concurrent tasks and the rate at which they can be processed, respectively. The timeouts ensure that operations do not hang indefinitely. The findings thresholds (`MaxTotalFindings`, `SARIFMaxResults`) limit the output size, which is useful for performance optimization.
+- The introduction of these constants will affect how email addresses, passwords, tokens, device identifiers, and other data are handled throughout the application.
+- The `API_VERSION` constant ensures that all API endpoints use a consistent versioning scheme.
 
 **Risks or Concerns:**
-- **Default Values:** Default values like `DefaultWorkerCount` and `RateLimitPerSecond` might be too high or low depending on the environment. Care must be taken to ensure these defaults are appropriate.
-- **Error Handling:** While not directly related, ensuring proper error handling when these constants are used in critical paths is essential. For instance, if a timeout occurs, how will it be handled?
-- **Scalability:** The chosen values should be scalable and configurable based on the environment (e.g., cloud vs. local). Hardcoded values might need to be adjusted for different use cases.
+- **Potential Hardcoding:** While centralizing constants is beneficial, overusing hardcoded values can make the code less flexible. Ensure these constants are used appropriately and not overly restrictive.
+- **Security Considerations:** Constants like `PASSWORD_MAX_LENGTH` should be carefully chosen to balance security and usability. For example, a minimum password length of 8 characters might be too short for some use cases.
 
-Overall, this change enhances code organization and maintainability while introducing potential risks that need careful consideration during implementation.
+Overall, this change improves code organization but requires careful consideration during implementation to avoid potential issues.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 16:40*
+*Generated by CodeWorm on 2026-02-23 18:30*
