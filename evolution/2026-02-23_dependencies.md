@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** social-media-notes
-**File:** backend/app/core/dependencies.py
+**File:** backend/app/auth/dependencies.py
 **Language:** python
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,157 +15,57 @@
 Commit: 8c757802
 Message: easy peasy
 Author: CarterPerez-dev
-File: backend/app/core/dependencies.py
+File: backend/app/auth/dependencies.py
 Change type: new file
 
 Diff:
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,21 @@
 +"""
 +ⒸAngelaMos | 2025
 +dependencies.py
 +"""
 +
-+from __future__ import annotations
-+
 +from typing import Annotated
-+from uuid import UUID
 +
-+import jwt
-+from fastapi import Depends, Request
-+from fastapi.security import OAuth2PasswordBearer
-+from sqlalchemy.ext.asyncio import AsyncSession
++from fastapi import Depends
 +
-+from config import (
-+    API_PREFIX,
-+    TokenType,
-+    UserRole,
-+)
-+from .database import get_db_session
-+from .exceptions import (
-+    InactiveUser,
-+    PermissionDenied,
-+    TokenError,
-+    TokenRevokedError,
-+    UserNotFound,
-+)
-+from user.User import User
-+from .security import decode_access_token
-+from user.repository import UserRepository
++from core.dependencies import DBSession
++from .service import AuthService
 +
 +
-+oauth2_scheme = OAuth2PasswordBearer(
-+    tokenUrl = f"{API_PREFIX}/auth/login",
-+    auto_error = True,
-+)
-+
-+oauth2_scheme_optional = OAuth2PasswordBearer(
-+    tokenUrl = f"{API_PREFIX}/auth/login",
-+    auto_error = False,
-+)
-+
-+DBSession = Annotated[AsyncSession, Depends(get_db_session)]
-+
-+
-+async def get_current_user(
-+    token: Annotated[str,
-+                     Depends(oauth2_scheme)],
-+    db: DBSession,
-+) -> User:
++def get_auth_service(db: DBSession) -> AuthService:
 +    """
-+    Validate access token and return current user
++    Dependency to inject AuthService instance
 +    """
-+    try:
-+        payload = decode_access_token(token)
-+    except jwt.InvalidTokenError as e:
-+        raise TokenError(message = str(e)) from e
-+
-+    if payload.get("type") != TokenType.ACCESS.value:
-+        raise TokenError(message = "Invalid token type")
-+
-+    user_id = UUID(payload["sub"])
-+    user = await UserRepository.get_by_id(db, user_id)
-+
-+    if user is None:
-+        raise UserNotFound(identifier = str(user_id))
-+
-+    if payload.get("token_version") != user.token_version:
-+        raise TokenRevokedError()
-+
-+    return user
++    return AuthService(db)
 +
 +
-+async def get_current_active_user(
-+    user: Annotated[User,
-+                    Depends(get_current_user)],
-+) -> User:
-+    """
-+    Ensure user is active
-+    """
-+    if not user.is_active:
-+        raise InactiveUser()
-+    return user
-+
-+
-+async def get_optional_user(
-+    token: Annotated[str | None,
-+                     Depends(oauth2_scheme_optional)],
-+    db: DBSession,
-+) -> User | None:
-+    """
-+    Return current user if authenticated, None otherwise
-+    """
-+    if token is None:
-+        return None
-+
-+    try:
-+        payload = decode_access_token(token)
-+        if payload.get("type") != TokenType.ACCESS.value:
-+            return None
-+        user_id = UUID(payload["sub"])
-+        user = await UserRepository.get_by_id(db, user_id)
-+        if user and user.token_version == payload.get("token_version"):
-+            return user
-+    except (jwt.InvalidTokenError, ValueError):
-+        pass
-+
-+    return None
-+
-+
-+class RequireRole:
-+    """
-+    Dependency class to check user role
-+    """
-+    def __init__(self, *allowed_roles: UserRole) -> None:
-+        self.allowed_roles = allowed_roles
-+
-+ 
++AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
 ```
 
 ---
 
 ## Code Evolution
 
-### Change Analysis for `backend/app/core/dependencies.py`
+### Change Analysis for Commit `8c757802`
 
-**What Changed:**
-The file `dependencies.py` was added to the project, introducing dependency injection and authentication mechanisms using FastAPI. The code defines several functions and classes to handle token validation, user retrieval, role checking, and IP address extraction.
+**What was Changed:**
+A new file named `dependencies.py` was added to the `backend/app/auth/` directory. This file introduces a dependency injection mechanism using FastAPI's `Depends` and type hints from Python's `typing` module.
 
-**Why It Was Likely Changed:**
-This change likely aims to centralize authentication logic for better maintainability and reusability across the application. By defining these dependencies, the team can ensure consistent handling of tokens, users, roles, and client IPs throughout the API.
+Specifically, it defines:
+1. A function `get_auth_service(db: DBSession) -> AuthService`, which returns an instance of `AuthService`.
+2. An annotated type alias `AuthServiceDep` that uses this dependency function with `Annotated`.
+
+**Why it was Likely Changed:**
+This change likely aims to improve the modularity and testability of the application by centralizing authentication service dependencies. By defining a clear dependency injection mechanism, developers can more easily manage and inject dependencies in FastAPI routes or other parts of the application.
 
 **Impact on Behavior:**
-- **Token Validation:** The `get_current_user` function validates access tokens and retrieves the corresponding user from the database.
-- **Role Checking:** The `RequireRole` class enforces role-based access control.
-- **Optional User Retrieval:** The `get_optional_user` function returns a user if authenticated, or `None` otherwise.
-- **IP Address Extraction:** The `get_client_ip` function extracts the client's IP address considering proxy headers.
+The addition of `AuthServiceDep` allows for seamless injection of an `AuthService` instance wherever needed, ensuring that the database session (`DBSession`) is properly passed to the service. This enhances code readability and maintainability by adhering to dependency injection principles.
 
-**Risks and Concerns:**
-- **Security Risks:** Ensure that token validation logic is robust against common attacks like token replay. Consider implementing additional security measures such as rate limiting.
-- **Dependency Injection:** While useful, over-reliance on dependency injection can make testing more complex if not managed properly.
-- **Error Handling:** The current error handling might need to be extended or standardized across the application for consistency.
-
-Overall, this change significantly enhances the security and maintainability of the API by centralizing authentication logic.
+**Risks or Concerns:**
+While this change introduces a clear pattern, it might increase complexity slightly if not all developers are familiar with FastAPI's dependency injection mechanism. Additionally, ensuring that `DBSession` is always properly managed (e.g., closing connections) remains crucial to avoid potential issues like database leaks.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 17:44*
+*Generated by CodeWorm on 2026-02-23 18:21*
