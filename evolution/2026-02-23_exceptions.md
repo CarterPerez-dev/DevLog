@@ -1,7 +1,7 @@
 # exceptions
 
 **Type:** Code Evolution
-**Repository:** social-media-notes
+**Repository:** angelamos-3d
 **File:** backend/app/core/exceptions.py
 **Language:** python
 **Lines:** 1-1
@@ -12,154 +12,97 @@
 ## Source Code
 
 ```python
-Commit: 8c757802
-Message: easy peasy
+Commit: a61e4cd8
+Message: feat: complete mvp v1.0.0
 Author: CarterPerez-dev
 File: backend/app/core/exceptions.py
 Change type: new file
 
 Diff:
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,62 @@
 +"""
-+ⒸAngelaMos | 2025
++©AngelaMos | 2026
 +exceptions.py
 +"""
 +
-+from typing import Any
++from fastapi import HTTPException, status
 +
 +
-+class BaseAppException(Exception):
++class AngelaException(HTTPException):
 +    """
-+    Base exception for all application specific errors
-+    """
-+    def __init__(
-+        self,
-+        message: str,
-+        status_code: int = 500,
-+        extra: dict[str,
-+                    Any] | None = None,
-+    ) -> None:
-+        self.message = message
-+        self.status_code = status_code
-+        self.extra = extra or {}
-+        super().__init__(self.message)
-+
-+
-+class ResourceNotFound(BaseAppException):
-+    """
-+    Raised when a requested resource does not exist
++    Base exception for Angela backend.
 +    """
 +    def __init__(
 +        self,
-+        resource: str,
-+        identifier: str | int,
-+        extra: dict[str,
-+                    Any] | None = None,
++        status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
++        detail: str = "An error occurred",
 +    ) -> None:
++        super().__init__(status_code = status_code, detail = detail)
++
++
++class EmptyTextError(AngelaException):
++    """
++    Raised when text input is empty or whitespace.
++    """
++    def __init__(self) -> None:
 +        super().__init__(
-+            message = f"{resource} with id '{identifier}' not found",
-+            status_code = 404,
-+            extra = extra,
-+        )
-+        self.resource = resource
-+        self.identifier = identifier
-+
-+
-+class ConflictError(BaseAppException):
-+    """
-+    Raised when an operation conflicts with existing state
-+    """
-+    def __init__(
-+        self,
-+        message: str,
-+        extra: dict[str,
-+                    Any] | None = None,
-+    ) -> None:
-+        super().__init__(
-+            message = message,
-+            status_code = 409,
-+            extra = extra
++            status_code = status.HTTP_400_BAD_REQUEST,
++            detail = "Text cannot be empty",
 +        )
 +
 +
-+class ValidationError(BaseAppException):
++class ModelNotLoadedError(AngelaException):
 +    """
-+    Raised when input validation fails outside of Pydantic
++    Raised when a required model is not loaded.
 +    """
-+    def __init__(
-+        self,
-+        message: str,
-+        field: str | None = None,
-+        extra: dict[str,
-+                    Any] | None = None,
-+    ) -> None:
++    def __init__(self, model_name: str) -> None:
 +        super().__init__(
-+            message = message,
-+            status_code = 422,
-+            extra = extra
-+        )
-+        self.field = field
-+
-+
-+class AuthenticationError(BaseAppException):
-+    """
-+    Raised when authentication fails
-+    """
-+    def __init__(
-+        self,
-+        message: str = "Authentication failed",
-+        extra: dict[str,
-+                    Any] | None = None,
-+    ) -> None:
-+        super().__init__(
-+            message = message,
-+            status_code = 401,
-+            extra = extra
++            status_code = status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail = f"Model not loaded: {model_name}",
 +        )
 +
 +
-+class TokenError(AuthenticationError):
++class TranscriptionError(AngelaException):
 +    """
-+    Raised for JWT token specific errors
++    Raised when audio transcription fails.
 +    """
-+    def __init__(
-+        self,
-+        message: str = "Invalid or expired token",
-+        extra: dict[str,
-+                    Any] | None = None,
-+    ) -> None:
-+        super().__init__(message = message, extra = extra)
++    def __init__(self, reason: str = "Unknown error") -> None:
++        super().__init__(
++            status_code = status.HTTP_422_UNPROCESSABLE_ENTITY,
++            detail = f"Transcription failed: {reason}",
++        )
 +
 +
-+class TokenRevokedError(TokenError):
++class OllamaConnectionError(AngelaException):
 +    """
-+    Raised when a revoked token is used
++    Raised when connection to Ollama fails.
 +    """
-+    def __init__(self, extra: dict[str, Any] | None = None) -> None:
-+        super().__init__(message = "Token has been revoked", extra 
++    def __init__(self) -> None:
++        super().__init__(
++            status_code = status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail = "Cannot connect to Ollama",
++        )
+
 ```
 
 ---
 
 ## Code Evolution
 
-### Change Analysis for `exceptions.py`
+### Change Analysis
 
-**What was Changed**: A new file named `exceptions.py` was added, introducing a comprehensive set of custom exception classes in Python. The changes include defining base and derived exceptions with specific error messages, status codes, and extra fields.
+**What was Changed:**
+A new file `exceptions.py` was added to the repository, introducing a hierarchy of custom exceptions for the Angela backend. The file defines several exception classes derived from `HTTPException`, including `AngelaException`, `EmptyTextError`, `ModelNotLoadedError`, `TranscriptionError`, and `OllamaConnectionError`.
 
-**Why it Was Likely Changed**: This change likely aims to standardize error handling across the application by providing clear, structured ways to handle various types of errors. It follows best practices for modular code design, making error management more explicit and maintainable.
+**Why it was Likely Changed:**
+This change likely aims to standardize error handling across the application, providing clearer and more specific error messages. By extending `HTTPException`, these custom exceptions can be easily used in FastAPI routes to return appropriate HTTP status codes.
 
-**Impact on Behavior**: The introduction of these exceptions will affect how errors are handled in the application. For instance:
-- `ResourceNotFound` and `UserNotFound` provide specific messages indicating that a requested resource or user was not found.
-- `ConflictError`, `EmailAlreadyExists`, and `TokenRevokedError` handle conflicts and specific error scenarios with appropriate status codes.
-- `AuthenticationError`, `InvalidCredentials`, and related exceptions manage authentication-related issues.
+**Impact on Behavior:**
+The introduction of these exception classes will allow for more precise control over how errors are handled and communicated to clients. For example, an empty text input will now raise a `400 Bad Request` error with the message "Text cannot be empty," while a failed connection to Ollama will result in a `503 Service Unavailable` status.
 
-**Risks or Concerns**: While this is a positive change, there are a few potential risks:
-1. **Overhead**: Adding many exception classes might introduce overhead in the codebase if not used efficiently.
-2. **Consistency**: Ensuring all parts of the application use these custom exceptions consistently will be important to maintain uniform error handling.
-
-Overall, this change enhances the robustness and clarity of error management in the `social-media-notes` repository.
+**Risks or Concerns:**
+While this change enhances error handling, there is a risk that developers might not always use these custom exceptions consistently. Ensuring all error scenarios are covered with the appropriate exception type and status code could be challenging. Additionally, maintaining backward compatibility if the structure of these exceptions changes in future updates will require careful consideration.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 17:49*
+*Generated by CodeWorm on 2026-02-23 18:50*
