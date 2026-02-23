@@ -1,0 +1,159 @@
+# reporter_test
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/secrets-scanner/internal/reporter/reporter_test.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 294169a2
+Message: feat: Complete Go secrets scanner - Portia
+Author: CarterPerez-dev
+File: PROJECTS/intermediate/secrets-scanner/internal/reporter/reporter_test.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,215 @@
++// ©AngelaMos | 2026
++// reporter_test.go
++
++package reporter
++
++import (
++	"bytes"
++	"encoding/json"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++
++	"github.com/CarterPerez-dev/portia/pkg/types"
++)
++
++func testResult() *types.ScanResult {
++	return &types.ScanResult{
++		Findings: []types.Finding{
++			{ //nolint:gosec
++				RuleID:      "aws-access-key-id",
++				Description: "AWS Access Key ID",
++				Severity:    types.SeverityCritical,
++				Match:       `AKIAIOSFODNN7EXAMPLE`,
++				Secret:      "AKIAIOSFODNN7EXAMPLE",
++				FilePath:    "src/config.py",
++				LineNumber:  42,
++				LineContent: `aws_key = "AKIAIOSFODNN7EXAMPLE"`,
++				CommitSHA:   "abc123def456",
++				Author:      "dev@example.com",
++				HIBPStatus:  types.HIBPBreached,
++				BreachCount: 1500,
++			},
++			{ //nolint:gosec
++				RuleID:      "generic-password",
++				Description: "Password in Assignment",
++				Severity:    types.SeverityHigh,
++				Match:       `password = "xK9mP2vL5nQ8"`,
++				Secret:      "xK9mP2vL5nQ8",
++				Entropy:     4.12,
++				FilePath:    "config.yaml",
++				LineNumber:  10,
++				LineContent: `password = "xK9mP2vL5nQ8"`,
++				HIBPStatus:  types.HIBPClean,
++			},
++		},
++		TotalFiles:    100,
++		TotalRules:    50,
++		TotalFindings: 2,
++		HIBPChecked:   2,
++		HIBPBreached:  1,
++		Duration:      1500 * time.Millisecond,
++	}
++}
++
++func TestNewReporter(t *testing.T) {
++	t.Parallel()
++
++	assert.IsType(t, &Terminal{}, New("terminal"))
++	assert.IsType(t, &Terminal{}, New(""))
++	assert.IsType(t, &JSON{}, New("json"))
++	assert.IsType(t, &SARIF{}, New("sarif"))
++}
++
++func TestTerminalReportWithFindings(t *testing.T) {
++	t.Parallel()
++	var buf bytes.Buffer
++	r := &Terminal{}
++	err := r.Report(&buf, testResult())
++	require.NoError(t, err)
++
++	output := buf.String()
++	assert.Contains(t, output, "2 secret(s) detected")
++	assert.Contains(t, output, "aws-access-key-id")
++	assert.Contains(t, output, "src/config.py")
++	assert.Contains(t, output, "FOUND IN BREACHES")
++	assert.Contains(t, output, "not found in breaches")
++	assert.Contains(t, output, "4.12")
++	assert.Contains(t, output, "abc123de")
++}
++
++func TestTerminalReportNoFindings(t *testing.T) {
++	t.Parallel()
++	var buf bytes.Buffer
++	r := &Terminal{}
++	result := &types.ScanResult{
++		TotalRules: 50,
++		Duration:   500 * time.Millisecond,
++	}
++	err := r.Report(&buf, result)
++	require.NoError(t, err)
++
++	output := buf.String()
++	assert.Contains(t, output, "No secrets detected")
++}
++
++func TestJSONReport(t *testing.T) {
++	t.Parallel()
++	var buf bytes.Buffer
++	r := &JSON{}
++	err := r.Report(&buf, testResult())
++	require.NoError(t, err)
++
++	var output jsonOutput
++	require.NoError(t, json.Unmarshal(buf.Bytes(), &output))
++
++	assert.Len(t, output.Findings, 2)
++
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:** 
+A new file `reporter_test.go` was added to the `secrets-scanner` project, containing test cases for different reporter implementations (`Terminal`, `JSON`, and `SARIF`). The tests cover various scenarios including reporting findings with secrets detected, no findings, and masked secret values.
+
+**Why it was Likely Changed:**
+This change likely aims to ensure that the reporters correctly handle different types of scan results and produce appropriate outputs. By adding comprehensive test cases, the developers can verify that each reporter behaves as expected under various conditions, such as when there are findings versus when there are none.
+
+**Impact on Behavior:**
+The tests validate that:
+- The `Terminal` reporter outputs a readable report with relevant details.
+- The `JSON` reporter produces JSON formatted output containing all necessary fields.
+- The `SARIF` reporter generates SARIF compliant JSON logs, which can be used for integration with other security tools.
+
+**Risks or Concerns:**
+While the tests cover most use cases, there might be edge cases not yet addressed. For example, testing how reporters handle very long secrets or complex file paths could improve robustness. Additionally, ensuring that all secret values are properly masked in the `Terminal` reporter output is crucial to prevent accidental exposure of sensitive information.
+
+Overall, this change significantly enhances the test coverage and ensures the reporters function correctly across different scenarios.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 21:18*
