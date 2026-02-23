@@ -1,9 +1,9 @@
 # constants
 
 **Type:** Code Evolution
-**Repository:** stripe-referral
-**File:** src/stripe_referral/config/constants.py
-**Language:** python
+**Repository:** docksec
+**File:** internal/config/constants.go
+**Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
 
@@ -11,80 +11,42 @@
 
 ## Source Code
 
-```python
-Commit: bfb52633
-Message: feat: Done
+```go
+Commit: 5a7c48c4
+Message: Initial release
 Author: CarterPerez-dev
-File: src/stripe_referral/config/constants.py
+File: internal/config/constants.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,65 @@
-+"""
-+ⒸAngelaMos | 2025 | CertGames.com
-+Magic values as constants
-+"""
+@@ -0,0 +1,27 @@
++/*
++AngelaMos | 2025
++constants.go
++*/
 +
-+CODE_LENGTH: int = 8
-+CODE_PREFIX: str = "REF"
-+CODE_SEPARATOR: str = "_"
++package config
 +
-+MIN_CODE_LENGTH: int = 6
-+MAX_CODE_LENGTH: int = 20
++import "time"
 +
-+DEFAULT_PAYOUT_CURRENCY: str = "USD"
-+MIN_PAYOUT_AMOUNT: float = 10.00
-+MAX_PAYOUT_AMOUNT: float = 100000.00
++// Scanner configuration constants for concurrency, rate limiting, and timeouts.
++const (
++	MaxWorkers         = 50
++	DefaultWorkerCount = 20
++	RateLimitPerSecond = 50
++	RateLimitBurst     = 50
 +
-+MAX_CODE_GENERATIONS_PER_USER: int = 10
-+MAX_CODES_PER_USER_PER_PROGRAM: int = 5
-+CODE_GENERATION_RETRY_ATTEMPTS: int = 10
++	DefaultTimeout    = 30 * time.Second
++	InspectTimeout    = 10 * time.Second
++	ConnectionTimeout = 5 * time.Second
 +
-+DEFAULT_CONVERSION_WINDOW_DAYS: int = 30
-+MAX_CONVERSION_WINDOW_DAYS: int = 365
++	MaxTotalFindings = 10000
 +
-+MAX_PROGRAM_NAME_LENGTH: int = 255
-+MAX_PROGRAM_KEY_LENGTH: int = 100
++	SARIFMaxResults = 25000
 +
-+MIN_REWARD_AMOUNT: float = 0.01
-+MAX_REWARD_AMOUNT: float = 100000.00
-+
-+CURRENCY_CODE_LENGTH: int = 3
-+
-+MIN_MAX_REWARDS_PER_USER: int = 1
-+MAX_MAX_REWARDS_PER_USER: int = 1000
-+
-+MIN_CONVERSION_WINDOW_DAYS: int = 1
-+
-+MAX_USER_ID_LENGTH: int = 100
-+MAX_TRANSACTION_ID_LENGTH: int = 255
-+
-+MAX_RECIPIENT_DATA_SIZE_BYTES: int = 10240
-+
-+MAX_ERROR_MESSAGE_LENGTH: int = 500
-+
-+STRIPE_CONNECT_ACCOUNT_ID_PREFIX: str = "acct_"
-+STRIPE_TRANSFER_ID_PREFIX: str = "tr_"
-+
-+MANUAL_PAYOUT_ID_PREFIX: str = "manual_"
-+
-+DATABASE_CONNECTION_POOL_SIZE: int = 10
-+DATABASE_CONNECTION_MAX_OVERFLOW: int = 20
-+DATABASE_CONNECTION_TIMEOUT_SECONDS: int = 30
-+
-+CACHE_TTL_SECONDS: int = 3600
-+
-+WEBHOOK_TIMEOUT_SECONDS: int = 10
-+
-+RATE_LIMIT_PER_MINUTE: int = 60
-+RATE_LIMIT_PER_HOUR: int = 1000
-+
-+BATCH_SIZE_PAYOUT_PROCESSING: int = 100
-+
-+ALLOW_SELF_REFERRAL: bool = False
-+REQUIRE_RECIPIENT_VALIDATION: bool = True
-+
-+STRIPE_API_VERSION: str = "2024-11-20.acacia"
++	MinEntropyForSecret = 4.5
++	MinSecretLength     = 16
++)
 
 ```
 
@@ -92,24 +54,24 @@ Diff:
 
 ## Code Evolution
 
-### Change Analysis for Commit `bfb52633`
+### Change Analysis for `internal/config/constants.go`
 
 **What was Changed:**
-A new file, `config/constants.py`, was added to the repository. This file introduces a series of constants used throughout the application, including magic values like code lengths, currency settings, and API version strings.
+The file `internal/config/constants.go` was added, introducing 27 constants related to scanner configuration. These include values for concurrency (`MaxWorkers`, `DefaultWorkerCount`), rate limiting (`RateLimitPerSecond`, `RateLimitBurst`), timeouts (`DefaultTimeout`, `InspectTimeout`, `ConnectionTimeout`), and thresholds for findings and entropy.
 
-**Why it Was Likely Changed:**
-This change likely aims to centralize configuration parameters for easier management and consistency across the application. By defining these constants in one place, it simplifies updates and reduces the risk of hard-coded values leading to bugs or inconsistencies.
+**Why it was Likely Changed:**
+This change likely aims to centralize configuration settings, making them easier to manage and modify. By defining these constants in a single file, the codebase becomes more modular and maintainable. The values chosen are typical for security scanning tools, balancing concurrency with rate limiting to prevent overloading systems.
 
 **Impact on Behavior:**
-These constants will affect various parts of the application, such as code generation rules, payout amounts, database connection settings, and webhook timeouts. For example, `DEFAULT_PAYOUT_CURRENCY` and `MIN_MAX_REWARDS_PER_USER` will influence how payouts are processed and rewards are managed.
+These changes will affect how the scanner operates. For example, `MaxWorkers` and `RateLimitPerSecond` control the number of concurrent tasks and the rate at which they can be processed, respectively. The timeouts ensure that operations do not hang indefinitely. The findings thresholds (`MaxTotalFindings`, `SARIFMaxResults`) limit the output size, which is useful for performance optimization.
 
 **Risks or Concerns:**
-- **Maintenance:** Ensuring all relevant parts of the application use these constants consistently.
-- **Deprecation:** If a constant is updated but not used, it could lead to confusion or unused code.
-- **Testing:** New constants may require additional tests to ensure they behave as expected in different scenarios.
+- **Default Values:** Default values like `DefaultWorkerCount` and `RateLimitPerSecond` might be too high or low depending on the environment. Care must be taken to ensure these defaults are appropriate.
+- **Error Handling:** While not directly related, ensuring proper error handling when these constants are used in critical paths is essential. For instance, if a timeout occurs, how will it be handled?
+- **Scalability:** The chosen values should be scalable and configurable based on the environment (e.g., cloud vs. local). Hardcoded values might need to be adjusted for different use cases.
 
-Overall, this change enhances maintainability and clarity at the cost of initial setup effort.
+Overall, this change enhances code organization and maintainability while introducing potential risks that need careful consideration during implementation.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 01:52*
+*Generated by CodeWorm on 2026-02-23 16:40*
