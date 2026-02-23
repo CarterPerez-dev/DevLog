@@ -4,7 +4,7 @@
 **Repository:** angelamos-operations
 **File:** CarterOS-Server/src/aspects/life_manager/facets/checklist/repository.py
 **Language:** python
-**Lines:** 54-139
+**Lines:** 54-137
 **Complexity:** 0.0
 
 ---
@@ -28,10 +28,9 @@ class ChecklistLogRepository(BaseRepository[ChecklistLog]):
         Get all log entries for a date, joined with item for title/sort
         """
         result = await session.execute(
-            select(ChecklistLog)
-            .join(ChecklistLog.item)
-            .where(ChecklistLog.log_date == log_date)
-            .order_by(ChecklistItem.sort_order)
+            select(ChecklistLog).join(ChecklistLog.item).where(
+                ChecklistLog.log_date == log_date
+            ).order_by(ChecklistItem.sort_order)
         )
         return result.scalars().all()
 
@@ -46,8 +45,7 @@ class ChecklistLogRepository(BaseRepository[ChecklistLog]):
         Get a specific log entry
         """
         result = await session.execute(
-            select(ChecklistLog)
-            .where(
+            select(ChecklistLog).where(
                 ChecklistLog.item_id == item_id,
                 ChecklistLog.log_date == log_date,
             )
@@ -67,15 +65,15 @@ class ChecklistLogRepository(BaseRepository[ChecklistLog]):
         result = await session.execute(
             select(
                 ChecklistLog.log_date,
-                func.sum(sa.cast(ChecklistLog.completed, sa.Integer)).label("completed_count"),
+                func.sum(sa.cast(ChecklistLog.completed,
+                                 sa.Integer)).label("completed_count"),
                 func.count(ChecklistLog.id).label("total_count"),
-            )
-            .where(
+            ).where(
                 ChecklistLog.log_date >= start_date,
                 ChecklistLog.log_date <= end_date,
+            ).group_by(ChecklistLog.log_date).order_by(
+                ChecklistLog.log_date
             )
-            .group_by(ChecklistLog.log_date)
-            .order_by(ChecklistLog.log_date)
         )
         return result.all()
 
@@ -91,11 +89,11 @@ class ChecklistLogRepository(BaseRepository[ChecklistLog]):
             select(
                 ChecklistLog.item_id,
                 func.count(ChecklistLog.id).label("total"),
-                func.sum(sa.cast(ChecklistLog.completed, sa.Integer)).label("completed"),
-            )
-            .join(ChecklistLog.item)
-            .where(ChecklistItem.is_active == sa.true())
-            .group_by(ChecklistLog.item_id)
+                func.sum(sa.cast(ChecklistLog.completed,
+                                 sa.Integer)).label("completed"),
+            ).join(ChecklistLog.item).where(
+                ChecklistItem.is_active == sa.true()
+            ).group_by(ChecklistLog.item_id)
         )
         return result.all()
 ```
@@ -107,20 +105,20 @@ class ChecklistLogRepository(BaseRepository[ChecklistLog]):
 ### ChecklistLogRepository Documentation
 
 **Class Responsibility and Purpose:**
-The `ChecklistLogRepository` class is responsible for managing database operations related to `ChecklistLog` entities, providing a clean abstraction layer over SQLAlchemy queries.
+The `ChecklistLogRepository` class is responsible for managing database operations related to `ChecklistLog` entries. It provides methods to retrieve logs by date, specific item-date pairs, heatmap data over a date range, and completion rates for all active items.
 
 **Public Interface (Key Methods):**
-- `get_by_date(session: AsyncSession, log_date: date) -> Sequence[ChecklistLog]`: Retrieves all logs for a specific date.
-- `get_by_item_and_date(session: AsyncSession, item_id: UUID, log_date: date) -> ChecklistLog | None`: Fetches a specific log entry by item and date.
-- `get_heatmap_data(session: AsyncSession, start_date: date, end_date: date) -> Sequence[sa.Row]`: Aggregates log data for a date range to create heatmap data.
+- `get_by_date(session: AsyncSession, log_date: date) -> Sequence[ChecklistLog]`: Retrieves all log entries for a given date.
+- `get_by_item_and_date(session: AsyncSession, item_id: UUID, log_date: date) -> ChecklistLog | None`: Fetches a specific log entry by item ID and date.
+- `get_heatmap_data(session: AsyncSession, start_date: date, end_date: date) -> Sequence[sa.Row]`: Aggregates logs to generate heatmap data for a specified date range.
 - `get_item_completion_rates(session: AsyncSession) -> Sequence[sa.Row]`: Computes completion rates for all active checklist items.
 
 **Design Patterns Used:**
-The class employs the **Repository Pattern**, which encapsulates persistence logic and abstracts database operations. No specific design patterns like Factory, Observer, or Strategy are explicitly used in this implementation.
+The class leverages the **Repository Pattern**, encapsulating database operations and providing a clean interface for interacting with `ChecklistLog` data. It uses SQLAlchemy's declarative base to interact with the database asynchronously, ensuring efficient and type-safe queries.
 
-**How It Fits in the Architecture:**
-`ChecklistLogRepository` acts as a central hub for CRUD-like operations on `ChecklistLog`. It is part of the data access layer, ensuring that business logic remains separate from database interactions. This class interacts with other entities like `ChecklistItem` and uses SQLAlchemy to perform complex queries, making it integral to the overall architecture by providing structured and efficient data management capabilities.
+**How it Fits in the Architecture:**
+This repository acts as a central point of interaction between the application logic and the database. By abstracting database operations, it enables other parts of the system to focus on business logic rather than data retrieval. The use of asynchronous methods ensures that these operations do not block the main thread, making the application more responsive.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 07:18*
+*Generated by CodeWorm on 2026-02-22 19:09*
