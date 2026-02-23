@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/core/decorators/throttle.py
+**File:** backend/api/core/decorators/unified.py
 **Language:** python
-**Lines:** 1-127
+**Lines:** 1-198
 **Complexity:** 0.0
 
 ---
@@ -13,105 +13,104 @@
 
 ```python
 """
-AI Throttle Decorator
-Decorator for AI endpoints that applies throttling and guardrails
-/api/core/decorators/throttle.py
+Unified API Endpoint Decorator
+/api/core/decorators/unified.py
 """
 
-import logging
+import time
+import traceback
 from typing import Any
 from functools import wraps
-from flask import g, jsonify
+from flask import g, request
 from collections.abc import Callable
 
-from ..limiters.throttle_helpers import (
-    AI_OPERATION_CONFIG,
-    DEFAULT_LIMITS,
-    extract_input_text,
-    limit_input_length,
-    check_token_limit,
-    log_ai_request,
+from ..services.logging import AuditLogger
+from ..auth.auth_required import (
+    auth_required as _auth_required,
 )
+from ..auth.subscription_required import (
+    subscription_required as _subscription_required,
+)
+from ...domains.progression.services.streak_ops import StreakService
+from ...domains.progression.services.progression_ops import ProgressionService
 
 
-logger = logging.getLogger(__name__)
-
-
-def ai_throttle(
-    operation_type: str,
+def api_endpoint(
     *,
-    input_field: str | None = None,
-    custom_limits: dict[str,
-                        int] | None = None,
-    model: str | None = None,
-    log_usage: bool = True,
-    streaming: bool = False,
-):
+    auth: bool = True,
+    subscription: bool = False,
+    audit: bool = True,
+    audit_action: str | None = None,
+    audit_data: dict | None = None,
+    json_body: bool | None = None,
+) -> Callable[[Callable[...,
+                        Any]],
+              Callable[...,
+                       Any]]:
     """
-    Decorator for AI endpoints with throttling, token limits and usage tracking
+    Unified decorator for API endpoints combining common middleware.
     """
-    def decorator(f: Callable) -> Callable:
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
         def decorated_function(*args: Any, **kwargs: Any) -> Any:
-            config: dict[str,
-                         Any] = AI_OPERATION_CONFIG.get(
-                             operation_type,
-                             DEFAULT_LIMITS.copy()
-                         )
-            if isinstance(config, dict):
-                config = config.copy()
+            """
+            Used as @api_endpoint - audit | auth | subscription | json body
+            """
+            start_time: float = time.time()
+            if json_body is None:
+                expects_json: bool = request.method in [
+                    "POST",
+                    "PUT",
+                    "PATCH"
+                ]
+            else:
+                expects_json = json_body
 
-            if custom_limits:
-                config.update(custom_limits)
-
-            ai_model: str = model or config.get("model", "gpt-4o")
-
-            user_id: str | None = getattr(g, "user_id", None)
-
-            input_text: str | None = extract_input_text(input_field)
-            if not input_text:
-                return jsonify({"error": "No input text provided"}), 400
-
-            limited_text: str | None = limit_input_length(
-                input_text,
-                operation_type = operation_type,
-                custom_max = config.get("max_chars")
-            )
-
-            is_within_limit: bool
-            estimated_tokens: int
-            is_within_limit, estimated_tokens = check_token_limit(
-                limited_text,
-                operation_type=operation_type,
-                custom_max=config.get("max_tokens"),
-            )
-
-            if not is_within_limit:
-                max_tokens: int = config.get(
-                    "max_tokens",
-                    DEFAULT_LIMITS["max_tokens"]
-                )
-                error_msg: str = (
-                    f"Input exceeds maximum token limit. "
-                    f"Estimated: {estimated_tokens} tokens, Maximum: {max_tokens} tokens. "
-                    f"Please use shorter input."
-                )
-
-                if streaming:
-
-                    def error_generator():
-                        yield error_msg
-
-                    return error_generator()
-
-                return jsonify({"error": error_msg, "type": "token_limit_exceeded"}), 400
-
-            log_id: str | None = None
-            if log_usage:
+            if expects_json:
                 try:
-                    log_id = log_ai_request(
-                        user_id = user_id,
-                        op
+                    g.json = request.get_json(
+                        force = True,
+                        silent = True
+                    ) or {}
+                except Exception:
+                    g.json = {}
+            else:
+                g.json = {}
+
+            if auth:
+
+                @_auth_required
+                def _temp_auth_check() -> None:
+                    pass
+
+                auth_result = _temp_auth_check()
+                if auth_result is not None:
+
+                    return auth_result
+
+            if subscription:
+
+                @_subscription_required
+                def _temp_sub_check() -> None:
+                    pass
+
+                sub_result = _temp_sub_check()
+                if sub_result is not None:
+                    return sub_result
+
+            if auth and hasattr(g, 'user') and g.user:
+                try:
+                    streak_result = StreakService.update_streak(g.user)
+                    if streak_result["streak_updated"]:
+                        daily_reward = StreakService.calculate_daily_reward(
+                            streak_result["current_streak"]
+                        )
+                        ProgressionService.update_xp_and_coins(
+                            g.user,
+                            daily_reward["xp"],
+                            daily_reward["coins"]
+                        )
+          
 ```
 
 ---
@@ -122,24 +121,25 @@ def ai_throttle(
 
 **Pattern Used:** Decorator Pattern
 
-The `ai_throttle` decorator in this code implements the **Decorator Pattern**, which allows behavior to be added to an individual object, either statically or dynamically, without affecting the structure of other objects.
+The `api_endpoint` decorator combines multiple middleware functionalities such as authentication, subscription validation, logging, and JSON body handling into a single unified decorator. This implementation uses Python's `functools.wraps` to preserve the metadata of the decorated function.
 
-- **Implementation**: The `ai_throttle` function returns a decorator that wraps another function (`f`). This inner decorator (`decorator`) then adds functionality (throttling and logging) before calling the original function.
-  
-- **Benefits**:
-  - **Modularity**: The decorator can be reused across different AI endpoints without modifying their core logic.
-  - **Flexibility**: Custom limits and models can be specified dynamically, enhancing adaptability.
-  - **Maintainability**: Centralized throttling and logging logic simplifies maintenance.
+**Implementation Details:**
+- The `api_endpoint` takes various parameters like `auth`, `subscription`, `audit`, etc., which control whether specific middleware should be applied.
+- It wraps the original function with a nested decorator, allowing for conditional execution based on these parameters.
+- Middleware functions (like `_temp_auth_check` and `_temp_sub_check`) are temporarily defined within the decorator to ensure they only run when needed.
 
-- **Deviations**:
-  - The decorator sets attributes on the decorated function (`g.ai_input`, `g.ai_model`, etc.), which is not typical of standard decorators but helps with state management within the application context.
-  - It uses a custom error generator for streaming responses, diverging from traditional return values.
+**Benefits:**
+1. **Modularity:** The ability to selectively enable or disable middleware components makes the code more modular and easier to maintain.
+2. **Reusability:** A single decorator can handle multiple common tasks, reducing redundancy in API endpoint definitions.
+3. **Flexibility:** Different types of endpoints (e.g., public vs. private) can be easily configured by adjusting the parameters.
 
-- **Appropriateness**:
-  - This pattern is suitable when you need to add cross-cutting concerns like logging and throttling across multiple functions without modifying their core logic. It's particularly useful in web frameworks where such behaviors are common.
+**Deviations:**
+- The use of temporary functions (`_temp_auth_check` and `_temp_sub_check`) to conditionally apply middleware is a deviation from the standard decorator pattern, which typically applies middleware directly.
+- The handling of `g.json` and error logging involves additional context management that isn't strictly part of the core decorator functionality.
 
-This implementation effectively encapsulates the functionality of AI endpoint management, making it a good fit for this context.
+**Appropriateness:**
+This pattern is highly appropriate for APIs where common functionalities like authentication and logging need to be applied consistently across multiple endpoints. It provides a clean, maintainable way to manage these concerns without cluttering each endpoint definition with boilerplate code.
 
 ---
 
-*Generated by CodeWorm on 2026-02-22 17:22*
+*Generated by CodeWorm on 2026-02-22 19:08*
