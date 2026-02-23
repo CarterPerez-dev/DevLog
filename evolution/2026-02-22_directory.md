@@ -1,0 +1,188 @@
+# directory
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/intermediate/secrets-scanner/internal/source/directory.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 294169a2
+Message: feat: Complete Go secrets scanner - Portia
+Author: CarterPerez-dev
+File: PROJECTS/intermediate/secrets-scanner/internal/source/directory.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,209 @@
++// ©AngelaMos | 2026
++// directory.go
++
++package source
++
++import (
++	"bufio"
++	"context"
++	"io/fs"
++	"os"
++	"path/filepath"
++	"strings"
++
++	"github.com/CarterPerez-dev/portia/pkg/types"
++)
++
++const defaultMaxFileSize = 1 << 20
++
++type Directory struct {
++	Path     string
++	MaxSize  int64
++	Excludes []string
++}
++
++func NewDirectory(
++	path string, maxSize int64, excludes []string,
++) *Directory {
++	if maxSize <= 0 {
++		maxSize = defaultMaxFileSize
++	}
++	return &Directory{
++		Path:     path,
++		MaxSize:  maxSize,
++		Excludes: excludes,
++	}
++}
++
++func (d *Directory) String() string {
++	return "directory:" + d.Path
++}
++
++func (d *Directory) Chunks(
++	ctx context.Context, out chan<- types.Chunk,
++) error {
++	return filepath.WalkDir(
++		d.Path,
++		func(path string, entry fs.DirEntry, err error) error {
++			if err != nil {
++				return nil //nolint:nilerr
++			}
++
++			if ctx.Err() != nil {
++				return ctx.Err()
++			}
++
++			if entry.IsDir() {
++				base := entry.Name()
++				if base == ".git" || base == "node_modules" ||
++					base == "vendor" || base == "__pycache__" ||
++					base == ".venv" || base == "venv" ||
++					base == ".svn" || base == ".hg" ||
++					base == ".tox" || base == ".mypy_cache" ||
++					base == ".pytest_cache" || base == ".ruff_cache" ||
++					base == ".next" || base == ".nuxt" ||
++					base == ".terraform" || base == ".gradle" ||
++					base == "Pods" || base == "coverage" ||
++					base == ".nyc_output" || base == ".bundle" ||
++					base == "target" || base == ".eggs" {
++					return filepath.SkipDir
++				}
++				return nil
++			}
++
++			rel, relErr := filepath.Rel(d.Path, path)
++			if relErr != nil {
++				rel = path
++			}
++
++			if d.isExcluded(rel) {
++				return nil
++			}
++
++			if isBinaryExt(path) {
++				return nil
++			}
++
++			info, infoErr := entry.Info()
++			if infoErr != nil || info.Size() > d.MaxSize {
++				return nil //nolint:nilerr
++			}
++
++			return d.emitChunks(ctx, path, rel, out)
++		},
++	)
++}
++
++func (d *Directory) emitChunks(
++	ctx context.Context,
++	absPath, relPath string,
++	out chan<- types.Chunk,
++) error {
++	f, err := os.Open(absPath) //nolint:gosec
++	if err != nil {
++		return nil //nolint:nilerr
++	}
++	defer f.Close() //nolint:errcheck
++
++	var buf strings.Builder
++	scanner := bufio.NewScanner(f)
++	scanner.Buffer(make([]byte, 0, 512*1024), 512*1024)
++
++	lineNum := 0
++	chunkStart := 1
++	linesInChunk := 0
++
++	for scanner.Scan() {
++		if ctx.Err() != nil {
++			return ctx.Err()
++		}
++
++		lineNum++
++		linesInChunk++
++
++		if buf.Len() > 0 {
++			buf.WriteByte('\n')
++		}
++		buf.WriteString(scanner.Text())
++
++		if linesInChunk >= 50 {
++			select {
++			case <-ctx.Done():
++				return ctx.Err()
++			case out <- types.Chunk{
++				Content:   buf.String(),
++				FilePath:  relPath,
++				LineStart: chunkStart,
++			}:
++			}
++			buf.R
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit introduces a new file `directory.go` in the `secrets-scanner` project, implementing functionality to scan directories for potential secrets. The code defines a `Directory` struct and methods to initialize it (`NewDirectory`), describe its state (`String`), walk through files and emit chunks of text content (`Chunks`), and exclude certain paths or file extensions from scanning.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance the secrets scanner by adding directory-based scanning capabilities. This is crucial for detecting secrets in various project directories, ensuring a comprehensive security audit across different file types and structures.
+
+**Impact on Behavior:**
+The new `Directory` struct and its methods allow the scanner to traverse specified directories, filter out irrelevant files (like binaries or excluded patterns), and emit text chunks that may contain sensitive information. This significantly broadens the scope of the secrets scanner, making it more versatile and robust.
+
+**Risks or Concerns:**
+- **Security Risks:** Opening files without proper validation could expose sensitive data if not handled correctly.
+- **Performance Issues:** The chunking mechanism might introduce latency by splitting large files into smaller chunks. Care should be taken to optimize this process.
+- **Error Handling:** Some error handling (e.g., `nil` checks) is marked with lint suppression, which may indicate potential issues that need addressing.
+
+Overall, the change is a significant enhancement but requires thorough testing and refinement to ensure robustness and security.
+
+---
+
+*Generated by CodeWorm on 2026-02-22 21:48*
