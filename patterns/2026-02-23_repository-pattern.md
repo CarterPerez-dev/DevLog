@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** CertGames-Core
-**File:** backend/api/domains/social/services/friendship_ops.py
+**File:** backend/api/domains/social/services/certification_ops.py
 **Language:** python
-**Lines:** 1-515
+**Lines:** 1-156
 **Complexity:** 0.0
 
 ---
@@ -13,92 +13,105 @@
 
 ```python
 """
-Friendship Service Operations
-/api/domains/social/services/friendship_ops.py
+Certification Service Operations
+/api/domains/social/services/certification_ops.py
 """
 
-from __future__ import annotations
-
 from bson import ObjectId
-from datetime import datetime, UTC, timedelta
+from contextlib import suppress
+from datetime import datetime, UTC
 
 from api.core.validation.exceptions import NotFoundError
-from api.domains.account.models.User import User
 
-from ..types import (
-    FriendUserDict,
-    PendingRequestDict,
-    SentRequestDict,
-    SearchUserDict,
+from .s3_ops import S3Service
+from ..models.EarnedCertification import (
+    EarnedCertification,
+    VerificationStatus,
 )
-from ..models.Friendship import Friendship, FriendshipStatus
-from api.websockets.social.service import SocialSocketService
 
 
-class FriendshipService:
+class CertificationService:
     """
-    Service class for friendship operations
+    Service class for earned certification operations
     """
     @staticmethod
-    def send_friend_request(
-        requester_id: str | ObjectId,
-        recipient_id: str | ObjectId,
-        existing_friendship_id: str | ObjectId | None = None
-    ) -> Friendship:
+    def upload_certification(
+        user_id: str | ObjectId,
+        certification_type: str,
+        file_data: bytes,
+        filename: str,
+        content_type: str,
+        earned_date: datetime | None = None,
+        certification_number: str | None = None,
+        is_public: bool = True
+    ) -> EarnedCertification:
         """
-        Create a new friend request or reuse existing rejected one
+        Upload a certification image and create database record
         """
-        requester_id = ObjectId(requester_id) if isinstance(
-            requester_id,
+        user_id = ObjectId(user_id
+                           ) if isinstance(user_id,
+                                           str) else user_id
+
+        upload_result = S3Service.upload_certification_image(
+            user_id = str(user_id),
+            file_data = file_data,
+            filename = filename,
+            content_type = content_type
+        )
+
+        certification = EarnedCertification(
+            userId = user_id,
+            certificationType = certification_type,
+            imageUrl = upload_result["imageUrl"],
+            s3Key = upload_result["s3Key"],
+            earnedDate = earned_date,
+            uploadedAt = datetime.now(UTC),
+            verificationStatus = VerificationStatus.VERIFIED.value,
+            certificationNumber = certification_number,
+            isPublic = is_public
+        )
+        certification.save()
+        return certification
+
+    @staticmethod
+    def get_user_certifications(
+        user_id: str | ObjectId,
+        include_private: bool = False
+    ) -> list[EarnedCertification]:
+        """
+        Get all certifications for a user
+        """
+        user_id = ObjectId(user_id
+                           ) if isinstance(user_id,
+                                           str) else user_id
+
+        query: dict[str, ObjectId | bool] = {"userId": user_id}
+        if not include_private:
+            query["isPublic"] = True
+
+        certifications = EarnedCertification.objects(
+            **query
+        ).order_by('-uploadedAt')
+        return list(certifications)
+
+    @staticmethod
+    def get_certification_by_id(
+        certification_id: str | ObjectId
+    ) -> EarnedCertification | None:
+        """
+        Get a specific certification by ID
+        """
+        certification_id = ObjectId(certification_id) if isinstance(
+            certification_id,
             str
-        ) else requester_id
-        recipient_id = ObjectId(recipient_id) if isinstance(
-            recipient_id,
-            str
-        ) else recipient_id
+        ) else certification_id
 
-        if existing_friendship_id is not None:
-            existing_friendship_id = ObjectId(existing_friendship_id
-                                              ) if isinstance(
-                                                  existing_friendship_id,
-                                                  str
-                                              ) else existing_friendship_id
+        return EarnedCertification.objects(id = certification_id).first()
 
-            friendship = Friendship.objects(id = existing_friendship_id
-                                            ).first()
-            if friendship:
-                friendship.update(
-                    set__status = FriendshipStatus.PENDING.value,
-                    set__createdAt = datetime.now(UTC)
-                )
-                friendship.reload()
-
-                requester = User.objects(
-                    id = requester_id
-                ).only("username",
-                       "level",
-                       "currentAvatar",
-                       "nameColor").first()
-
-                if requester:
-                    SocialSocketService.emit_friend_request_received(
-                        friendship_id = str(friendship.id),
-                        requester_id = str(requester_id),
-                        requester_username = requester.username,
-                        requester_level = requester.level,
-                        requester_avatar = str(requester.currentAvatar)
-                        if requester.currentAvatar else None,
-                        requester_name_color = requester.nameColor,
-                        recipient_id = str(recipient_id),
-                        created_at = friendship.createdAt
-                    )
-
-                return friendship
-
-        friendship = Friendship(
-            requesterUserId = requester_id,
-            recipientUserId = recipient_id,
- 
+    @staticmethod
+    def delete_certification(certification_id: str | ObjectId) -> None:
+        """
+        Delete a certification 
 ```
 
 ---
@@ -107,26 +120,23 @@ class FriendshipService:
 
 ### Pattern Analysis
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:** Repository Pattern
 
-The `FriendshipService` class in the provided code implements a simplified version of the **Repository Pattern**, which abstracts data access operations and encapsulates business logic related to data retrieval and manipulation.
+**Implementation:**
+The `CertificationService` class encapsulates operations related to earned certifications, including uploading, retrieving, updating, and deleting certifications. It interacts with a database model (`EarnedCertification`) and an S3 service for file storage. The methods are static, providing clear responsibilities such as `upload_certification`, `get_user_certifications`, `delete_certification`, etc.
 
-#### Implementation Details:
-- The `send_friend_request` and `accept_friend_request` methods use PyMongo's `objects` method to query, update, and save `Friendship` documents. These methods handle the creation, updating, and acceptance of friend requests.
-- The `User` model is used to fetch user details based on their IDs.
+**Benefits:**
+- **Separation of Concerns:** By encapsulating data access logic within the service class, it separates business rules from database operations.
+- **Testability:** Static methods and clear responsibilities make unit testing easier.
+- **Consistency:** A uniform interface for CRUD operations simplifies client code.
 
-#### Benefits:
-1. **Encapsulation**: Data access logic (e.g., querying MongoDB) is encapsulated within the service class, making it easier to manage and test.
-2. **Separation of Concerns**: Business logic related to friend requests is separated from data access logic, improving code organization and maintainability.
-3. **Flexibility**: The pattern allows for easy switching between different storage mechanisms or databases.
+**Deviations:**
+- The use of `@staticmethod` might be a deviation if these methods are not intended to operate independently of the class instance. Typically, repository patterns involve instance methods interacting with an injected repository object.
+- Direct interaction with database models (`EarnedCertification.objects`) without an explicit repository abstraction can make it harder to switch storage mechanisms later.
 
-#### Deviations:
-- The `Repository Pattern` typically involves a dedicated repository class that handles all data operations. Here, the service class directly interacts with MongoDB using PyMongo methods.
-- The pattern is not fully adhered to since there are no separate repository classes; instead, the service class performs both business logic and data access.
-
-#### Appropriateness:
-This pattern is appropriate for small-scale applications or when a full-fledged repository layer is not necessary. However, in larger systems, it might be beneficial to introduce dedicated repository classes for better separation of concerns and testability.
+**Appropriateness:**
+This pattern is appropriate for this context where the service layer needs to handle business logic and interact with both a database and external services like S3. However, consider refactoring towards a more traditional repository pattern if the complexity grows or if you need to decouple the service from specific storage implementations.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 13:26*
+*Generated by CodeWorm on 2026-02-23 13:51*
