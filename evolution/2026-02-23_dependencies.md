@@ -1,0 +1,171 @@
+# dependencies
+
+**Type:** Code Evolution
+**Repository:** social-media-notes
+**File:** backend/app/core/dependencies.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 8c757802
+Message: easy peasy
+Author: CarterPerez-dev
+File: backend/app/core/dependencies.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,146 @@
++"""
++ⒸAngelaMos | 2025
++dependencies.py
++"""
++
++from __future__ import annotations
++
++from typing import Annotated
++from uuid import UUID
++
++import jwt
++from fastapi import Depends, Request
++from fastapi.security import OAuth2PasswordBearer
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from config import (
++    API_PREFIX,
++    TokenType,
++    UserRole,
++)
++from .database import get_db_session
++from .exceptions import (
++    InactiveUser,
++    PermissionDenied,
++    TokenError,
++    TokenRevokedError,
++    UserNotFound,
++)
++from user.User import User
++from .security import decode_access_token
++from user.repository import UserRepository
++
++
++oauth2_scheme = OAuth2PasswordBearer(
++    tokenUrl = f"{API_PREFIX}/auth/login",
++    auto_error = True,
++)
++
++oauth2_scheme_optional = OAuth2PasswordBearer(
++    tokenUrl = f"{API_PREFIX}/auth/login",
++    auto_error = False,
++)
++
++DBSession = Annotated[AsyncSession, Depends(get_db_session)]
++
++
++async def get_current_user(
++    token: Annotated[str,
++                     Depends(oauth2_scheme)],
++    db: DBSession,
++) -> User:
++    """
++    Validate access token and return current user
++    """
++    try:
++        payload = decode_access_token(token)
++    except jwt.InvalidTokenError as e:
++        raise TokenError(message = str(e)) from e
++
++    if payload.get("type") != TokenType.ACCESS.value:
++        raise TokenError(message = "Invalid token type")
++
++    user_id = UUID(payload["sub"])
++    user = await UserRepository.get_by_id(db, user_id)
++
++    if user is None:
++        raise UserNotFound(identifier = str(user_id))
++
++    if payload.get("token_version") != user.token_version:
++        raise TokenRevokedError()
++
++    return user
++
++
++async def get_current_active_user(
++    user: Annotated[User,
++                    Depends(get_current_user)],
++) -> User:
++    """
++    Ensure user is active
++    """
++    if not user.is_active:
++        raise InactiveUser()
++    return user
++
++
++async def get_optional_user(
++    token: Annotated[str | None,
++                     Depends(oauth2_scheme_optional)],
++    db: DBSession,
++) -> User | None:
++    """
++    Return current user if authenticated, None otherwise
++    """
++    if token is None:
++        return None
++
++    try:
++        payload = decode_access_token(token)
++        if payload.get("type") != TokenType.ACCESS.value:
++            return None
++        user_id = UUID(payload["sub"])
++        user = await UserRepository.get_by_id(db, user_id)
++        if user and user.token_version == payload.get("token_version"):
++            return user
++    except (jwt.InvalidTokenError, ValueError):
++        pass
++
++    return None
++
++
++class RequireRole:
++    """
++    Dependency class to check user role
++    """
++    def __init__(self, *allowed_roles: UserRole) -> None:
++        self.allowed_roles = allowed_roles
++
++ 
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `backend/app/core/dependencies.py`
+
+**What Changed:**
+The file `dependencies.py` was added to the project, introducing dependency injection and authentication mechanisms using FastAPI. The code defines several functions and classes to handle token validation, user retrieval, role checking, and IP address extraction.
+
+**Why It Was Likely Changed:**
+This change likely aims to centralize authentication logic for better maintainability and reusability across the application. By defining these dependencies, the team can ensure consistent handling of tokens, users, roles, and client IPs throughout the API.
+
+**Impact on Behavior:**
+- **Token Validation:** The `get_current_user` function validates access tokens and retrieves the corresponding user from the database.
+- **Role Checking:** The `RequireRole` class enforces role-based access control.
+- **Optional User Retrieval:** The `get_optional_user` function returns a user if authenticated, or `None` otherwise.
+- **IP Address Extraction:** The `get_client_ip` function extracts the client's IP address considering proxy headers.
+
+**Risks and Concerns:**
+- **Security Risks:** Ensure that token validation logic is robust against common attacks like token replay. Consider implementing additional security measures such as rate limiting.
+- **Dependency Injection:** While useful, over-reliance on dependency injection can make testing more complex if not managed properly.
+- **Error Handling:** The current error handling might need to be extended or standardized across the application for consistency.
+
+Overall, this change significantly enhances the security and maintainability of the API by centralizing authentication logic.
+
+---
+
+*Generated by CodeWorm on 2026-02-23 17:44*
