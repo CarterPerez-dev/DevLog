@@ -55,19 +55,17 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
 ### ChecklistItemRepository Documentation
 
 **Class Responsibility and Purpose:**
-The `ChecklistItemRepository` class is responsible for managing operations related to `ChecklistItem` entities, such as retrieving active items and soft-deleting them. This class adheres to the repository pattern, providing a clean interface for database interactions.
+The `ChecklistItemRepository` class is responsible for managing operations related to `ChecklistItem` entities within a database context. It provides methods to retrieve active checklist items and perform soft deletions, ensuring data integrity without physically removing records.
 
 **Public Interface (Key Methods):**
-- **`get_active(session: AsyncSession) -> Sequence[ChecklistItem]`:** Retrieves all active `ChecklistItem` instances ordered by their `sort_order`.
-- **`soft_delete(session: AsyncSession, item: ChecklistItem) -> ChecklistItem`:** Soft-deletes a `ChecklistItem` by setting its `is_active` attribute to `False`.
+- **`get_active(session: AsyncSession) -> Sequence[ChecklistItem]`:** Retrieves all active `ChecklistItem` instances ordered by their sort order.
+- **`soft_delete(session: AsyncSession, item: ChecklistItem) -> ChecklistItem`:** Marks a specified `ChecklistItem` as inactive (soft delete) and updates the database session.
 
 **Design Patterns Used:**
-The class employs the **Repository Pattern**, which abstracts data access and encapsulates database operations. This pattern ensures that business logic remains separate from data-access concerns.
+The class leverages the **Repository Pattern**, which encapsulates data access logic. It also uses **AsyncIO** for asynchronous operations, ensuring efficient handling of database interactions in an asynchronous context.
 
-**How It Fits in the Architecture:**
-This repository is part of a larger system, likely within the `angelamos-operations` project. It interacts directly with the database through SQLAlchemy sessions to perform CRUD-like operations on `ChecklistItem` entities. The class provides a clear and consistent interface for other parts of the application to interact with checklist items without needing to know the underlying database implementation details.
-
-This design promotes loose coupling, making it easier to switch out the data access layer or use different storage mechanisms in the future if needed.
+**How it Fits in the Architecture:**
+`ChecklistItemRepository` acts as a central hub for `ChecklistItem` operations within the application's architecture. By providing a clear interface and leveraging async operations, it integrates seamlessly with other components that require access to checklist items, ensuring consistent and efficient data management throughout the system.
 
 ---
 
