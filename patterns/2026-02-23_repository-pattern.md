@@ -1,10 +1,10 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** Cybersecurity-Projects
-**File:** PROJECTS/advanced/bug-bounty-platform/backend/app/program/repository.py
+**Repository:** CertGames-Core
+**File:** backend/api/domains/social/services/friendship_ops.py
 **Language:** python
-**Lines:** 1-233
+**Lines:** 1-515
 **Complexity:** 0.0
 
 ---
@@ -13,120 +13,92 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
-repository.py
+Friendship Service Operations
+/api/domains/social/services/friendship_ops.py
 """
 
-from collections.abc import Sequence
-from uuid import UUID
+from __future__ import annotations
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from bson import ObjectId
+from datetime import datetime, UTC, timedelta
 
-from config import ProgramStatus, ProgramVisibility
-from core.base_repository import BaseRepository
-from .Program import Program
-from .Asset import Asset
-from .RewardTier import RewardTier
+from api.core.validation.exceptions import NotFoundError
+from api.domains.account.models.User import User
+
+from ..types import (
+    FriendUserDict,
+    PendingRequestDict,
+    SentRequestDict,
+    SearchUserDict,
+)
+from ..models.Friendship import Friendship, FriendshipStatus
+from api.websockets.social.service import SocialSocketService
 
 
-class ProgramRepository(BaseRepository[Program]):
+class FriendshipService:
     """
-    Repository for Program model database operations
+    Service class for friendship operations
     """
-    model = Program
+    @staticmethod
+    def send_friend_request(
+        requester_id: str | ObjectId,
+        recipient_id: str | ObjectId,
+        existing_friendship_id: str | ObjectId | None = None
+    ) -> Friendship:
+        """
+        Create a new friend request or reuse existing rejected one
+        """
+        requester_id = ObjectId(requester_id) if isinstance(
+            requester_id,
+            str
+        ) else requester_id
+        recipient_id = ObjectId(recipient_id) if isinstance(
+            recipient_id,
+            str
+        ) else recipient_id
 
-    @classmethod
-    async def get_by_slug(
-        cls,
-        session: AsyncSession,
-        slug: str,
-    ) -> Program | None:
-        """
-        Get program by slug
-        """
-        result = await session.execute(
-            select(Program).where(Program.slug == slug)
-        )
-        return result.scalars().first()
+        if existing_friendship_id is not None:
+            existing_friendship_id = ObjectId(existing_friendship_id
+                                              ) if isinstance(
+                                                  existing_friendship_id,
+                                                  str
+                                              ) else existing_friendship_id
 
-    @classmethod
-    async def get_by_slug_with_details(
-        cls,
-        session: AsyncSession,
-        slug: str,
-    ) -> Program | None:
-        """
-        Get program by slug with assets and reward tiers
-        """
-        result = await session.execute(
-            select(Program).where(Program.slug == slug).options(
-                selectinload(Program.assets),
-                selectinload(Program.reward_tiers),
-            )
-        )
-        return result.scalars().first()
+            friendship = Friendship.objects(id = existing_friendship_id
+                                            ).first()
+            if friendship:
+                friendship.update(
+                    set__status = FriendshipStatus.PENDING.value,
+                    set__createdAt = datetime.now(UTC)
+                )
+                friendship.reload()
 
-    @classmethod
-    async def get_by_id_with_details(
-        cls,
-        session: AsyncSession,
-        program_id: UUID,
-    ) -> Program | None:
-        """
-        Get program by ID with assets and reward tiers
-        """
-        result = await session.execute(
-            select(Program).where(Program.id == program_id).options(
-                selectinload(Program.assets),
-                selectinload(Program.reward_tiers),
-            )
-        )
-        return result.scalars().first()
+                requester = User.objects(
+                    id = requester_id
+                ).only("username",
+                       "level",
+                       "currentAvatar",
+                       "nameColor").first()
 
-    @classmethod
-    async def slug_exists(
-        cls,
-        session: AsyncSession,
-        slug: str,
-    ) -> bool:
-        """
-        Check if slug is already taken
-        """
-        result = await session.execute(
-            select(Program.id).where(Program.slug == slug)
-        )
-        return result.scalars().first() is not None
+                if requester:
+                    SocialSocketService.emit_friend_request_received(
+                        friendship_id = str(friendship.id),
+                        requester_id = str(requester_id),
+                        requester_username = requester.username,
+                        requester_level = requester.level,
+                        requester_avatar = str(requester.currentAvatar)
+                        if requester.currentAvatar else None,
+                        requester_name_color = requester.nameColor,
+                        recipient_id = str(recipient_id),
+                        created_at = friendship.createdAt
+                    )
 
-    @classmethod
-    async def get_public_programs(
-        cls,
-        session: AsyncSession,
-        skip: int = 0,
-        limit: int = 20,
-    ) -> Sequence[Program]:
-        """
-        Get active public programs
-        """
-        result = await session.execute(
-            select(Program).where(
-                Program.status == ProgramStatus.ACTIVE,
-                Program.visibility == ProgramVisibility.PUBLIC,
-            ).order_by(Program.created_at.desc()
-                       ).offset(skip).limit(limit)
-        )
-        return result.scalars().all()
+                return friendship
 
-    @classmethod
-    async def count_public_programs(
-        cls,
-        session: AsyncSession,
-    ) -> int:
-        """
-        Count active public programs
-        """
-        result = await
+        friendship = Friendship(
+            requesterUserId = requester_id,
+            recipientUserId = recipient_id,
+ 
 ```
 
 ---
@@ -135,28 +107,26 @@ class ProgramRepository(BaseRepository[Program]):
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern
+**Pattern Used: Repository Pattern**
 
-#### Implementation in Code
-The `ProgramRepository`, `AssetRepository`, and `RewardTierRepository` classes are implementations of the repository pattern. Each class inherits from a base repository (`BaseRepository`) and provides methods for database operations specific to their respective models (e.g., `Program`, `Asset`, `RewardTier`). These methods include fetching entities by ID or slug, checking existence, getting public programs, counting records, and more.
+The `FriendshipService` class in the provided code implements a simplified version of the **Repository Pattern**, which abstracts data access operations and encapsulates business logic related to data retrieval and manipulation.
 
-#### Benefits
-1. **Encapsulation**: The pattern encapsulates all data access logic within the repository classes, making it easier to switch between different database systems.
-2. **Separation of Concerns**: It separates business logic from data access logic, improving code maintainability and testability.
-3. **Consistency**: Ensures a consistent approach to handling CRUD operations across multiple models.
+#### Implementation Details:
+- The `send_friend_request` and `accept_friend_request` methods use PyMongo's `objects` method to query, update, and save `Friendship` documents. These methods handle the creation, updating, and acceptance of friend requests.
+- The `User` model is used to fetch user details based on their IDs.
 
-#### Deviations
-- The `BaseRepository` is not explicitly defined in the provided snippet, but it likely abstracts common repository functionalities like session management or basic CRUD operations.
-- Some methods (e.g., `get_by_company`, `count_by_company`) are specific to certain conditions and might require additional logic depending on the context.
+#### Benefits:
+1. **Encapsulation**: Data access logic (e.g., querying MongoDB) is encapsulated within the service class, making it easier to manage and test.
+2. **Separation of Concerns**: Business logic related to friend requests is separated from data access logic, improving code organization and maintainability.
+3. **Flexibility**: The pattern allows for easy switching between different storage mechanisms or databases.
 
-#### Appropriateness
-This pattern is highly appropriate for this scenario because:
-1. **Complex Queries**: The code handles complex queries involving multiple joins and filters, which are common in database operations.
-2. **Scalability**: It can easily accommodate more models or operations as the application grows.
-3. **Maintenance**: By centralizing data access logic, it simplifies maintenance and reduces the risk of introducing bugs.
+#### Deviations:
+- The `Repository Pattern` typically involves a dedicated repository class that handles all data operations. Here, the service class directly interacts with MongoDB using PyMongo methods.
+- The pattern is not fully adhered to since there are no separate repository classes; instead, the service class performs both business logic and data access.
 
-Overall, the repository pattern is well-suited for managing database interactions in a structured and scalable manner.
+#### Appropriateness:
+This pattern is appropriate for small-scale applications or when a full-fledged repository layer is not necessary. However, in larger systems, it might be beneficial to introduce dedicated repository classes for better separation of concerns and testability.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 07:41*
+*Generated by CodeWorm on 2026-02-23 13:26*
