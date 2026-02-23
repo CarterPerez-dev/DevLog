@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** angela
-**File:** internal/pyproject/writer_test.go
+**File:** internal/requirements/writer_test.go
 **Language:** go
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -15,144 +15,104 @@
 Commit: ea4cc501
 Message: Create canonical module source location - release v1.0.0
 Author: CarterPerez-dev
-File: internal/pyproject/writer_test.go
+File: internal/requirements/writer_test.go
 Change type: new file
 
 Diff:
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,92 @@
 +// ©AngelaMos | 2026
 +// writer_test.go
 +
-+package pyproject
++package requirements
 +
 +import (
++	"os"
++	"path/filepath"
 +	"strings"
 +	"testing"
 +)
 +
-+const sampleTOML = `# Project configuration
-+[project]
-+name = "myapp"
-+version = "1.0.0"
++func TestUpdateFile(t *testing.T) {
++	t.Parallel()
 +
-+# Core dependencies
-+dependencies = [
-+    "requests>=2.28.0",  # HTTP library
-+    "django>=3.2,<4.0",
-+    "flask[async]>=2.0",
-+    "numpy",
-+]
-+
-+[project.optional-dependencies]
-+# Development tools
-+dev = [
-+    "pytest>=7.0.0",
-+    "black==23.7.0",  # Code formatter
-+]
++	content := `# Core deps
++django>=3.2.0
++requests==2.28.1  # HTTP client
++flask>=2.0.0
 +`
 +
-+func TestUpdaterPreservesComments(t *testing.T) {
-+	t.Parallel()
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
 +
-+	u, err := NewUpdater([]byte(sampleTOML))
-+	if err != nil {
-+		t.Fatalf("NewUpdater error: %v", err)
-+	}
-+
-+	if err := u.UpdateDependency("requests", ">=2.31.0"); err != nil {
-+		t.Fatalf("UpdateDependency error: %v", err)
++	updates := map[string]string{
++		"django":   ">=6.0.1",
++		"requests": ">=2.32.5",
 +	}
 +
-+	result := string(u.Bytes())
-+
-+	if !strings.Contains(result, `"requests>=2.31.0"`) {
-+		t.Error("version was not updated")
-+	}
-+	if !strings.Contains(result, "# HTTP library") {
-+		t.Error("inline comment was lost")
-+	}
-+	if !strings.Contains(result, "# Project configuration") {
-+		t.Error("header comment was lost")
-+	}
-+	if !strings.Contains(result, "# Core dependencies") {
-+		t.Error("section comment was lost")
-+	}
-+	if !strings.Contains(result, "# Development tools") {
-+		t.Error("optional-deps comment was lost")
-+	}
-+}
-+
-+func TestUpdaterPreservesExtras(t *testing.T) {
-+	t.Parallel()
-+
-+	u, err := NewUpdater([]byte(sampleTOML))
-+	if err != nil {
-+		t.Fatal(err)
++	if err := UpdateFile(path, updates); err != nil {
++		t.Fatalf("UpdateFile: %v", err)
 +	}
 +
-+	if err := u.UpdateDependency("flask", ">=3.0"); err != nil {
-+		t.Fatal(err)
-+	}
++	data, _ := os.ReadFile(path) //nolint:errcheck,gosec
++	result := string(data)
 +
-+	result := string(u.Bytes())
-+	if !strings.Contains(result, `"flask[async]>=3.0"`) {
-+		t.Errorf("extras lost or version not updated: %s", result)
++	if !strings.Contains(result, "django>=6.0.1") {
++		t.Error("django not updated")
++	}
++	if !strings.Contains(result, "requests>=2.32.5") {
++		t.Error("requests not updated")
++	}
++	if !strings.Contains(result, "# Core deps") {
++		t.Error("comment lost")
++	}
++	if !strings.Contains(result, "# HTTP client") {
++		t.Error("inline comment lost")
++	}
++	if !strings.Contains(result, "flask>=2.0.0") {
++		t.Error("flask was incorrectly modified")
 +	}
 +}
 +
-+func TestUpdaterHandlesExactPin(t *testing.T) {
++func TestUpdateFilePreservesFormatting(t *testing.T) {
 +	t.Parallel()
 +
-+	u, err := NewUpdater([]byte(sampleTOML))
-+	if err != nil {
-+		t.Fatal(err)
++	content := "Django>=3.2.0\nnumpy==1.24.0\n"
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte(content), 0o600) //nolint:errcheck
++
++	updates := map[string]string{
++		"django": ">=6.0.1",
 +	}
 +
-+	if err := u.UpdateDependency("black", ">=24.0.0"); err != nil {
-+		t.Fatal(err)
++	if err := UpdateFile(path, updates); err != nil {
++		t.Fatalf("UpdateFile: %v", err)
 +	}
 +
-+	result := string(u.Bytes())
-+	if !strings.Contains(result, `"black>=24.0.0"`) {
-+		t.Errorf("exact pin not updated: %s", result)
++	data, _ := os.ReadFile(path) //nolint:errcheck,gosec
++	result := string(data)
++
++	if !strings.Contains(result, "Django>=6.0.1") {
++		t.Error("original casing not preserved")
 +	}
-+	if !strings.Contains(result, "# Code formatter") {
-+		t.Error("inline comment was lost")
++	if !strings.Contains(result, "numpy==1.24.0") {
++		t.Error("numpy was incorrectly modified")
 +	}
 +}
 +
-+func TestUpdaterNotFound(t *testing.T) {
++func TestUpdateFileNotFound(t *testing.T) {
 +	t.Parallel()
 +
-+	u, err := NewUpdater([]byte(sampleTOML))
-+	if err != nil {
-+		t.Fatal(err)
-+	}
++	path := filepath.Join(t.TempDir(), "requirements.txt")
++	os.WriteFile(path, []byte("flask>=2.0.0\n"), 0o600) //nolint:errcheck
 +
-+	err = u.UpdateDependency("nonexistent", ">=1.0")
++	err := UpdateFile(path, map[string]string{
++		"nonexistent": ">=1.0.0",
++	})
 +	if err == nil {
-+		t.Fatal("expected error for missing dependency")
++		t.Error("expected error for missing dependency")
 +	}
 +}
-+
-+func TestUpdaterSkipsBareNames(t *testing.T) {
-+	t.Parallel()
-+
-+	u, err := NewUpdater([]byte(sampleTOML))
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+
-+	err = u.UpdateDependency("numpy", ">=1.26.0")
-+	if err == nil {
-+		t.Fatal("expected error: bare name has no version spec to match")
-+	}
-+}
-+
-+func TestUpdaterMultipleUpdates(t *testing.T) {
-+	t.Parallel()
-+
-+	u
+
 ```
 
 ---
@@ -161,18 +121,18 @@ Diff:
 
 ### Change Analysis
 
-**What was Changed:** 
-A new test file `writer_test.go` was added to the `internal/pyproject` package, containing multiple test functions that validate the behavior of a TOML updater. The tests cover various scenarios such as preserving comments and extras, handling exact pins, updating dependencies with or without version specifications, and managing invalid TOML inputs.
+**What was Changed**: 
+A new file `writer_test.go` was added to the `internal/requirements` package, containing three test functions: `TestUpdateFile`, `TestUpdateFilePreservesFormatting`, and `TestUpdateFileNotFound`. These tests verify that the `UpdateFile` function correctly updates dependencies in a requirements file while preserving formatting and handling non-existent dependencies.
 
-**Why it Was Likely Changed:**
-This change was likely made to ensure robust testing of the TOML updater functionality. By adding comprehensive test cases, the developer aims to verify that the updater correctly updates dependency versions while preserving comments and extras, handles missing dependencies gracefully, and rejects invalid input formats.
+**Why it was Likely Changed**: 
+This change likely aims to ensure robustness in dependency management by validating how the `UpdateFile` function handles various scenarios, including updating multiple packages, preserving original line formatting, and gracefully handling non-existent package names. The tests are crucial for maintaining the integrity of requirement files during automated updates.
 
-**Impact on Behavior:**
-The addition of these tests will help maintain the integrity of the TOML updater by ensuring it behaves as expected in different scenarios. This is crucial for any package management tool or build system that relies on updating dependency versions accurately.
+**Impact on Behavior**: 
+The introduction of these tests ensures that any future modifications to the `UpdateFile` function will be validated against a comprehensive set of use cases. This enhances code reliability and helps prevent regressions in dependency management logic.
 
-**Risks or Concerns:**
-While the tests are thorough, they assume that the `NewUpdater` function and its dependencies work correctly. Any issues with these underlying components could lead to false positives or negatives in the test results. Additionally, the tests may need periodic updates if the implementation of the updater changes significantly.
+**Risks or Concerns**: 
+While the new tests cover multiple scenarios, there is a risk if the actual implementation of `UpdateFile` does not fully align with the test expectations. Additionally, the use of `nolint:errcheck` and `nolint:gosec` in the code suggests potential issues that should be addressed to improve overall security and error handling practices.
 
 ---
 
-*Generated by CodeWorm on 2026-02-23 14:24*
+*Generated by CodeWorm on 2026-02-23 14:43*
