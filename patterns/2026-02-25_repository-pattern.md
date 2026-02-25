@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/analytics/facets/data_input/service.py
+**File:** CarterOS-Server/src/aspects/life_manager/facets/checklist/service.py
 **Language:** python
-**Lines:** 1-185
+**Lines:** 1-251
 **Complexity:** 0.0
 
 ---
@@ -17,105 +17,117 @@
 service.py
 """
 
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import ResourceNotFound
-from aspects.analytics.facets.data_input.repository import TikTokVideoRepository
-from aspects.analytics.facets.data_input.schemas import (
-    TikTokVideoCreate,
-    TikTokVideoUpdate,
-    TikTokVideoResponse,
-    TikTokVideoListResponse,
+from aspects.life_manager.facets.checklist.repository import (
+    ChecklistItemRepository,
+    ChecklistLogRepository,
 )
+from aspects.life_manager.facets.checklist.schemas import (
+    ChecklistItemCreate,
+    ChecklistItemUpdate,
+    ChecklistItemResponse,
+    ChecklistItemListResponse,
+    ChecklistLogResponse,
+    ChecklistDayResponse,
+    ChecklistLogUpdate,
+    ChecklistStatsResponse,
+    HeatmapDay,
+    ItemStat,
+)
+from aspects.life_manager.facets.checklist.models import ChecklistLog
 
 
-class TikTokVideoNotFound(ResourceNotFound):
+class ChecklistItemNotFound(ResourceNotFound):
     """
-    Raised when TikTok video not found
+    Raised when a checklist item is not found
     """
-    def __init__(self, video_id: UUID) -> None:
+    def __init__(self, item_id: UUID) -> None:
         super().__init__(
-            resource = "TikTokVideo",
-            identifier = str(video_id)
+            resource = "ChecklistItem",
+            identifier = str(item_id)
         )
 
 
-class DataInputService:
+class ChecklistLogNotFound(ResourceNotFound):
     """
-    Service for TikTok video data input operations
+    Raised when a checklist log entry is not found
+    """
+    def __init__(self, log_id: UUID) -> None:
+        super().__init__(
+            resource = "ChecklistLog",
+            identifier = str(log_id)
+        )
+
+
+def _to_log_response(log: ChecklistLog) -> ChecklistLogResponse:
+    """
+    Convert a ChecklistLog ORM instance to ChecklistLogResponse
+    """
+    return ChecklistLogResponse(
+        id = log.id,
+        created_at = log.created_at,
+        updated_at = log.updated_at,
+        item_id = log.item_id,
+        log_date = log.log_date,
+        completed = log.completed,
+        note = log.note,
+        item_title = log.item.title,
+        item_sort_order = log.item.sort_order,
+    )
+
+
+class ChecklistService:
+    """
+    Service for checklist operations
     """
     @staticmethod
-    async def create_video(
-        session: AsyncSession,
-        data: TikTokVideoCreate,
-    ) -> TikTokVideoResponse:
+    async def get_items(
+        session: AsyncSession
+    ) -> ChecklistItemListResponse:
         """
-        Create a TikTok video record
+        Get all active checklist items
         """
-        video = await TikTokVideoRepository.create(
-            session,
-            rank = data.rank,
-            date_posted = data.date_posted,
-            video_url = data.video_url,
-            views = data.views,
-            comments = data.comments,
-            likes = data.likes,
-            bookmarks = data.bookmarks,
-            shares = data.shares,
-            avg_watch_time = data.avg_watch_time,
-            new_followers = data.new_followers,
-            watched_full_video_percentage = data.
-            watched_full_video_percentage,
-            top_comment_words = data.top_comment_words,
-            search_queries = data.search_queries,
-            traffic_sources = data.traffic_sources,
-            hook = data.hook,
-            text_on_screen_hook = data.text_on_screen_hook,
-            length = data.length,
-            description = data.description,
-            hashtags = data.hashtags,
-            cta = data.cta,
-            full_transcription = data.full_transcription,
-            notes = data.notes,
-        )
-        return TikTokVideoResponse.model_validate(video)
-
-    @staticmethod
-    async def get_video(
-        session: AsyncSession,
-        video_id: UUID,
-    ) -> TikTokVideoResponse:
-        """
-        Get a single video by ID
-        """
-        video = await TikTokVideoRepository.get_by_id(session, video_id)
-        if not video:
-            raise TikTokVideoNotFound(video_id)
-        return TikTokVideoResponse.model_validate(video)
-
-    @staticmethod
-    async def get_all_videos(
-        session: AsyncSession,
-        page: int = 1,
-        page_size: int = 50,
-    ) -> TikTokVideoListResponse:
-        """
-        Get all videos with pagination
-        """
-        skip = (page - 1) * page_size
-        videos = await TikTokVideoRepository.get_multi(
-            session,
-            skip = skip,
-            limit = page_size
-        )
-        total = await TikTokVideoRepository.count(session)
-
-        return TikTokVideoListResponse(
+        items = await ChecklistItemRepository.get_active(session)
+        return ChecklistItemListResponse(
             items = [
- 
+                ChecklistItemResponse.model_validate(i) for i in items
+            ]
+        )
+
+    @staticmethod
+    async def create_item(
+        session: AsyncSession,
+        data: ChecklistItemCreate,
+    ) -> ChecklistItemResponse:
+        """
+        Create a new checklist item
+        """
+        item = await ChecklistItemRepository.create(
+            session,
+            title = data.title,
+            sort_order = data.sort_order,
+        )
+        return ChecklistItemResponse.model_validate(item)
+
+    @staticmethod
+    async def update_item(
+        session: AsyncSession,
+        item_id: UUID,
+        data: ChecklistItemUpdate,
+    ) -> ChecklistItemResponse:
+        """
+        Update a checklist item
+        """
+        item = await ChecklistItemRepository.get_by_id(session, item_id)
+        if not item:
+            raise ChecklistItemNotFound(item_id)
+
+        update_
 ```
 
 ---
@@ -126,25 +138,24 @@ class DataInputService:
 
 **Pattern Used:** Repository Pattern
 
-#### Implementation
-The `DataInputService` class encapsulates operations related to TikTok video data input, delegating database interactions to the `TikTokVideoRepository`. This repository handles CRUD (Create, Read, Update, Delete) and search operations. For example:
-- `create_video`, `get_video`, `update_video`, and `delete_video` methods call corresponding methods on `TikTokVideoRepository`.
-- `search_videos` and `get_videos_by_date_range` use custom repository methods to filter data.
+The **Repository Pattern** is implemented in the `ChecklistService` class, which abstracts database operations through methods like `get_items`, `create_item`, and `update_log`. Each method interacts with repositories (`ChecklistItemRepository` and `ChecklistLogRepository`) to perform CRUD (Create, Read, Update, Delete) operations.
 
-#### Benefits
-1. **Decoupling**: The service layer is decoupled from the database implementation, making it easier to switch databases or modify storage logic without changing the service code.
-2. **Maintainability**: Repository methods can be easily tested and modified independently of the business logic in the service class.
-3. **Consistency**: Ensures that all data access operations follow a consistent pattern, reducing errors.
+**Implementation:**
+- **Repositories**: The code uses separate repository classes for `ChecklistItem` and `ChecklistLog` models. These repositories handle the database interactions.
+- **Service Layer**: The service layer (`ChecklistService`) acts as a facade, providing high-level business logic while delegating low-level data access to the repositories.
 
-#### Deviations
-- The `DataInputService` uses static methods for each operation, which is slightly different from the typical instance-based repository pattern where repositories are often instances with state.
-- Custom validation and error handling (e.g., raising `TikTokVideoNotFound`) are done in service methods rather than within the repository.
+**Benefits:**
+1. **Separation of Concerns**: The repository pattern clearly separates data access concerns from business logic, making the code more maintainable and testable.
+2. **Testability**: Repositories can be easily mocked or replaced with in-memory databases for unit testing.
+3. **Flexibility**: Changes to database technology (e.g., switching from SQLAlchemy ORM to a different ORM) require minimal changes outside the repository layer.
 
-#### Appropriateness
-The Repository Pattern is highly appropriate here because:
-- The application needs to interact with a database, and separation of concerns between business logic and data access is crucial.
-- Custom validation and error handling can be managed more effectively at the service level.
+**Deviations:**
+- The service methods are static, which might not always align with the intent of the repository pattern where services often encapsulate business logic and interact with multiple repositories.
+- Some methods like `get_day` involve additional logic (auto-init logs if first visit), which slightly deviates from the pure CRUD operations.
+
+**Appropriateness:**
+This pattern is highly appropriate for this context, as it effectively separates data access concerns and provides a clear structure for handling business logic. The static nature of service methods can be justified in scenarios where they are stateless or when the service layer is relatively simple. However, if more complex business logic emerges, consider making services instance-based to encapsulate state and dependencies better.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 18:06*
+*Generated by CodeWorm on 2026-02-25 18:51*
