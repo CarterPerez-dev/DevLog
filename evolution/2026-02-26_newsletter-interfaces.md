@@ -1,0 +1,147 @@
+# newsletter.interfaces
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/newsletter/types/newsletter.interfaces.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 45920f64
+Message: refactor(domains): migrate small domain interfaces to Zod schemas
+
+Convert newsletter, onboarding, daily, leaderboard, and achievement
+domains from manual TypeScript interfaces + manual type guards to
+Zod schemas + Zod-wrapped guards (Task 2 of Zod migration).
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/newsletter/types/newsletter.interfaces.ts
+Change type: modified
+
+Diff:
+@@ -1,75 +1,89 @@
+ // ===========================
+-// Newsletter Interfaces
+-// ©AngelaMos | 2025
++// © AngelaMos | 2026
++// newsletter.interfaces.ts
+ // ===========================
+ 
++import { z } from 'zod';
++
+ export interface NewsletterSubscribeRequest {
+   email: string;
+ }
+ 
+-export interface NewsletterSubscribeResponse {
+-  email: string;
+-  subscribed: boolean;
+-  resubscribed: boolean;
+-  subscribedAt: string | null;
+-}
++export const newsletterSubscribeResponseSchema = z.object({
++  email: z.string(),
++  subscribed: z.boolean(),
++  resubscribed: z.boolean(),
++  subscribedAt: z.string().nullable(),
++});
++
++export type NewsletterSubscribeResponse = z.infer<typeof newsletterSubscribeResponseSchema>;
+ 
+ export interface NewsletterUnsubscribeRequest {
+   email: string;
+ }
+ 
+-export interface NewsletterUnsubscribeResponse {
+-  email: string;
+-  unsubscribed: boolean;
+-  unsubscribedAt: string | null;
+-}
++export const newsletterUnsubscribeResponseSchema = z.object({
++  email: z.string(),
++  unsubscribed: z.boolean(),
++  unsubscribedAt: z.string().nullable(),
++});
++
++export type NewsletterUnsubscribeResponse = z.infer<typeof newsletterUnsubscribeResponseSchema>;
+ 
+ export interface NewsletterUnsubscribeTokenParams {
+   token: string;
+ }
+ 
+-export interface NewsletterSubscriber {
+-  email: string;
+-  subscribedAt: string | null;
+-  unsubscribed: boolean;
+-  unsubscribedAt: string | null;
+-  openCount: number;
+-  clickCount: number;
+-  createdAt: string | null;
+-  updatedAt: string | null;
+-}
++export const newsletterSubscriberSchema = z.object({
++  email: z.string(),
++  subscribedAt: z.string().nullable(),
++  unsubscribed: z.boolean(),
++  unsubscribedAt: z.string().nullable(),
++  openCount: z.number(),
++  clickCount: z.number(),
++  createdAt: z.string().nullable(),
++  updatedAt: z.string().nullable(),
++});
+ 
+-export interface NewsletterCampaign {
+-  campaignId: string;
+-  subject: string;
+-  content: string;
+-  plainTextContent: string | null;
+-  sentAt: string | null;
+-  scheduledFor: string | null;
+-  sentBy: string | null;
+-  recipientCount: number;
+-  openCount: number;
+-  clickCount: number;
+-  unsubscribeCount: number;
+-  bounceCount: number;
+-  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+-  openRate: string;
+-  clickRate: string;
+-  createdAt: string | null;
+-  updatedAt: string | null;
+-}
++export type NewsletterSubscriber = z.infer<typeof newsletterSubscriberSchema>;
+ 
+-export interface NewsletterStats {
+-  totalSubscribers: number;
+-  activeSubscribers: number;
+-  unsubscribedCount: number;
+-  averageOpenRate:
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code refactors the `newsletter.interfaces.ts` file by converting all interfaces related to newsletters into Zod schemas and adding corresponding type guard functions. This includes `NewsletterSubscribeResponse`, `NewsletterUnsubscribeResponse`, `NewsletterSubscriber`, `NewsletterCampaign`, `NewsletterStats`, and `NewsletterError`.
+
+**Why it was Likely Changed:**
+This change is part of a larger refactoring effort to migrate from manual TypeScript interfaces and type guards to Zod schemas, which provide stronger validation capabilities. This transition enhances the robustness of data handling by ensuring that only valid data can pass through these schemas.
+
+**Impact on Behavior:**
+The primary impact is improved data validation and consistency across the application. While the behavior of the newsletter domain logic remains unchanged, there are now more precise checks to ensure data integrity during operations like subscribing or unsubscribing users.
+
+**Risks or Concerns:**
+There could be a risk if the Zod schemas do not fully align with existing implementation details (e.g., nullable fields). Careful testing is required to ensure that all edge cases and current behaviors are preserved. Additionally, the introduction of new schema validation might introduce performance overhead, though this should be minimal given modern JavaScript engines' optimization for such operations.
+
+Overall, this change enhances data handling robustness without altering core functionality.
+
+---
+
+*Generated by CodeWorm on 2026-02-26 07:43*
