@@ -1,0 +1,155 @@
+# support.interfaces
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/community/types/support.interfaces.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 8086f947
+Message: refactor(domains): migrate medium domain interfaces to Zod schemas
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/community/types/support.interfaces.ts
+Change type: modified
+
+Diff:
+@@ -1,18 +1,21 @@
+ // ===========================
+-// Support Interfaces
+-// ©AngelaMos | 2025
++// © AngelaMos | 2026
++// support.interfaces.ts
+ // ===========================
+ 
+-import type { ThreadStatus, MessageSender } from './support.enums';
++import { z } from 'zod';
++import type { ThreadStatus } from './support.enums';
+ 
+-export interface SupportMessage {
+-  id: string;
+-  content: string;
+-  timestamp: string;
+-  isAdmin: boolean;
+-  userId?: string;
+-  sender?: MessageSender;
+-}
++export const supportMessageSchema = z.object({
++  id: z.string(),
++  content: z.string(),
++  timestamp: z.string(),
++  isAdmin: z.boolean(),
++  userId: z.string().optional(),
++  sender: z.enum(['user', 'admin']).optional(),
++});
++
++export type SupportMessage = z.infer<typeof supportMessageSchema>;
+ 
+ export interface SupportThreadListItem {
+   id: string;
+@@ -35,54 +38,69 @@ export interface SupportThreadDetail {
+   updatedAt: string | null;
+ }
+ 
+-export interface SupportThreadListResponse {
+-  threads: SupportThreadListItem[];
+-}
++export const supportThreadListResponseSchema = z.object({
++  threads: z.array(
++    z.object({
++      id: z.string(),
++      subject: z.string(),
++      status: z.string(),
++      messageCount: z.number(),
++      lastMessage: supportMessageSchema.nullable(),
++      createdAt: z.string().nullable(),
++      updatedAt: z.string().nullable(),
++    }),
++  ),
++});
+ 
+-export interface SupportThreadDetailResponse {
+-  id: string;
+-  userId: string;
+-  subject: string;
+-  status: ThreadStatus;
+-  messages: SupportMessage[];
+-  messageCount: number;
+-  createdAt: string | null;
+-  updatedAt: string | null;
+-}
++export type SupportThreadListResponse = z.infer<
++  typeof supportThreadListResponseSchema
++>;
++
++export const supportThreadDetailResponseSchema = z.object({
++  id: z.string(),
++  userId: z.string(),
++  subject: z.string(),
++  status: z.string(),
++  messages: z.array(supportMessageSchema),
++  messageCount: z.number(),
++  createdAt: z.string().nullable(),
++  updatedAt: z.string().nullable(),
++});
++
++export type SupportThreadDetailResponse = z.infer<
++  typeof supportThreadDetailResponseSchema
++>;
+ 
+ export interface CreateThreadRequest {
+   subject: string;
+ }
+ 
+-export interface CreateThreadResponse {
+-  id: string;
+-  userId: string;
+-  subject: string;
+-  status: ThreadStatus;
+-  messages: SupportMessage[];
+-  messageCount: number;
+-  createdAt: string | null;
+-  updatedAt: string | null;
+-}
++export const createThreadResponseSchema = supportThreadDetailResponseSchema;
++
++export type CreateThreadResponse = z.infer<typeof createThreadResponseSchema>;
+ 
+ export interface SendMessageRequest {
+   content: string;
+ }
+ 
+-export interface SendMessageResponse {
+-  messageId: string;
+-  timestamp: string;
+-  threadReopened: boolean
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was changed:**
+The code in `support.interfaces.ts` was refactored to use Zod schemas for validation and type inference instead of plain TypeScript interfaces. This involved replacing the old interface definitions with Zod schema objects, and then using `z.infer` to derive the corresponding types.
+
+**Why it was likely changed:**
+This change is likely part of a broader effort to standardize data validation across the application using Zod, which provides robust type checking and validation capabilities. Using Zod schemas can help ensure that incoming data conforms to expected structures, reducing potential runtime errors and improving code maintainability.
+
+**Impact on behavior:**
+The primary impact is on how support-related data is validated and inferred in the application. Previously, TypeScript interfaces were used for both types and validation; now, Zod schemas are responsible for validation while the `z.infer` function provides the type definitions. This change does not alter the public API but may affect internal implementation details.
+
+**Risks or concerns:**
+- **Backward Compatibility:** Ensure that existing code using these interfaces/types works seamlessly with the new schema-based approach.
+- **Error Handling:** Zod schemas can provide more detailed error messages, which might require adjustments in how errors are handled and displayed to users.
+- **Performance Impact:** While unlikely significant for this specific change, it's worth monitoring if there are performance implications due to additional validation steps.
+
+---
+
+*Generated by CodeWorm on 2026-02-25 23:49*
