@@ -1,0 +1,127 @@
+# achievement.guards
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/achievement/types/achievement.guards.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 45920f64
+Message: refactor(domains): migrate small domain interfaces to Zod schemas
+
+Convert newsletter, onboarding, daily, leaderboard, and achievement
+domains from manual TypeScript interfaces + manual type guards to
+Zod schemas + Zod-wrapped guards (Task 2 of Zod migration).
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/achievement/types/achievement.guards.ts
+Change type: modified
+
+Diff:
+@@ -1,8 +1,26 @@
+ // ===========================
+-// Achievement Type Guards
+-// ©AngelaMos | 2025
++// © AngelaMos | 2026
++// achievement.guards.ts
+ // ===========================
+ 
++import {
++  achievementBaseSchema,
++  achievementCriteriaSchema,
++  achievementProgressDetailsSchema,
++  achievementProgressSchema,
++  userAchievementSchema,
++  achievementSummarySchema,
++  achievementStatisticsDataSchema,
++  achievementCatalogResponseSchema,
++  achievementDetailResponseSchema,
++  achievementStatisticsResponseSchema,
++  userAchievementProgressResponseSchema,
++  userAchievementsResponseSchema,
++  unlockAchievementResponseSchema,
++  gameAchievementSchema,
++  gameAchievementsByTypeSchema,
++  gameAchievementSummarySchema,
++} from './achievement.interfaces';
+ import type {
+   AchievementBase,
+   AchievementCriteria,
+@@ -25,326 +43,95 @@ import type {
+ export const isValidAchievementCriteria = (
+   data: unknown,
+ ): data is AchievementCriteria => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    (obj.level === undefined || typeof obj.level === 'number') &&
+-    (obj.coins === undefined || typeof obj.coins === 'number') &&
+-    (obj.testCount === undefined || typeof obj.testCount === 'number') &&
+-    (obj.perfectTests === undefined ||
+-      typeof obj.perfectTests === 'number') &&
+-    (obj.totalQuestions === undefined ||
+-      typeof obj.totalQuestions === 'number') &&
+-    (obj.minScore === undefined || typeof obj.minScore === 'number') &&
+-    (obj.minScoreBefore === undefined ||
+-      typeof obj.minScoreBefore === 'number') &&
+-    (obj.minScoreAfter === undefined ||
+-      typeof obj.minScoreAfter === 'number')
+-  );
++  return achievementCriteriaSchema.safeParse(data).success;
+ };
+ 
+ export const isValidAchievementBase = (
+   data: unknown,
+ ): data is AchievementBase => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.achievementId === 'string' &&
+-    typeof obj.title === 'string' &&
+-    typeof obj.description === 'string' &&
+-    typeof obj.category === 'string' &&
+-    typeof obj.xpReward === 'number' &&
+-    typeof obj.coinReward === 'number' &&
+-    (obj.iconUrl === null || typeof obj.iconUrl === 'string') &&
+-    typeof obj.hidden === 'boolean' &&
+-    isValidAchievementCriteria(obj.criteria) &&
+-    (obj.createdAt === null || typeof obj.createdAt === 'string') &&
+-    (ob
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code refactors the validation logic for various achievement-related interfaces from manual TypeScript type guards to Zod schemas. This includes converting `isValidAchievementCriteria`, `isValidAchievementBase`, `isValidAchievementProgressDetails`, and `isValidUserAchievement` functions into Zod schema validations.
+
+**Why it was Likely Changed:**
+This change is part of a broader effort to migrate the project's validation logic from manual TypeScript type guards to Zod schemas. Zod provides more robust, expressive, and reusable validation capabilities compared to traditional type guards, making the codebase easier to maintain and extend.
+
+**Impact on Behavior:**
+The behavior remains the same; these functions still validate that the input data conforms to the expected structure of an achievement-related object. However, the implementation now leverages Zod's schema parsing methods (`safeParse`), which can provide more detailed error messages and better handling of validation failures.
+
+**Risks or Concerns:**
+- **Backward Compatibility:** Ensure that all existing code using these guards works correctly with the new schemas.
+- **Error Handling:** Verify that the Zod validation errors are handled appropriately, as they might differ from the previous type guard approach.
+- **Performance Impact:** While unlikely significant, there could be a minor performance overhead due to additional schema parsing.
+
+Overall, this refactoring improves code quality and maintainability while maintaining functional equivalence.
+
+---
+
+*Generated by CodeWorm on 2026-02-25 23:23*
