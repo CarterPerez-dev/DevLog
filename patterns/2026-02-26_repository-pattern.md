@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/life_manager/facets/notes/repository.py
+**File:** CarterOS-Server/src/core/security/auth/dependencies.py
 **Language:** python
-**Lines:** 1-206
+**Lines:** 1-147
 **Complexity:** 0.0
 
 ---
@@ -13,124 +13,130 @@
 
 ```python
 """
-ⒸAngelaMos | 2026
-repository.py
+ⒸAngelaMos | 2025
+dependencies.py
 """
 
-from collections.abc import Sequence
+from __future__ import annotations
+
+from typing import Annotated
 from uuid import UUID
 
-from sqlalchemy import select
+import jwt
+from fastapi import Depends, Request
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.foundation.repositories.base import BaseRepository
-from aspects.life_manager.facets.notes.models import Note, NoteFolder
-from datetime import UTC
+from config import (
+    API_PREFIX,
+    TokenType,
+    UserRole,
+)
+from core.infrastructure.database.session import get_db_session
+from core.exceptions import (
+    InactiveUser,
+    PermissionDenied,
+    TokenError,
+    TokenRevokedError,
+    UserNotFound,
+)
+from aspects.auth.models.User import User
+from core.security.auth.jwt import decode_access_token
+from aspects.auth.repositories.user import UserRepository
 
 
-class NoteFolderRepository(BaseRepository[NoteFolder]):
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl = f"{API_PREFIX}/auth/login",
+    auto_error = True,
+)
+
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl = f"{API_PREFIX}/auth/login",
+    auto_error = False,
+)
+
+DBSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+async def get_current_user(
+    token: Annotated[str,
+                     Depends(oauth2_scheme)],
+    db: DBSession,
+) -> User:
     """
-    Repository for NoteFolder operations
+    Validate access token and return current user
     """
-    model = NoteFolder
+    try:
+        payload = decode_access_token(token)
+    except jwt.InvalidTokenError as e:
+        raise TokenError(message = str(e)) from e
 
-    @classmethod
-    async def get_all(
-        cls,
-        session: AsyncSession,
-    ) -> Sequence[NoteFolder]:
-        """
-        Get all non-deleted folders ordered by sort_order and name
-        """
-        result = await session.execute(
-            select(NoteFolder).where(
-                NoteFolder.deleted_at.is_(None)
-            ).order_by(NoteFolder.sort_order,
-                       NoteFolder.name)
-        )
-        return result.scalars().all()
+    if payload.get("type") != TokenType.ACCESS.value:
+        raise TokenError(message = "Invalid token type")
 
-    @classmethod
-    async def get_deleted(
-        cls,
-        session: AsyncSession,
-    ) -> Sequence[NoteFolder]:
-        """
-        Get all soft-deleted folders
-        """
-        result = await session.execute(
-            select(NoteFolder).where(
-                NoteFolder.deleted_at.is_not(None)
-            ).order_by(NoteFolder.deleted_at.desc())
-        )
-        return result.scalars().all()
+    user_id = UUID(payload["sub"])
+    user = await UserRepository.get_by_id(db, user_id)
 
-    @classmethod
-    async def soft_delete(
-        cls,
-        session: AsyncSession,
-        folder: NoteFolder,
-    ) -> NoteFolder:
-        """
-        Soft delete a folder
-        """
-        from datetime import datetime
-        folder.deleted_at = datetime.now(UTC)
-        await session.flush()
-        await session.refresh(folder)
-        return folder
+    if user is None:
+        raise UserNotFound(identifier = str(user_id))
 
-    @classmethod
-    async def restore(
-        cls,
-        session: AsyncSession,
-        folder: NoteFolder,
-    ) -> NoteFolder:
-        """
-        Restore a soft-deleted folder
-        """
-        folder.deleted_at = None
-        await session.flush()
-        await session.refresh(folder)
-        return folder
+    if payload.get("token_version") != user.token_version:
+        raise TokenRevokedError()
 
-    @classmethod
-    async def bulk_soft_delete(
-        cls,
-        session: AsyncSession,
-        folder_ids: list[UUID],
-    ) -> int:
-        """
-        Bulk soft delete multiple folders by their IDs
-        """
-        from datetime import datetime
-        from sqlalchemy import update
-
-        result = await session.execute(
-            update(NoteFolder).where(NoteFolder.id.in_(folder_ids)).where(
-                NoteFolder.deleted_at.is_(None)
-            ).values(deleted_at = datetime.now(UTC))
-        )
-        await session.flush()
-        return result.rowcount
+    return user
 
 
-class NoteRepository(BaseRepository[Note]):
+async def get_current_active_user(
+    user: Annotated[User,
+                    Depends(get_current_user)],
+) -> User:
     """
-    Repository for Note operations
+    Ensure user is active
     """
-    model = Note
+    if not user.is_active:
+        raise InactiveUser()
+    return user
 
-    @classmethod
-    async def get_all(
-        cls,
-        session: AsyncSession,
-        folder_id: UUID | None = None,
-    ) -> Sequence[Note]:
-        """
-        Get all non-deleted notes, optionally filtered by folder
-        """
-        query = select(Note).
+
+async def get_optional_user(
+    token: Annotated[str | None,
+                     Depends(oauth2_scheme_optional)],
+    db: DBSession,
+) -> User | None:
+    """
+    Return current user if authenticated, None otherwise
+    """
+    if token is None:
+        return None
+
+    try:
+        payload = decode_access_token(token)
+        if payload.get("type") != TokenType.ACCESS.value:
+            return None
+        user_id = UUID(payload["sub"])
+        user = await UserRepository.get_by_id(db, user_id)
+        if user and user.token_version == payload.get("token_version"):
+            return user
+    except (jwt.InvalidTokenError, ValueError):
+        pass
+
+    return None
+
+
+class RequireRole:
+    """
+    Dependency class to check user role
+    """
+    def __init__(self, *allowed_roles: UserRole) -> None:
+        self.allowed_roles = allowed_roles
+
+    async def __call__(
+        self,
+        user: Annotated[User,
+                        Depends(get_current_active_user)],
+    ) -> User:
+        if user.role not in self.allowed_roles:
+   
 ```
 
 ---
@@ -141,25 +147,24 @@ class NoteRepository(BaseRepository[Note]):
 
 **Pattern Used:** Repository Pattern
 
-The `NoteFolderRepository` and `NoteRepository` classes implement the **Repository Pattern**, which abstracts data access operations, providing a consistent interface for interacting with database records.
+The repository pattern is implemented through the `UserRepository` class, which abstracts data access operations for user entities. This pattern is used to encapsulate database interactions and provide a clean interface for other parts of the application.
 
-#### Implementation:
-- Both repositories inherit from `BaseRepository`, which defines common methods like `get_all`, `soft_delete`, `restore`, and `bulk_soft_delete`.
-- Each repository class specifies its model type (`NoteFolder` or `Note`).
-- Methods such as `get_all`, `get_deleted`, `soft_delete`, `restore`, and `bulk_soft_delete` are implemented to handle CRUD operations for the respective models.
+#### Implementation Details:
+- The `UserRepository.get_by_id(db, user_id)` method handles fetching a user by their ID from the database.
+- Dependency injection ensures that the repository can be easily swapped out or mocked during testing.
 
 #### Benefits:
-1. **Encapsulation**: Abstracts data access logic, making it easier to switch between different storage mechanisms.
-2. **Consistency**: Ensures a uniform interface across repositories, simplifying code maintenance and testing.
-3. **Testability**: Facilitates unit testing by isolating business logic from database interactions.
+1. **Encapsulation:** Database interactions are encapsulated within the `UserRepository`, making the codebase more modular and easier to maintain.
+2. **Testability:** Repositories can be easily replaced with mock implementations, facilitating unit tests.
+3. **Decoupling:** The repository acts as a buffer between the business logic and the database, allowing changes in storage mechanisms without affecting other parts of the application.
 
 #### Deviations:
-- The use of `@classmethod` for repository methods, which is common in Python but differs slightly from the canonical pattern where instance methods are more typical.
-- Specific implementations like `soft_delete` and `restore` involve setting `deleted_at` to `None` or a current UTC datetime, reflecting soft-deleting behavior.
+- While the pattern is generally followed, there are no explicit interfaces or abstract classes defining the `UserRepository` methods. This could be improved by adding type hints or an interface for better adherence to the pattern.
+- The `get_client_ip` function and its annotation do not directly relate to the repository pattern but provide a utility for extracting client IP addresses.
 
-#### Appropriateness:
-This pattern is highly appropriate for this context as it effectively encapsulates database operations, making the codebase cleaner and easier to manage. It's particularly useful in applications where data persistence needs to be abstracted away from business logic.
+#### Appropriate Use:
+This pattern is highly appropriate in this context, where data access operations are well-defined and need to be isolated from business logic. It ensures that database interactions remain consistent and maintainable across different parts of the application.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 00:37*
+*Generated by CodeWorm on 2026-02-26 09:48*
