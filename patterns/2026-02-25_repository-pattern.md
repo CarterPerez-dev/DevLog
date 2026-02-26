@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/life_manager/facets/planner/service.py
+**File:** CarterOS-Server/src/core/foundation/repositories/base.py
 **Language:** python
-**Lines:** 1-103
+**Lines:** 1-107
 **Complexity:** 0.0
 
 ---
@@ -14,106 +14,110 @@
 ```python
 """
 ⒸAngelaMos | 2026
-service.py
+base.py
 """
 
-from datetime import date
+from collections.abc import Sequence
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+)
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import ResourceNotFound
-from aspects.life_manager.facets.planner.repository import TimeBlockRepository
-from aspects.life_manager.facets.planner.schemas import (
-    TimeBlockCreate,
-    TimeBlockUpdate,
-    TimeBlockResponse,
-    TimeBlockListResponse,
-)
+from core.infrastructure.database.Base import Base
 
 
-class TimeBlockNotFound(ResourceNotFound):
+ModelT = TypeVar("ModelT", bound = Base)
+
+
+class BaseRepository(Generic[ModelT]):
     """
-    Raised when time block not found
+    Generic repository with common CRUD operations
     """
-    def __init__(self, block_id: UUID) -> None:
-        super().__init__(
-            resource = "TimeBlock",
-            identifier = str(block_id)
-        )
+    model: type[ModelT]
 
-
-class PlannerService:
-    """
-    Service for planner operations
-    """
-    @staticmethod
-    async def get_blocks_by_date(
+    @classmethod
+    async def get_by_id(
+        cls,
         session: AsyncSession,
-        block_date: date,
-    ) -> TimeBlockListResponse:
+        id: UUID,
+    ) -> ModelT | None:
         """
-        Get all time blocks for a date
+        Get a single record by ID
         """
-        blocks = await TimeBlockRepository.get_by_date(session, block_date)
-        return TimeBlockListResponse(
-            items = [TimeBlockResponse.model_validate(b) for b in blocks],
-            date = block_date,
-        )
+        return await session.get(cls.model, id)
 
-    @staticmethod
-    async def create_block(
+    @classmethod
+    async def get_multi(
+        cls,
         session: AsyncSession,
-        data: TimeBlockCreate,
-    ) -> TimeBlockResponse:
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[ModelT]:
         """
-        Create a time block
+        Get multiple records with pagination
         """
-        block = await TimeBlockRepository.create(
-            session,
-            block_date = data.block_date,
-            start_time = data.start_time,
-            end_time = data.end_time,
-            title = data.title,
-            description = data.description,
-            color = data.color,
-            sort_order = data.sort_order,
+        result = await session.execute(
+            select(cls.model).offset(skip).limit(limit)
         )
-        return TimeBlockResponse.model_validate(block)
+        return result.scalars().all()
 
-    @staticmethod
-    async def update_block(
-        session: AsyncSession,
-        block_id: UUID,
-        data: TimeBlockUpdate,
-    ) -> TimeBlockResponse:
+    @classmethod
+    async def count(cls, session: AsyncSession) -> int:
         """
-        Update a time block
+        Count total records
         """
-        block = await TimeBlockRepository.get_by_id(session, block_id)
-        if not block:
-            raise TimeBlockNotFound(block_id)
-
-        update_dict = data.model_dump(exclude_unset = True)
-        block = await TimeBlockRepository.update(
-            session,
-            block,
-            **update_dict
+        result = await session.execute(
+            select(func.count()).select_from(cls.model)
         )
-        return TimeBlockResponse.model_validate(block)
+        return result.scalar_one()
 
-    @staticmethod
-    async def delete_block(
+    @classmethod
+    async def create(
+        cls,
         session: AsyncSession,
-        block_id: UUID,
+        **kwargs: Any,
+    ) -> ModelT:
+        """
+        Create a new record
+        """
+        instance = cls.model(**kwargs)
+        session.add(instance)
+        await session.flush()
+        await session.refresh(instance)
+        return instance
+
+    @classmethod
+    async def update(
+        cls,
+        session: AsyncSession,
+        instance: ModelT,
+        **kwargs: Any,
+    ) -> ModelT:
+        """
+        Update an existing record
+        """
+        for key, value in kwargs.items():
+            setattr(instance, key, value)
+        await session.flush()
+        await session.refresh(instance)
+        return instance
+
+    @classmethod
+    async def delete(
+        cls,
+        session: AsyncSession,
+        instance: ModelT,
     ) -> None:
         """
-        Delete a time block
+        Delete a record
         """
-        block = await TimeBlockRepository.get_by_id(session, block_id)
-        if not block:
-            raise TimeBlockNotFound(block_id)
-        await TimeBlockRepository.delete(session, block)
+        await session.delete(instance)
+        await session.flush()
 
 ```
 
@@ -125,24 +129,20 @@ class PlannerService:
 
 **Pattern Used:** Repository Pattern
 
-The `PlannerService` class interacts with a `TimeBlockRepository` to perform CRUD operations on time blocks. The repository handles database interactions, ensuring that service logic remains clean and focused.
+The `BaseRepository` class implements a generic repository pattern, providing common CRUD operations for database entities. Each method (`get_by_id`, `get_multi`, `count`, `create`, `update`, and `delete`) operates on a specific model type, ensuring that the business logic is decoupled from the data access layer.
 
-- **Implementation**: 
-  - `get_blocks_by_date`, `create_block`, `update_block`, and `delete_block` methods in `PlannerService` delegate the actual database operations to `TimeBlockRepository`.
-  - `TimeBlockRepository` contains methods like `get_by_date`, `create`, `get_by_id`, `update`, and `delete`.
+**Benefits:**
+- **Decoupling:** The repository abstracts the interaction with the database, making it easier to switch between different storage mechanisms.
+- **Reusability:** Generic methods can be reused across multiple models by simply specifying the model type.
+- **Testability:** Repository methods are isolated and can be easily tested in isolation from the database.
 
-- **Benefits**:
-  - **Separation of Concerns**: The repository handles all data-related logic, making the service layer simpler and more focused on business logic.
-  - **Testability**: Repository methods can be easily mocked or replaced for unit testing.
+**Deviations:**
+- The implementation uses class methods instead of instance methods, which is a common deviation but still adheres to the repository pattern's intent.
+- The use of `TypeVar` for generic type hints enhances code readability and maintainability.
 
-- **Deviations**:
-  - The `PlannerService` class is stateless (all methods are static), which might not align with the typical repository pattern where services often manage application state. However, this deviation simplifies the service layer.
-  - No explicit error handling in the repository; exceptions like `ResourceNotFound` are raised directly.
-
-- **Appropriateness**:
-  - This pattern is appropriate for managing data operations and ensuring that business logic remains clean and testable.
-  - It’s particularly useful when dealing with complex database interactions or when you need to switch between different storage mechanisms without changing the service layer.
+**Appropriateness:**
+This pattern is highly appropriate in this context because it provides a structured way to manage database operations. It ensures that business logic remains separate from data access, making the application more modular and easier to maintain. However, it might be overkill for very simple applications or when working with small datasets where direct ORM usage could suffice.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 20:12*
+*Generated by CodeWorm on 2026-02-25 20:25*
