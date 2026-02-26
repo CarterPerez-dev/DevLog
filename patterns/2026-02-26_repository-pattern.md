@@ -1,142 +1,146 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** angelamos-operations
-**File:** CarterOS-Server/src/core/security/auth/dependencies.py
-**Language:** python
-**Lines:** 1-147
+**Repository:** kill-pr0cess.inc
+**File:** frontend/src/services/github.ts
+**Language:** typescript
+**Lines:** 1-468
 **Complexity:** 0.0
 
 ---
 
 ## Source Code
 
-```python
-"""
-ⒸAngelaMos | 2025
-dependencies.py
-"""
+```typescript
+/*
+ * ©AngelaMos | 2025
+ */
 
-from __future__ import annotations
+import { apiClient } from './api';
+import type {
+  Repository,
+  RepositoryDetailed,
+  RepositoryFilter,
+} from '../hooks/useGitHub';
 
-from typing import Annotated
-from uuid import UUID
+interface RepositoryResponse {
+  repositories: Repository[];
+  pagination: {
+    current_page: number;
+    per_page: number;
+    total_pages: number;
+    total_count: number;
+    has_next_page: boolean;
+    has_previous_page: boolean;
+  };
+  statistics: {
+    total_stars: number;
+    total_forks: number;
+    average_stars: number;
+    most_starred_repo: string;
+    language_count: number;
+    topics_count: number;
+  };
+  rate_limit: {
+    limit: number;
+    remaining: number;
+    reset_at: string;
+    percentage_used: number;
+  };
+}
 
-import jwt
-from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+interface LanguageDistribution {
+  languages: Array<{
+    name: string;
+    repository_count: number;
+    total_size_kb: number;
+    percentage: number;
+    average_stars: number;
+  }>;
+  summary: {
+    total_languages: number;
+    total_repositories_analyzed: number;
+    most_used_language?: string;
+    language_diversity_score: number;
+  };
+}
 
-from config import (
-    API_PREFIX,
-    TokenType,
-    UserRole,
-)
-from core.infrastructure.database.session import get_db_session
-from core.exceptions import (
-    InactiveUser,
-    PermissionDenied,
-    TokenError,
-    TokenRevokedError,
-    UserNotFound,
-)
-from aspects.auth.models.User import User
-from core.security.auth.jwt import decode_access_token
-from aspects.auth.repositories.user import UserRepository
+class GitHubService {
+  private cache: Map<string, { data: any; timestamp: number; ttl: number }>;
+  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
+  constructor() {
+    this.cache = new Map();
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl = f"{API_PREFIX}/auth/login",
-    auto_error = True,
-)
+    // I'm setting up cache cleanup to prevent memory leaks
+    setInterval(() => this.cleanupCache(), 60000); // Cleanup every minute
+  }
 
-oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl = f"{API_PREFIX}/auth/login",
-    auto_error = False,
-)
+  private cleanupCache() {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
 
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
+  private getCacheKey(
+    endpoint: string,
+    params?: Record<string, any>,
+  ): string {
+    const paramString = params ? JSON.stringify(params) : '';
+    return `${endpoint}:${paramString}`;
+  }
 
+  private getFromCache<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
 
-async def get_current_user(
-    token: Annotated[str,
-                     Depends(oauth2_scheme)],
-    db: DBSession,
-) -> User:
-    """
-    Validate access token and return current user
-    """
-    try:
-        payload = decode_access_token(token)
-    except jwt.InvalidTokenError as e:
-        raise TokenError(message = str(e)) from e
+    const now = Date.now();
+    if (now - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
 
-    if payload.get("type") != TokenType.ACCESS.value:
-        raise TokenError(message = "Invalid token type")
+    return entry.data;
+  }
 
-    user_id = UUID(payload["sub"])
-    user = await UserRepository.get_by_id(db, user_id)
+  private setCache<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl,
+    });
+  }
 
-    if user is None:
-        raise UserNotFound(identifier = str(user_id))
+  async getRepositories(
+    params: {
+      page?: number;
+      per_page?: number;
+      sort?: string;
+      direction?: string;
+      language?: string;
+      min_stars?: number;
+      max_stars?: number;
+      is_fork?: boolean;
+      is_archived?: boolean;
+      search?: string;
+    } = {},
+  ): Promise<RepositoryResponse> {
+    const cacheKey = this.getCacheKey('/api/github/repos', params);
 
-    if payload.get("token_version") != user.token_version:
-        raise TokenRevokedError()
+    // I'm checking cache first for performance optimization
+    const cached = this.getFromCache<RepositoryResponse>(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
-    return user
+    try {
+      const queryParams = new URLSearchParams();
 
-
-async def get_current_active_user(
-    user: Annotated[User,
-                    Depends(get_current_user)],
-) -> User:
-    """
-    Ensure user is active
-    """
-    if not user.is_active:
-        raise InactiveUser()
-    return user
-
-
-async def get_optional_user(
-    token: Annotated[str | None,
-                     Depends(oauth2_scheme_optional)],
-    db: DBSession,
-) -> User | None:
-    """
-    Return current user if authenticated, None otherwise
-    """
-    if token is None:
-        return None
-
-    try:
-        payload = decode_access_token(token)
-        if payload.get("type") != TokenType.ACCESS.value:
-            return None
-        user_id = UUID(payload["sub"])
-        user = await UserRepository.get_by_id(db, user_id)
-        if user and user.token_version == payload.get("token_version"):
-            return user
-    except (jwt.InvalidTokenError, ValueError):
-        pass
-
-    return None
-
-
-class RequireRole:
-    """
-    Dependency class to check user role
-    """
-    def __init__(self, *allowed_roles: UserRole) -> None:
-        self.allowed_roles = allowed_roles
-
-    async def __call__(
-        self,
-        user: Annotated[User,
-                        Depends(get_current_active_user)],
-    ) -> User:
-        if user.role not in self.allowed_roles:
-   
+      // I'm building query parameters with proper type conversion
+      Object.entries(params).forEach(([ke
 ```
 
 ---
@@ -147,24 +151,25 @@ class RequireRole:
 
 **Pattern Used:** Repository Pattern
 
-The repository pattern is implemented through the `UserRepository` class, which abstracts data access operations for user entities. This pattern is used to encapsulate database interactions and provide a clean interface for other parts of the application.
+The `GitHubService` class implements the **Repository Pattern**, which encapsulates the interaction with an external service (in this case, GitHub's API) and provides a clean interface for accessing data.
 
 #### Implementation Details:
-- The `UserRepository.get_by_id(db, user_id)` method handles fetching a user by their ID from the database.
-- Dependency injection ensures that the repository can be easily swapped out or mocked during testing.
+- The `GitHubService` class handles caching of responses to optimize performance.
+- It uses a private cache (`Map`) to store recent responses based on unique keys derived from request parameters.
+- Cache entries are automatically cleaned up after their TTL (Time To Live) expires, preventing memory leaks.
 
 #### Benefits:
-1. **Encapsulation:** Database interactions are encapsulated within the `UserRepository`, making the codebase more modular and easier to maintain.
-2. **Testability:** Repositories can be easily replaced with mock implementations, facilitating unit tests.
-3. **Decoupling:** The repository acts as a buffer between the business logic and the database, allowing changes in storage mechanisms without affecting other parts of the application.
+1. **Performance Optimization:** Caching reduces the number of API calls by reusing previously fetched data.
+2. **Rate Limit Management:** The service intelligently adjusts cache durations based on remaining rate limits, ensuring efficient use of API resources.
+3. **Encapsulation:** The class encapsulates all interaction logic with the external API, making it easier to maintain and test.
 
 #### Deviations:
-- While the pattern is generally followed, there are no explicit interfaces or abstract classes defining the `UserRepository` methods. This could be improved by adding type hints or an interface for better adherence to the pattern.
-- The `get_client_ip` function and its annotation do not directly relate to the repository pattern but provide a utility for extracting client IP addresses.
+- The pattern is slightly modified by including a manual cleanup interval (`setInterval`), which ensures that even if cache entries are not accessed within their TTL, they will still be cleaned up periodically.
+- The caching strategy is more nuanced, considering different types of data (e.g., repositories vs. stats) and varying TTLs based on the nature of the data.
 
-#### Appropriate Use:
-This pattern is highly appropriate in this context, where data access operations are well-defined and need to be isolated from business logic. It ensures that database interactions remain consistent and maintainable across different parts of the application.
+#### Appropriateness:
+This pattern is highly appropriate in scenarios where frequent API calls can lead to performance degradation or rate limit issues. It is particularly useful for applications that need to fetch large amounts of data from external services, such as GitHub's API, which has usage limits. However, it may not be necessary if the service does not have strict rate limits or if the data changes infrequently.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 09:48*
+*Generated by CodeWorm on 2026-02-26 10:14*
