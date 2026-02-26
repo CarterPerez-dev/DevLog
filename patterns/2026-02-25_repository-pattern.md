@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/life_manager/facets/career/job_app_tracker/service.py
+**File:** CarterOS-Server/src/aspects/life_manager/facets/planner/service.py
 **Language:** python
-**Lines:** 1-223
+**Lines:** 1-103
 **Complexity:** 0.0
 
 ---
@@ -13,119 +13,108 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
+ⒸAngelaMos | 2026
 service.py
 """
 
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import ResourceNotFound, PermissionDenied
-from aspects.life_manager.facets.career.job_app_tracker.repository import (
-    JobApplicationRepository,
-)
-from aspects.life_manager.facets.career.job_app_tracker.schemas import (
-    JobApplicationCreate,
-    JobApplicationUpdate,
-    JobApplicationResponse,
-    JobApplicationListResponse,
-)
-from aspects.life_manager.facets.career.job_app_tracker.enums import (
-    ApplicationStatus,
-    Outcome,
+from core.exceptions import ResourceNotFound
+from aspects.life_manager.facets.planner.repository import TimeBlockRepository
+from aspects.life_manager.facets.planner.schemas import (
+    TimeBlockCreate,
+    TimeBlockUpdate,
+    TimeBlockResponse,
+    TimeBlockListResponse,
 )
 
 
-class JobApplicationNotFound(ResourceNotFound):
+class TimeBlockNotFound(ResourceNotFound):
     """
-    Raised when job application not found
+    Raised when time block not found
     """
-    def __init__(self, application_id: UUID) -> None:
+    def __init__(self, block_id: UUID) -> None:
         super().__init__(
-            resource = "JobApplication",
-            identifier = str(application_id)
+            resource = "TimeBlock",
+            identifier = str(block_id)
         )
 
 
-class JobApplicationService:
+class PlannerService:
     """
-    Service for job application operations
+    Service for planner operations
     """
     @staticmethod
-    async def get_application(
+    async def get_blocks_by_date(
         session: AsyncSession,
-        user_id: UUID,
-        application_id: UUID,
-    ) -> JobApplicationResponse:
+        block_date: date,
+    ) -> TimeBlockListResponse:
         """
-        Get a single job application by ID
+        Get all time blocks for a date
         """
-        application = await JobApplicationRepository.get_by_id(
-            session,
-            application_id
-        )
-        if not application:
-            raise JobApplicationNotFound(application_id)
-        if application.user_id != user_id:
-            raise PermissionDenied()
-        return JobApplicationResponse.model_validate(application)
-
-    @staticmethod
-    async def get_applications(
-        session: AsyncSession,
-        user_id: UUID,
-        skip: int = 0,
-        limit: int = 50,
-    ) -> JobApplicationListResponse:
-        """
-        Get all job applications for a user
-        """
-        applications = await JobApplicationRepository.get_by_user(
-            session,
-            user_id,
-            skip,
-            limit
-        )
-        total = await JobApplicationRepository.count_by_user(
-            session,
-            user_id
-        )
-        return JobApplicationListResponse(
-            items = [
-                JobApplicationResponse.model_validate(a)
-                for a in applications
-            ],
-            total = total,
+        blocks = await TimeBlockRepository.get_by_date(session, block_date)
+        return TimeBlockListResponse(
+            items = [TimeBlockResponse.model_validate(b) for b in blocks],
+            date = block_date,
         )
 
     @staticmethod
-    async def get_by_status(
+    async def create_block(
         session: AsyncSession,
-        user_id: UUID,
-        status: ApplicationStatus,
-    ) -> JobApplicationListResponse:
+        data: TimeBlockCreate,
+    ) -> TimeBlockResponse:
         """
-        Get job applications filtered by status
+        Create a time block
         """
-        applications = await JobApplicationRepository.get_by_status(
+        block = await TimeBlockRepository.create(
             session,
-            user_id,
-            status
+            block_date = data.block_date,
+            start_time = data.start_time,
+            end_time = data.end_time,
+            title = data.title,
+            description = data.description,
+            color = data.color,
+            sort_order = data.sort_order,
         )
-        return JobApplicationListResponse(
-            items = [
-                JobApplicationResponse.model_validate(a)
-                for a in applications
-            ],
-            total = len(applications),
-        )
+        return TimeBlockResponse.model_validate(block)
 
     @staticmethod
-    async def get_by_outcome(
+    async def update_block(
         session: AsyncSession,
-        user_id: UUID,
-        outc
+        block_id: UUID,
+        data: TimeBlockUpdate,
+    ) -> TimeBlockResponse:
+        """
+        Update a time block
+        """
+        block = await TimeBlockRepository.get_by_id(session, block_id)
+        if not block:
+            raise TimeBlockNotFound(block_id)
+
+        update_dict = data.model_dump(exclude_unset = True)
+        block = await TimeBlockRepository.update(
+            session,
+            block,
+            **update_dict
+        )
+        return TimeBlockResponse.model_validate(block)
+
+    @staticmethod
+    async def delete_block(
+        session: AsyncSession,
+        block_id: UUID,
+    ) -> None:
+        """
+        Delete a time block
+        """
+        block = await TimeBlockRepository.get_by_id(session, block_id)
+        if not block:
+            raise TimeBlockNotFound(block_id)
+        await TimeBlockRepository.delete(session, block)
+
 ```
 
 ---
@@ -136,30 +125,24 @@ class JobApplicationService:
 
 **Pattern Used:** Repository Pattern
 
-#### Implementation
-The `JobApplicationService` class encapsulates business logic for job applications, delegating data retrieval and manipulation to the `JobApplicationRepository`. The repository methods handle database operations such as fetching, creating, updating, and filtering job applications. For example:
+The `PlannerService` class interacts with a `TimeBlockRepository` to perform CRUD operations on time blocks. The repository handles database interactions, ensuring that service logic remains clean and focused.
 
-- `get_application()`: Fetches a single application by ID.
-- `create_application()`: Creates a new job application.
-- `update_application()`: Updates an existing job application.
+- **Implementation**: 
+  - `get_blocks_by_date`, `create_block`, `update_block`, and `delete_block` methods in `PlannerService` delegate the actual database operations to `TimeBlockRepository`.
+  - `TimeBlockRepository` contains methods like `get_by_date`, `create`, `get_by_id`, `update`, and `delete`.
 
-#### Benefits
-1. **Separation of Concerns**: The service layer focuses on business logic, while the repository handles data access and persistence.
-2. **Testability**: Repository methods can be easily mocked or replaced for unit testing.
-3. **Flexibility**: Changes in database schema or storage mechanism do not affect the service layer.
+- **Benefits**:
+  - **Separation of Concerns**: The repository handles all data-related logic, making the service layer simpler and more focused on business logic.
+  - **Testability**: Repository methods can be easily mocked or replaced for unit testing.
 
-#### Deviations
-- The `JobApplicationService` class is stateless with static methods, which might deviate from a more traditional repository pattern that could include instance methods and state management.
-- Custom exceptions like `JobApplicationNotFound` are defined to handle specific error cases, enhancing clarity in error handling.
+- **Deviations**:
+  - The `PlannerService` class is stateless (all methods are static), which might not align with the typical repository pattern where services often manage application state. However, this deviation simplifies the service layer.
+  - No explicit error handling in the repository; exceptions like `ResourceNotFound` are raised directly.
 
-#### Appropriate Use Cases
-This pattern is appropriate when:
-1. You need to manage complex business logic alongside data access operations.
-2. The application requires a clear separation between domain logic and data storage mechanisms.
-3. Testability and maintainability of the codebase are priorities.
-
-By adhering to this pattern, the `JobApplicationService` ensures that business rules and data handling remain decoupled, making the system more modular and easier to manage.
+- **Appropriateness**:
+  - This pattern is appropriate for managing data operations and ensuring that business logic remains clean and testable.
+  - It’s particularly useful when dealing with complex database interactions or when you need to switch between different storage mechanisms without changing the service layer.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 20:11*
+*Generated by CodeWorm on 2026-02-25 20:12*
