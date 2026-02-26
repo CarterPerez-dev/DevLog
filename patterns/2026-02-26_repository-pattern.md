@@ -1,0 +1,165 @@
+# repository_pattern
+
+**Type:** Pattern Analysis
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/aspects/life_manager/facets/notes/repository.py
+**Language:** python
+**Lines:** 1-206
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2026
+repository.py
+"""
+
+from collections.abc import Sequence
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.foundation.repositories.base import BaseRepository
+from aspects.life_manager.facets.notes.models import Note, NoteFolder
+from datetime import UTC
+
+
+class NoteFolderRepository(BaseRepository[NoteFolder]):
+    """
+    Repository for NoteFolder operations
+    """
+    model = NoteFolder
+
+    @classmethod
+    async def get_all(
+        cls,
+        session: AsyncSession,
+    ) -> Sequence[NoteFolder]:
+        """
+        Get all non-deleted folders ordered by sort_order and name
+        """
+        result = await session.execute(
+            select(NoteFolder).where(
+                NoteFolder.deleted_at.is_(None)
+            ).order_by(NoteFolder.sort_order,
+                       NoteFolder.name)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_deleted(
+        cls,
+        session: AsyncSession,
+    ) -> Sequence[NoteFolder]:
+        """
+        Get all soft-deleted folders
+        """
+        result = await session.execute(
+            select(NoteFolder).where(
+                NoteFolder.deleted_at.is_not(None)
+            ).order_by(NoteFolder.deleted_at.desc())
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def soft_delete(
+        cls,
+        session: AsyncSession,
+        folder: NoteFolder,
+    ) -> NoteFolder:
+        """
+        Soft delete a folder
+        """
+        from datetime import datetime
+        folder.deleted_at = datetime.now(UTC)
+        await session.flush()
+        await session.refresh(folder)
+        return folder
+
+    @classmethod
+    async def restore(
+        cls,
+        session: AsyncSession,
+        folder: NoteFolder,
+    ) -> NoteFolder:
+        """
+        Restore a soft-deleted folder
+        """
+        folder.deleted_at = None
+        await session.flush()
+        await session.refresh(folder)
+        return folder
+
+    @classmethod
+    async def bulk_soft_delete(
+        cls,
+        session: AsyncSession,
+        folder_ids: list[UUID],
+    ) -> int:
+        """
+        Bulk soft delete multiple folders by their IDs
+        """
+        from datetime import datetime
+        from sqlalchemy import update
+
+        result = await session.execute(
+            update(NoteFolder).where(NoteFolder.id.in_(folder_ids)).where(
+                NoteFolder.deleted_at.is_(None)
+            ).values(deleted_at = datetime.now(UTC))
+        )
+        await session.flush()
+        return result.rowcount
+
+
+class NoteRepository(BaseRepository[Note]):
+    """
+    Repository for Note operations
+    """
+    model = Note
+
+    @classmethod
+    async def get_all(
+        cls,
+        session: AsyncSession,
+        folder_id: UUID | None = None,
+    ) -> Sequence[Note]:
+        """
+        Get all non-deleted notes, optionally filtered by folder
+        """
+        query = select(Note).
+```
+
+---
+
+## Pattern Analysis
+
+### Pattern Analysis
+
+**Pattern Used:** Repository Pattern
+
+The `NoteFolderRepository` and `NoteRepository` classes implement the **Repository Pattern**, which abstracts data access operations, providing a consistent interface for interacting with database records.
+
+#### Implementation:
+- Both repositories inherit from `BaseRepository`, which defines common methods like `get_all`, `soft_delete`, `restore`, and `bulk_soft_delete`.
+- Each repository class specifies its model type (`NoteFolder` or `Note`).
+- Methods such as `get_all`, `get_deleted`, `soft_delete`, `restore`, and `bulk_soft_delete` are implemented to handle CRUD operations for the respective models.
+
+#### Benefits:
+1. **Encapsulation**: Abstracts data access logic, making it easier to switch between different storage mechanisms.
+2. **Consistency**: Ensures a uniform interface across repositories, simplifying code maintenance and testing.
+3. **Testability**: Facilitates unit testing by isolating business logic from database interactions.
+
+#### Deviations:
+- The use of `@classmethod` for repository methods, which is common in Python but differs slightly from the canonical pattern where instance methods are more typical.
+- Specific implementations like `soft_delete` and `restore` involve setting `deleted_at` to `None` or a current UTC datetime, reflecting soft-deleting behavior.
+
+#### Appropriateness:
+This pattern is highly appropriate for this context as it effectively encapsulates database operations, making the codebase cleaner and easier to manage. It's particularly useful in applications where data persistence needs to be abstracted away from business logic.
+
+---
+
+*Generated by CodeWorm on 2026-02-26 00:37*
