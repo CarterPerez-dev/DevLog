@@ -1,146 +1,138 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** kill-pr0cess.inc
-**File:** frontend/src/services/github.ts
-**Language:** typescript
-**Lines:** 1-468
+**Repository:** my-portfolio
+**File:** v1/backend/app/user/service.py
+**Language:** python
+**Lines:** 1-220
 **Complexity:** 0.0
 
 ---
 
 ## Source Code
 
-```typescript
-/*
- * ©AngelaMos | 2025
- */
+```python
+"""
+ⒸAngelaMos | 2025
+service.py
+"""
 
-import { apiClient } from './api';
-import type {
-  Repository,
-  RepositoryDetailed,
-  RepositoryFilter,
-} from '../hooks/useGitHub';
+from uuid import UUID
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+)
 
-interface RepositoryResponse {
-  repositories: Repository[];
-  pagination: {
-    current_page: number;
-    per_page: number;
-    total_pages: number;
-    total_count: number;
-    has_next_page: boolean;
-    has_previous_page: boolean;
-  };
-  statistics: {
-    total_stars: number;
-    total_forks: number;
-    average_stars: number;
-    most_starred_repo: string;
-    language_count: number;
-    topics_count: number;
-  };
-  rate_limit: {
-    limit: number;
-    remaining: number;
-    reset_at: string;
-    percentage_used: number;
-  };
-}
+from config import settings, UserRole
+from core.exceptions import (
+    EmailAlreadyExists,
+    InvalidCredentials,
+    UserNotFound,
+)
+from core.security import (
+    hash_password,
+    verify_password,
+)
+from .schemas import (
+    AdminUserCreate,
+    UserCreate,
+    UserListResponse,
+    UserResponse,
+    UserUpdate,
+    UserUpdateAdmin,
+)
+from .User import User
+from .repository import UserRepository
 
-interface LanguageDistribution {
-  languages: Array<{
-    name: string;
-    repository_count: number;
-    total_size_kb: number;
-    percentage: number;
-    average_stars: number;
-  }>;
-  summary: {
-    total_languages: number;
-    total_repositories_analyzed: number;
-    most_used_language?: string;
-    language_diversity_score: number;
-  };
-}
 
-class GitHubService {
-  private cache: Map<string, { data: any; timestamp: number; ttl: number }>;
-  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+class UserService:
+    """
+    Business logic for user operations
+    """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-  constructor() {
-    this.cache = new Map();
+    async def create_user(
+        self,
+        user_data: UserCreate,
+    ) -> UserResponse:
+        """
+        Register a new user
+        """
+        if await UserRepository.email_exists(self.session, user_data.email):
+            raise EmailAlreadyExists(user_data.email)
 
-    // I'm setting up cache cleanup to prevent memory leaks
-    setInterval(() => this.cleanupCache(), 60000); // Cleanup every minute
-  }
+        role = UserRole.USER
+        if settings.ADMIN_EMAIL and user_data.email.lower(
+        ) == settings.ADMIN_EMAIL.lower():
+            role = UserRole.ADMIN
 
-  private cleanupCache() {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now - entry.timestamp > entry.ttl) {
-        this.cache.delete(key);
-      }
-    }
-  }
+        hashed = await hash_password(user_data.password)
+        user = await UserRepository.create_user(
+            self.session,
+            email = user_data.email,
+            hashed_password = hashed,
+            full_name = user_data.full_name,
+            role = role,
+        )
+        return UserResponse.model_validate(user)
 
-  private getCacheKey(
-    endpoint: string,
-    params?: Record<string, any>,
-  ): string {
-    const paramString = params ? JSON.stringify(params) : '';
-    return `${endpoint}:${paramString}`;
-  }
+    async def get_user_by_id(
+        self,
+        user_id: UUID,
+    ) -> UserResponse:
+        """
+        Get user by ID
+        """
+        user = await UserRepository.get_by_id(self.session, user_id)
+        if not user:
+            raise UserNotFound(str(user_id))
+        return UserResponse.model_validate(user)
 
-  private getFromCache<T>(key: string): T | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
+    async def get_user_model_by_id(
+        self,
+        user_id: UUID,
+    ) -> User:
+        """
+        Get user model by ID (for internal use)
+        """
+        user = await UserRepository.get_by_id(self.session, user_id)
+        if not user:
+            raise UserNotFound(str(user_id))
+        return user
 
-    const now = Date.now();
-    if (now - entry.timestamp > entry.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
+    async def update_user(
+        self,
+        user: User,
+        user_data: UserUpdate,
+    ) -> UserResponse:
+        """
+        Update user profile
+        """
+        update_dict = user_data.model_dump(exclude_unset = True)
+        updated_user = await UserRepository.update(
+            self.session,
+            user,
+            **update_dict
+        )
+        return UserResponse.model_validate(updated_user)
 
-    return entry.data;
-  }
+    async def change_password(
+        self,
+        user: User,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """
+        Change user password
+        """
+        is_valid, _ = await verify_password(current_password, user.hashed_password)
+        if not is_valid:
+            raise InvalidCredentials()
 
-  private setCache<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL) {
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl,
-    });
-  }
+        hashed = await hash_password(new_password)
+        await UserRepository.update_password(self.session, user, hashed)
 
-  async getRepositories(
-    params: {
-      page?: number;
-      per_page?: number;
-      sort?: string;
-      direction?: string;
-      language?: string;
-      min_stars?: number;
-      max_stars?: number;
-      is_fork?: boolean;
-      is_archived?: boolean;
-      search?: string;
-    } = {},
-  ): Promise<RepositoryResponse> {
-    const cacheKey = this.getCacheKey('/api/github/repos', params);
-
-    // I'm checking cache first for performance optimization
-    const cached = this.getFromCache<RepositoryResponse>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const queryParams = new URLSearchParams();
-
-      // I'm building query parameters with proper type conversion
-      Object.entries(params).forEach(([ke
+    a
 ```
 
 ---
@@ -151,25 +143,27 @@ class GitHubService {
 
 **Pattern Used:** Repository Pattern
 
-The `GitHubService` class implements the **Repository Pattern**, which encapsulates the interaction with an external service (in this case, GitHub's API) and provides a clean interface for accessing data.
+#### Implementation
+The `UserService` class in the provided code uses the **Repository Pattern** to encapsulate data access logic. This pattern is implemented via the `UserRepository` interface, which handles database operations like creating, updating, and retrieving users.
 
-#### Implementation Details:
-- The `GitHubService` class handles caching of responses to optimize performance.
-- It uses a private cache (`Map`) to store recent responses based on unique keys derived from request parameters.
-- Cache entries are automatically cleaned up after their TTL (Time To Live) expires, preventing memory leaks.
+- **Methods**: The `UserService` interacts with methods from `UserRepository`, such as `create_user`, `get_by_id`, `update`, etc.
+- **Dependency Injection**: The `UserService` constructor accepts an `AsyncSession` object to interact with the database, ensuring that data access logic is encapsulated within the repository.
 
-#### Benefits:
-1. **Performance Optimization:** Caching reduces the number of API calls by reusing previously fetched data.
-2. **Rate Limit Management:** The service intelligently adjusts cache durations based on remaining rate limits, ensuring efficient use of API resources.
-3. **Encapsulation:** The class encapsulates all interaction logic with the external API, making it easier to maintain and test.
+#### Benefits
+1. **Separation of Concerns**: By separating business logic from data access, the code becomes more modular and easier to maintain.
+2. **Testability**: Repository methods can be easily mocked or replaced for unit testing, making the service layer testable in isolation.
+3. **Flexibility**: Changes in database technology or storage mechanisms do not affect the business logic.
 
-#### Deviations:
-- The pattern is slightly modified by including a manual cleanup interval (`setInterval`), which ensures that even if cache entries are not accessed within their TTL, they will still be cleaned up periodically.
-- The caching strategy is more nuanced, considering different types of data (e.g., repositories vs. stats) and varying TTLs based on the nature of the data.
+#### Deviations
+- The `UserService` class directly handles some validation and exception handling (e.g., `EmailAlreadyExists`, `InvalidCredentials`) that could be moved to the repository for a more consistent pattern application.
+- Some methods like `admin_create_user` and `admin_update_user` are specific to admin actions, which might benefit from their own dedicated repositories or services.
 
-#### Appropriateness:
-This pattern is highly appropriate in scenarios where frequent API calls can lead to performance degradation or rate limit issues. It is particularly useful for applications that need to fetch large amounts of data from external services, such as GitHub's API, which has usage limits. However, it may not be necessary if the service does not have strict rate limits or if the data changes infrequently.
+#### Appropriateness
+The Repository Pattern is highly appropriate here because:
+- The codebase needs clear separation between business logic and data access.
+- There is a need for robust validation and exception handling in the service layer.
+- Future changes in database technology can be managed without affecting the core business logic.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 10:14*
+*Generated by CodeWorm on 2026-02-26 10:57*
