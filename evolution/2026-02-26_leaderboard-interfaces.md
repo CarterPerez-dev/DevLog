@@ -2,7 +2,7 @@
 
 **Type:** Code Evolution
 **Repository:** CertGames-Core
-**File:** frontend/user-app/src/domains/public/landing/types/leaderboard.interfaces.ts
+**File:** frontend/user-app/src/domains/leaderboard/types/leaderboard.interfaces.ts
 **Language:** typescript
 **Lines:** 1-1
 **Complexity:** 0.0
@@ -12,22 +12,26 @@
 ## Source Code
 
 ```typescript
-Commit: 8086f947
-Message: refactor(domains): migrate medium domain interfaces to Zod schemas
+Commit: 45920f64
+Message: refactor(domains): migrate small domain interfaces to Zod schemas
+
+Convert newsletter, onboarding, daily, leaderboard, and achievement
+domains from manual TypeScript interfaces + manual type guards to
+Zod schemas + Zod-wrapped guards (Task 2 of Zod migration).
 Author: CarterPerez-dev
-File: frontend/user-app/src/domains/public/landing/types/leaderboard.interfaces.ts
+File: frontend/user-app/src/domains/leaderboard/types/leaderboard.interfaces.ts
 Change type: modified
 
 Diff:
-@@ -1,24 +1,34 @@
+@@ -1,69 +1,87 @@
  // ===========================
--// Public Leaderboard Interfaces
+-// Leaderboard Interfaces
 -// ©AngelaMos | 2025
 +// © AngelaMos | 2026
 +// leaderboard.interfaces.ts
  // ===========================
  
--export interface PublicLeaderboardEntry {
+-export interface LeaderboardEntry {
 -  username: string;
 -  level: number;
 -  xp: number;
@@ -39,12 +43,12 @@ Diff:
 +import { z } from 'zod';
  
 -export interface PublicLeaderboardResponse {
--  data: PublicLeaderboardEntry[];
+-  data: LeaderboardEntry[];
 -  total: number;
 -  cached_at: number;
 -  cache_duration_ms: number;
 -}
-+export const publicLeaderboardEntrySchema = z.object({
++export const leaderboardEntrySchema = z.object({
 +  username: z.string(),
 +  level: z.number(),
 +  xp: z.number(),
@@ -53,25 +57,75 @@ Diff:
 +  avatarUrl: z.string().nullable(),
 +  nameColor: z.string().nullable(),
 +});
-+
-+export type PublicLeaderboardEntry = z.infer<
-+  typeof publicLeaderboardEntrySchema
-+>;
-+
+ 
+-export interface LeaderboardChange {
+-  username: string;
+-  old_rank: number;
+-  new_rank: number;
+-  change: number;
+-}
++export type LeaderboardEntry = z.infer<typeof leaderboardEntrySchema>;
+ 
+-export interface LeaderboardNewEntry {
+-  username: string;
+-  rank: number;
+-}
 +export const publicLeaderboardResponseSchema = z.object({
-+  data: z.array(publicLeaderboardEntrySchema),
++  data: z.array(leaderboardEntrySchema),
 +  total: z.number(),
 +  cached_at: z.number(),
 +  cache_duration_ms: z.number(),
 +});
-+
-+export type PublicLeaderboardResponse = z.infer<
-+  typeof publicLeaderboardResponseSchema
-+>;
  
- export interface PublicLeaderboardRequest {
-   skip?: number;
-
+-export interface LeaderboardLeftEntry {
+-  username: string;
+-  old_rank: number;
+-}
++export type PublicLeaderboardResponse = z.infer<typeof publicLeaderboardResponseSchema>;
+ 
+-export interface LeaderboardChanges {
+-  moved_up: LeaderboardChange[];
+-  moved_down: LeaderboardChange[];
+-  new_entries: LeaderboardNewEntry[];
+-  left_leaderboard: LeaderboardLeftEntry[];
+-}
++export const leaderboardChangeSchema = z.object({
++  username: z.string(),
++  old_rank: z.number(),
++  new_rank: z.number(),
++  change: z.number(),
++});
+ 
+-export interface PrivateLeaderboardResponse {
+-  data: LeaderboardEntry[];
+-  total: number;
+-  cached_at: number;
+-  cache_updated: boolean;
+-  cache_duration_ms: number;
+-  changes: LeaderboardChanges | null;
+-}
++export type LeaderboardChange = z.infer<typeof leaderboardChangeSchema>;
+ 
+-export interface UserLeaderboardPositionResponse {
+-  user_id: string;
+-  username: string;
+-  level: number;
+-  xp: number;
+-  rank: number;
+-  role: string;
+-  currentAvatar: string | null;
+-  nameColor: string | null;
+-  error?: string;
+-}
++export const leaderboardNewEntrySchema = z.object({
++  username: z.string(),
++  rank: z.number(),
++});
++
++export type LeaderboardNewEntry = z.infer<typeof leaderboardNewEntrySchema>;
++
++export const leaderboardLeftEntrySchema = z.object({
++  username: z.strin
 ```
 
 ---
@@ -81,21 +135,19 @@ Diff:
 ### Change Analysis
 
 **What was Changed:**
-The file `leaderboard.interfaces.ts` was modified to migrate medium domain interfaces from TypeScript to Zod schemas. The original interface definitions were replaced with Zod schema objects and corresponding type inference.
+The code refactors the `leaderboard.interfaces.ts` file by converting manual TypeScript interfaces and type guards into Zod schemas. This includes defining schemas for `LeaderboardEntry`, `PublicLeaderboardResponse`, `LeaderboardChange`, `LeaderboardNewEntry`, `LeaderboardLeftEntry`, `LeaderboardChanges`, `PrivateLeaderboardResponse`, `UserLeaderboardPositionResponse`, and `LeaderboardStatistics`. The existing interfaces are replaced with Zod schema definitions, and type guards are no longer needed.
 
-**Why it Was Likely Changed:**
-This change likely aims to improve data validation and consistency in the application by leveraging Zod, a powerful library for type-safe JavaScript/TypeScript schema definition and runtime type checking. This migration enhances the robustness of data handling, especially when dealing with external APIs or user inputs.
+**Why it was Likely Changed:**
+This change likely aims to improve the validation and type safety of data handling in the leaderboard domain. Zod provides robust schema validation, making it easier to ensure that incoming data conforms to expected structures. This can help catch errors early during development and reduce runtime bugs related to incorrect data formats.
 
 **Impact on Behavior:**
-The behavior of data validation has shifted from static TypeScript types to dynamic Zod schemas. This change ensures that any incoming data is validated against predefined rules at runtime, which can prevent potential errors and improve data integrity.
+The behavior remains largely unchanged as the schemas are designed to mirror the original interfaces. However, any future changes in how data is validated or processed will now be enforced by Zod, potentially leading to more consistent and reliable code.
 
 **Risks or Concerns:**
-- **Backward Compatibility:** Ensure that existing code using these interfaces does not break due to the new schema definitions.
-- **Performance Impact:** Runtime validation with Zod might introduce a slight performance overhead compared to static TypeScript types. However, this is generally minimal for most use cases.
-- **Documentation:** The change requires updating documentation to reflect the new schema structure and usage.
+While Zod offers strong typing and validation, there is a risk that schema definitions might become complex if not managed carefully. Ensuring that all possible cases are covered in the schemas can be challenging. Additionally, the initial setup of these schemas requires careful consideration to avoid introducing bugs during the transition.
 
-Overall, this refactor enhances data handling robustness while maintaining the core functionality of the application.
+Overall, this refactor enhances type safety and data validation without altering core functionality.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 00:34*
+*Generated by CodeWorm on 2026-02-26 07:30*
