@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/life_manager/facets/notes/service.py
+**File:** CarterOS-Server/src/aspects/life_manager/facets/career/job_app_tracker/service.py
 **Language:** python
-**Lines:** 1-324
+**Lines:** 1-223
 **Complexity:** 0.0
 
 ---
@@ -13,7 +13,7 @@
 
 ```python
 """
-ⒸAngelaMos | 2026
+ⒸAngelaMos | 2025
 service.py
 """
 
@@ -21,113 +21,111 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import ResourceNotFound
-from aspects.life_manager.facets.notes.models import Note
-from aspects.life_manager.facets.notes.repository import (
-    NoteFolderRepository,
-    NoteRepository,
+from core.exceptions import ResourceNotFound, PermissionDenied
+from aspects.life_manager.facets.career.job_app_tracker.repository import (
+    JobApplicationRepository,
 )
-from aspects.life_manager.facets.notes.schemas import (
-    NoteFolderCreate,
-    NoteFolderUpdate,
-    NoteFolderResponse,
-    NoteCreate,
-    NoteUpdate,
-    NoteResponse,
-    NotesListResponse,
-    DeletedNotesListResponse,
+from aspects.life_manager.facets.career.job_app_tracker.schemas import (
+    JobApplicationCreate,
+    JobApplicationUpdate,
+    JobApplicationResponse,
+    JobApplicationListResponse,
+)
+from aspects.life_manager.facets.career.job_app_tracker.enums import (
+    ApplicationStatus,
+    Outcome,
 )
 
 
-class NoteFolderNotFound(ResourceNotFound):
+class JobApplicationNotFound(ResourceNotFound):
     """
-    Raised when folder not found
+    Raised when job application not found
     """
-    def __init__(self, folder_id: UUID) -> None:
+    def __init__(self, application_id: UUID) -> None:
         super().__init__(
-            resource = "NoteFolder",
-            identifier = str(folder_id)
+            resource = "JobApplication",
+            identifier = str(application_id)
         )
 
 
-class NoteNotFound(ResourceNotFound):
+class JobApplicationService:
     """
-    Raised when note not found
-    """
-    def __init__(self, note_id: UUID) -> None:
-        super().__init__(resource = "Note", identifier = str(note_id))
-
-
-class NotesService:
-    """
-    Service for notes operations
+    Service for job application operations
     """
     @staticmethod
-    async def get_all_notes(
+    async def get_application(
         session: AsyncSession,
-    ) -> NotesListResponse:
+        user_id: UUID,
+        application_id: UUID,
+    ) -> JobApplicationResponse:
         """
-        Get all folders and notes
+        Get a single job application by ID
         """
-        folders = await NoteFolderRepository.get_all(session)
-        notes = await NoteRepository.get_all(session)
-        return NotesListResponse(
-            folders = [
-                NoteFolderResponse.model_validate(f) for f in folders
+        application = await JobApplicationRepository.get_by_id(
+            session,
+            application_id
+        )
+        if not application:
+            raise JobApplicationNotFound(application_id)
+        if application.user_id != user_id:
+            raise PermissionDenied()
+        return JobApplicationResponse.model_validate(application)
+
+    @staticmethod
+    async def get_applications(
+        session: AsyncSession,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> JobApplicationListResponse:
+        """
+        Get all job applications for a user
+        """
+        applications = await JobApplicationRepository.get_by_user(
+            session,
+            user_id,
+            skip,
+            limit
+        )
+        total = await JobApplicationRepository.count_by_user(
+            session,
+            user_id
+        )
+        return JobApplicationListResponse(
+            items = [
+                JobApplicationResponse.model_validate(a)
+                for a in applications
             ],
-            notes = [NoteResponse.model_validate(n) for n in notes],
+            total = total,
         )
 
     @staticmethod
-    async def create_folder(
+    async def get_by_status(
         session: AsyncSession,
-        data: NoteFolderCreate,
-    ) -> NoteFolderResponse:
+        user_id: UUID,
+        status: ApplicationStatus,
+    ) -> JobApplicationListResponse:
         """
-        Create a folder
+        Get job applications filtered by status
         """
-        folder = await NoteFolderRepository.create(
+        applications = await JobApplicationRepository.get_by_status(
             session,
-            name = data.name,
-            parent_id = data.parent_id,
-            sort_order = data.sort_order,
+            user_id,
+            status
         )
-        return NoteFolderResponse.model_validate(folder)
+        return JobApplicationListResponse(
+            items = [
+                JobApplicationResponse.model_validate(a)
+                for a in applications
+            ],
+            total = len(applications),
+        )
 
     @staticmethod
-    async def update_folder(
+    async def get_by_outcome(
         session: AsyncSession,
-        folder_id: UUID,
-        data: NoteFolderUpdate,
-    ) -> NoteFolderResponse:
-        """
-        Update a folder
-        """
-        folder = await NoteFolderRepository.get_by_id(session, folder_id)
-        if not folder:
-            raise NoteFolderNotFound(folder_id)
-
-        update_dict = data.model_dump(exclude_unset = True)
-        folder = await NoteFolderRepository.update(
-            session,
-            folder,
-            **update_dict
-        )
-        return NoteFolderResponse.model_validate(folder)
-
-    @staticmethod
-    async def delete_folder(
-        session: AsyncSession,
-        folder_id: UUID,
-    ) -> None:
-        """
-        Soft delete a folder and all its notes
-        """
-        folder = await NoteFolderRepository.get_by_id(session, folder_id)
-        if not folder:
-            raise NoteFolderNotFound(folder_id)
-
-        notes_in_folder = await Not
+        user_id: UUID,
+        outc
 ```
 
 ---
@@ -138,34 +136,30 @@ class NotesService:
 
 **Pattern Used:** Repository Pattern
 
-The `NotesService` class in this code implements the **Repository Pattern**, which decouples business logic from data access by providing a uniform interface to retrieve and store domain objects.
+#### Implementation
+The `JobApplicationService` class encapsulates business logic for job applications, delegating data retrieval and manipulation to the `JobApplicationRepository`. The repository methods handle database operations such as fetching, creating, updating, and filtering job applications. For example:
 
-- **Implementation**: The `NoteFolderRepository` and `NoteRepository` classes handle CRUD operations for `NoteFolder` and `Note` entities, respectively. These repositories are injected into the service methods via the `session` parameter.
-  
-  ```python
-  @staticmethod
-  async def get_all_notes(session: AsyncSession) -> NotesListResponse:
-      folders = await NoteFolderRepository.get_all(session)
-      notes = await NoteRepository.get_all(session)
-      return NotesListResponse(
-          folders=[NoteFolderResponse.model_validate(f) for f in folders],
-          notes=[NoteResponse.model_validate(n) for n in notes],
-      )
-  ```
+- `get_application()`: Fetches a single application by ID.
+- `create_application()`: Creates a new job application.
+- `update_application()`: Updates an existing job application.
 
-- **Benefits**: 
-  - **Encapsulation**: The service layer is decoupled from the database, making it easier to switch data storage mechanisms.
-  - **Testability**: Repositories can be easily mocked or replaced with in-memory databases during testing.
+#### Benefits
+1. **Separation of Concerns**: The service layer focuses on business logic, while the repository handles data access and persistence.
+2. **Testability**: Repository methods can be easily mocked or replaced for unit testing.
+3. **Flexibility**: Changes in database schema or storage mechanism do not affect the service layer.
 
-- **Deviations**:
-  - The `NotesService` class uses static methods instead of instance methods, which might not align perfectly with the standard pattern where services are often instances that maintain state.
-  - Error handling is done using custom exceptions (`NoteFolderNotFound`, `NoteNotFound`) rather than generic ones like `ResourceNotFound`.
+#### Deviations
+- The `JobApplicationService` class is stateless with static methods, which might deviate from a more traditional repository pattern that could include instance methods and state management.
+- Custom exceptions like `JobApplicationNotFound` are defined to handle specific error cases, enhancing clarity in error handling.
 
-- **Appropriateness**:
-  - This pattern is highly appropriate in this context as it effectively separates concerns, making the code more modular and easier to manage. It’s particularly useful when dealing with complex data access logic or when integrating with different types of storage systems.
+#### Appropriate Use Cases
+This pattern is appropriate when:
+1. You need to manage complex business logic alongside data access operations.
+2. The application requires a clear separation between domain logic and data storage mechanisms.
+3. Testability and maintainability of the codebase are priorities.
 
-This implementation closely follows the Repository Pattern while providing a clear separation between business logic and data access.
+By adhering to this pattern, the `JobApplicationService` ensures that business rules and data handling remain decoupled, making the system more modular and easier to manage.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 19:59*
+*Generated by CodeWorm on 2026-02-25 20:11*
