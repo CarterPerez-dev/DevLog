@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/life_manager/facets/checklist/service.py
+**File:** CarterOS-Server/src/aspects/life_manager/facets/notes/service.py
 **Language:** python
-**Lines:** 1-251
+**Lines:** 1-324
 **Complexity:** 0.0
 
 ---
@@ -17,117 +17,117 @@
 service.py
 """
 
-from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import ResourceNotFound
-from aspects.life_manager.facets.checklist.repository import (
-    ChecklistItemRepository,
-    ChecklistLogRepository,
+from aspects.life_manager.facets.notes.models import Note
+from aspects.life_manager.facets.notes.repository import (
+    NoteFolderRepository,
+    NoteRepository,
 )
-from aspects.life_manager.facets.checklist.schemas import (
-    ChecklistItemCreate,
-    ChecklistItemUpdate,
-    ChecklistItemResponse,
-    ChecklistItemListResponse,
-    ChecklistLogResponse,
-    ChecklistDayResponse,
-    ChecklistLogUpdate,
-    ChecklistStatsResponse,
-    HeatmapDay,
-    ItemStat,
+from aspects.life_manager.facets.notes.schemas import (
+    NoteFolderCreate,
+    NoteFolderUpdate,
+    NoteFolderResponse,
+    NoteCreate,
+    NoteUpdate,
+    NoteResponse,
+    NotesListResponse,
+    DeletedNotesListResponse,
 )
-from aspects.life_manager.facets.checklist.models import ChecklistLog
 
 
-class ChecklistItemNotFound(ResourceNotFound):
+class NoteFolderNotFound(ResourceNotFound):
     """
-    Raised when a checklist item is not found
+    Raised when folder not found
     """
-    def __init__(self, item_id: UUID) -> None:
+    def __init__(self, folder_id: UUID) -> None:
         super().__init__(
-            resource = "ChecklistItem",
-            identifier = str(item_id)
+            resource = "NoteFolder",
+            identifier = str(folder_id)
         )
 
 
-class ChecklistLogNotFound(ResourceNotFound):
+class NoteNotFound(ResourceNotFound):
     """
-    Raised when a checklist log entry is not found
+    Raised when note not found
     """
-    def __init__(self, log_id: UUID) -> None:
-        super().__init__(
-            resource = "ChecklistLog",
-            identifier = str(log_id)
-        )
+    def __init__(self, note_id: UUID) -> None:
+        super().__init__(resource = "Note", identifier = str(note_id))
 
 
-def _to_log_response(log: ChecklistLog) -> ChecklistLogResponse:
+class NotesService:
     """
-    Convert a ChecklistLog ORM instance to ChecklistLogResponse
-    """
-    return ChecklistLogResponse(
-        id = log.id,
-        created_at = log.created_at,
-        updated_at = log.updated_at,
-        item_id = log.item_id,
-        log_date = log.log_date,
-        completed = log.completed,
-        note = log.note,
-        item_title = log.item.title,
-        item_sort_order = log.item.sort_order,
-    )
-
-
-class ChecklistService:
-    """
-    Service for checklist operations
+    Service for notes operations
     """
     @staticmethod
-    async def get_items(
-        session: AsyncSession
-    ) -> ChecklistItemListResponse:
-        """
-        Get all active checklist items
-        """
-        items = await ChecklistItemRepository.get_active(session)
-        return ChecklistItemListResponse(
-            items = [
-                ChecklistItemResponse.model_validate(i) for i in items
-            ]
-        )
-
-    @staticmethod
-    async def create_item(
+    async def get_all_notes(
         session: AsyncSession,
-        data: ChecklistItemCreate,
-    ) -> ChecklistItemResponse:
+    ) -> NotesListResponse:
         """
-        Create a new checklist item
+        Get all folders and notes
         """
-        item = await ChecklistItemRepository.create(
+        folders = await NoteFolderRepository.get_all(session)
+        notes = await NoteRepository.get_all(session)
+        return NotesListResponse(
+            folders = [
+                NoteFolderResponse.model_validate(f) for f in folders
+            ],
+            notes = [NoteResponse.model_validate(n) for n in notes],
+        )
+
+    @staticmethod
+    async def create_folder(
+        session: AsyncSession,
+        data: NoteFolderCreate,
+    ) -> NoteFolderResponse:
+        """
+        Create a folder
+        """
+        folder = await NoteFolderRepository.create(
             session,
-            title = data.title,
+            name = data.name,
+            parent_id = data.parent_id,
             sort_order = data.sort_order,
         )
-        return ChecklistItemResponse.model_validate(item)
+        return NoteFolderResponse.model_validate(folder)
 
     @staticmethod
-    async def update_item(
+    async def update_folder(
         session: AsyncSession,
-        item_id: UUID,
-        data: ChecklistItemUpdate,
-    ) -> ChecklistItemResponse:
+        folder_id: UUID,
+        data: NoteFolderUpdate,
+    ) -> NoteFolderResponse:
         """
-        Update a checklist item
+        Update a folder
         """
-        item = await ChecklistItemRepository.get_by_id(session, item_id)
-        if not item:
-            raise ChecklistItemNotFound(item_id)
+        folder = await NoteFolderRepository.get_by_id(session, folder_id)
+        if not folder:
+            raise NoteFolderNotFound(folder_id)
 
-        update_
+        update_dict = data.model_dump(exclude_unset = True)
+        folder = await NoteFolderRepository.update(
+            session,
+            folder,
+            **update_dict
+        )
+        return NoteFolderResponse.model_validate(folder)
+
+    @staticmethod
+    async def delete_folder(
+        session: AsyncSession,
+        folder_id: UUID,
+    ) -> None:
+        """
+        Soft delete a folder and all its notes
+        """
+        folder = await NoteFolderRepository.get_by_id(session, folder_id)
+        if not folder:
+            raise NoteFolderNotFound(folder_id)
+
+        notes_in_folder = await Not
 ```
 
 ---
@@ -138,24 +138,34 @@ class ChecklistService:
 
 **Pattern Used:** Repository Pattern
 
-The **Repository Pattern** is implemented in the `ChecklistService` class, which abstracts database operations through methods like `get_items`, `create_item`, and `update_log`. Each method interacts with repositories (`ChecklistItemRepository` and `ChecklistLogRepository`) to perform CRUD (Create, Read, Update, Delete) operations.
+The `NotesService` class in this code implements the **Repository Pattern**, which decouples business logic from data access by providing a uniform interface to retrieve and store domain objects.
 
-**Implementation:**
-- **Repositories**: The code uses separate repository classes for `ChecklistItem` and `ChecklistLog` models. These repositories handle the database interactions.
-- **Service Layer**: The service layer (`ChecklistService`) acts as a facade, providing high-level business logic while delegating low-level data access to the repositories.
+- **Implementation**: The `NoteFolderRepository` and `NoteRepository` classes handle CRUD operations for `NoteFolder` and `Note` entities, respectively. These repositories are injected into the service methods via the `session` parameter.
+  
+  ```python
+  @staticmethod
+  async def get_all_notes(session: AsyncSession) -> NotesListResponse:
+      folders = await NoteFolderRepository.get_all(session)
+      notes = await NoteRepository.get_all(session)
+      return NotesListResponse(
+          folders=[NoteFolderResponse.model_validate(f) for f in folders],
+          notes=[NoteResponse.model_validate(n) for n in notes],
+      )
+  ```
 
-**Benefits:**
-1. **Separation of Concerns**: The repository pattern clearly separates data access concerns from business logic, making the code more maintainable and testable.
-2. **Testability**: Repositories can be easily mocked or replaced with in-memory databases for unit testing.
-3. **Flexibility**: Changes to database technology (e.g., switching from SQLAlchemy ORM to a different ORM) require minimal changes outside the repository layer.
+- **Benefits**: 
+  - **Encapsulation**: The service layer is decoupled from the database, making it easier to switch data storage mechanisms.
+  - **Testability**: Repositories can be easily mocked or replaced with in-memory databases during testing.
 
-**Deviations:**
-- The service methods are static, which might not always align with the intent of the repository pattern where services often encapsulate business logic and interact with multiple repositories.
-- Some methods like `get_day` involve additional logic (auto-init logs if first visit), which slightly deviates from the pure CRUD operations.
+- **Deviations**:
+  - The `NotesService` class uses static methods instead of instance methods, which might not align perfectly with the standard pattern where services are often instances that maintain state.
+  - Error handling is done using custom exceptions (`NoteFolderNotFound`, `NoteNotFound`) rather than generic ones like `ResourceNotFound`.
 
-**Appropriateness:**
-This pattern is highly appropriate for this context, as it effectively separates data access concerns and provides a clear structure for handling business logic. The static nature of service methods can be justified in scenarios where they are stateless or when the service layer is relatively simple. However, if more complex business logic emerges, consider making services instance-based to encapsulate state and dependencies better.
+- **Appropriateness**:
+  - This pattern is highly appropriate in this context as it effectively separates concerns, making the code more modular and easier to manage. It’s particularly useful when dealing with complex data access logic or when integrating with different types of storage systems.
+
+This implementation closely follows the Repository Pattern while providing a clear separation between business logic and data access.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 18:51*
+*Generated by CodeWorm on 2026-02-25 19:59*
