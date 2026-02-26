@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** my-portfolio
-**File:** v1/backend/app/auth/service.py
+**File:** v1/backend/app/auth/repository.py
 **Language:** python
-**Lines:** 1-207
+**Lines:** 1-177
 **Complexity:** 0.0
 
 ---
@@ -14,79 +14,74 @@
 ```python
 """
 ⒸAngelaMos | 2025
-service.py
+repository.py
 """
 
-import uuid6
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-)
+from uuid import UUID
+from datetime import UTC, datetime
 
-from core.exceptions import (
-    InvalidCredentials,
-    TokenError,
-    TokenRevokedError,
-)
-from core.security import (
-    hash_token,
-    create_access_token,
-    create_refresh_token,
-    verify_password_with_timing_safety,
-)
-from user.User import User
-from user.repository import UserRepository
-from .repository import RefreshTokenRepository
-from .schemas import (
-    TokenResponse,
-    TokenWithUserResponse,
-)
-from user.schemas import UserResponse
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .RefreshToken import RefreshToken
+from core.base_repository import BaseRepository
 
 
-class AuthService:
+class RefreshTokenRepository(BaseRepository[RefreshToken]):
     """
-    Business logic for authentication operations
+    Repository for RefreshToken model database operations
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    model = RefreshToken
 
-    async def authenticate(
-        self,
-        email: str,
-        password: str,
+    @classmethod
+    async def get_by_hash(
+        cls,
+        session: AsyncSession,
+        token_hash: str,
+    ) -> RefreshToken | None:
+        """
+        Get refresh token by its hash
+        """
+        result = await session.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def get_valid_by_hash(
+        cls,
+        session: AsyncSession,
+        token_hash: str,
+    ) -> RefreshToken | None:
+        """
+        Get valid (not revoked, not expired) refresh token by hash
+        """
+        result = await session.execute(
+            select(RefreshToken).where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.is_revoked == False,
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def create_token(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        token_hash: str,
+        family_id: UUID,
+        expires_at: datetime,
         device_id: str | None = None,
         device_name: str | None = None,
         ip_address: str | None = None,
-    ) -> tuple[str,
-               str,
-               User]:
+    ) -> RefreshToken:
         """
-        Authenticate user and create tokens
+        Create a new refresh token
         """
-        user = await UserRepository.get_by_email(self.session, email)
-        hashed_password = user.hashed_password if user else None
-
-        is_valid, new_hash = await verify_password_with_timing_safety(
-            password, hashed_password
-        )
-
-        if not is_valid or user is None:
-            raise InvalidCredentials()
-
-        if not user.is_active:
-            raise InvalidCredentials()
-
-        if new_hash:
-            await UserRepository.update_password(self.session, user, new_hash)
-
-        access_token = create_access_token(user.id, user.token_version)
-
-        family_id = uuid6.uuid7()
-        raw_refresh, token_hash, expires_at = create_refresh_token(user.id, family_id)
-
-        await RefreshTokenRepository.create_token(
-            self.session,
-            user_id = user.id,
+        token = RefreshToken(
+            user_id = user_id,
             token_hash = token_hash,
             family_id = family_id,
             expires_at = expires_at,
@@ -94,40 +89,42 @@ class AuthService:
             device_name = device_name,
             ip_address = ip_address,
         )
+        session.add(token)
+        await session.flush()
+        await session.refresh(token)
+        return token
 
-        return access_token, raw_refresh, user
-
-    async def login(
-        self,
-        email: str,
-        password: str,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> tuple[TokenWithUserResponse,
-               str]:
+    @classmethod
+    async def revoke_token(
+        cls,
+        session: AsyncSession,
+        token: RefreshToken,
+    ) -> RefreshToken:
         """
-        Login and return tokens with user data
+        Revoke a single token
         """
-        access_token, refresh_token, user = await self.authenticate(
-            email,
-            password,
-            device_id,
-            device_name,
-            ip_address,
-        )
+        token.revoke()
+        await session.flush()
+        await session.refresh(token)
+        return token
 
-        response = TokenWithUserResponse(
-            access_token = access_token,
-            user = UserResponse.model_validate(user),
-        )
-        return response, refresh_token
+    @classmethod
+    async def revoke_family(
+        cls,
+        session: AsyncSession,
+        family_id: UUID,
+    ) -> int:
+        """
+        Revoke all tokens in a family (for replay attack response)
 
-    async def refresh_tokens(
-        self,
-        refresh_token: str,
-        device_id: str | None = None,
-        device_name: s
+        Returns count of revoked tokens
+        """
+        result = await session.execute(
+            update(RefreshToken).where(
+                RefreshToken.family_id == family_id,
+                RefreshToken.is_revoked == False,
+            ).values(is_revoked = True,
+                     revoked_at = datetime.now(UTC)
 ```
 
 ---
@@ -138,30 +135,21 @@ class AuthService:
 
 **Pattern Used:** Repository Pattern
 
-#### Implementation in Code
-The `AuthService` class interacts with repositories such as `UserRepository` and `RefreshTokenRepository`. These repositories handle database operations like fetching, updating, and creating tokens. For example, the `authenticate` method uses `UserRepository.get_by_email` to fetch a user by email.
+The `RefreshTokenRepository` class implements the **Repository Pattern**, which abstracts data access operations, providing a uniform interface to interact with the database. This implementation includes methods for creating, retrieving, updating, and deleting `RefreshToken` objects.
 
-```python
-user = await UserRepository.get_by_email(self.session, email)
-```
+- **Implementation**: The class defines methods like `get_by_hash`, `create_token`, `revoke_token`, etc., each corresponding to CRUD operations on the `RefreshToken` model.
+- **Benefits**:
+  - **Encapsulation**: Abstracts database interactions behind a clean interface, making it easier to switch between different data storage mechanisms if needed.
+  - **Testability**: Methods can be easily tested in isolation without needing an actual database connection.
+  - **Maintainability**: Centralizes all database operations within the repository class, reducing coupling and improving code organization.
 
-#### Benefits of Using This Pattern Here
-1. **Separation of Concerns:** The repository pattern separates business logic from data access concerns, making the codebase more modular and easier to maintain.
-2. **Testability:** Repositories can be easily mocked or replaced with in-memory databases for testing purposes.
-3. **Flexibility:** It allows changing the underlying database system without affecting the service layer.
+- **Deviations**:
+  - The `BaseRepository` class is not shown, but it likely provides common methods that are reused here. This deviation simplifies the implementation by leveraging shared functionality.
+  - Methods like `revoke_family` and `revoke_all_user_tokens` use SQL updates to revoke tokens directly, which might be more efficient than individual delete operations.
 
-#### Deviations from Standard Pattern
-- The `AuthService` directly interacts with multiple repositories (`UserRepository`, `RefreshTokenRepository`) rather than a single repository interface. This could be improved by defining a higher-level abstraction or using dependency injection to manage these dependencies.
-- Some methods like `logout` do not return any value, which might not align perfectly with the standard pattern's expectations of clear method signatures.
-
-#### When This Pattern is Appropriate
-The repository pattern is highly appropriate in this context because:
-1. The service layer needs to interact with multiple data sources (users and refresh tokens).
-2. There are complex business rules around token validation and user authentication.
-3. Future changes, such as switching databases or adding more repositories, can be managed without altering the core logic.
-
-In summary, the repository pattern effectively separates concerns in `AuthService`, making it easier to manage and test various data access operations while maintaining a clean service layer.
+- **Appropriateness**:
+  - This pattern is highly appropriate for this scenario as it encapsulates database interactions in a structured manner, making the codebase more maintainable and testable. It's particularly useful when dealing with complex data models like `RefreshToken` that require multiple CRUD operations.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 11:20*
+*Generated by CodeWorm on 2026-02-26 11:25*
