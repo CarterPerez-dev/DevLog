@@ -1,0 +1,131 @@
+# test_autoencoder
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/ai-threat-detection/backend/tests/test_autoencoder.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: 9397b12a
+Message: add learn folder, move hidden files, update root readme, add learn folder, add clang tidy, and format
+Author: CarterPerez-dev
+File: PROJECTS/advanced/ai-threat-detection/backend/tests/test_autoencoder.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,99 @@
++"""
++©AngelaMos | 2026
++test_autoencoder.py
++"""
++
++import pytest
++import torch
++
++from ml.autoencoder import ThreatAutoencoder
++
++
++class TestAutoencoderArchitecture:
++
++    def test_output_shape_matches_input(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        x = torch.randn(16, 35)
++        out = model(x)
++        assert out.shape == (16, 35)
++
++    def test_bottleneck_dim_is_six(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        x = torch.randn(4, 35)
++        encoded = model.encode(x)
++        assert encoded.shape == (4, 6)
++
++    def test_single_sample_forward(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        model.eval()
++        x = torch.randn(1, 35)
++        with torch.no_grad():
++            out = model(x)
++        assert out.shape == (1, 35)
++
++    def test_output_values_in_zero_one_range(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        model.eval()
++        x = torch.randn(32, 35)
++        with torch.no_grad():
++            out = model(x)
++        assert out.min() >= 0.0
++        assert out.max() <= 1.0
++
++    def test_reconstruction_error_shape(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        model.eval()
++        x = torch.randn(8, 35)
++        with torch.no_grad():
++            errors = model.compute_reconstruction_error(x)
++        assert errors.shape == (8,)
++
++    def test_reconstruction_error_positive(self) -> None:
++        model = ThreatAutoencoder(input_dim=35)
++        model.eval()
++        x = torch.randn(8, 35)
++        with torch.no_grad():
++            errors = model.compute_reconstruction_error(x)
++        assert (errors >= 0.0).all()
++
++    def test_trained_model_reconstructs_normal_better_than_anomaly(self) -> None:
++        torch.manual_seed(42)
++        model = ThreatAutoencoder(input_dim=35)
++        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
++
++        normal_data = torch.randn(500, 35) * 0.5 + 0.5
++        normal_data = normal_data.clamp(0, 1)
++
++        model.train()
++        for _ in range(50):
++            out = model(normal_data)
++            loss = torch.nn.functional.mse_loss(out, normal_data)
++            optimizer.zero_grad()
++            loss.backward()
++            optimizer.step()
++
++        model.eval()
++        with torch.no_grad():
++            normal_errors = model.compute_reconstruction_error(normal_data[:50])
++            anomaly_data = torch.rand(50, 35) * 3.0 - 1.0
++            anomaly_errors = model.compute_reconstruction_error(anomaly_data)
++
++        assert anomaly_errors.mean() > normal_errors.mean()
++
++    def test_eval_mode_disables_dropout(self) -> None:
++        model = ThreatAutoencod
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for `test_autoencoder.py`
+
+**What was Changed:**
+A new test file `test_autoencoder.py` was added to the `backend/tests` directory. This file contains 99 lines of code, including various tests for the `ThreatAutoencoder` class from the `ml.autoencoder` module.
+
+**Why it Was Likely Changed:**
+The addition of this test suite is likely intended to ensure that the `ThreatAutoencoder` model functions correctly and meets specific requirements. The tests cover aspects such as output shape, bottleneck dimension, forward pass behavior, reconstruction error, training process, and batch size handling. This comprehensive testing helps in validating the model's architecture and functionality.
+
+**Impact on Behavior:**
+These tests will now be run automatically with each commit to ensure that changes do not break existing functionalities of the `ThreatAutoencoder`. The tests cover a wide range of scenarios, from basic shape checks to more complex training and error computation. This ensures robustness and reliability in the model's behavior.
+
+**Risks or Concerns:**
+While these tests are comprehensive, they assume that the `ThreatAutoencoder` class is correctly implemented. Any changes to the model’s internal logic could potentially break these tests unless corresponding updates are made. Additionally, the use of specific seeds (e.g., `torch.manual_seed(42)`) in some tests might make them less robust against future changes or random behavior.
+
+Overall, this change significantly improves code quality and maintainability by providing a thorough test suite for the `ThreatAutoencoder`.
+
+---
+
+*Generated by CodeWorm on 2026-02-26 01:58*
