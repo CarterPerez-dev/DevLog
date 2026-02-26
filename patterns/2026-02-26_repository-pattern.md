@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** my-portfolio
-**File:** v1/backend/app/auth/repository.py
+**File:** v1/backend/app/blog/service.py
 **Language:** python
-**Lines:** 1-177
+**Lines:** 1-109
 **Complexity:** 0.0
 
 ---
@@ -14,117 +14,113 @@
 ```python
 """
 ⒸAngelaMos | 2025
-repository.py
+service.py
 """
 
 from uuid import UUID
-from datetime import UTC, datetime
 
-from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .RefreshToken import RefreshToken
-from core.base_repository import BaseRepository
+import config
+from config import (
+    BlogCategory,
+    Language,
+)
+from core.exceptions import BlogNotFound
+from .repository import BlogRepository
+from .schemas import (
+    BlogBriefResponse,
+    BlogListResponse,
+    BlogResponse,
+)
 
 
-class RefreshTokenRepository(BaseRepository[RefreshToken]):
+class BlogService:
     """
-    Repository for RefreshToken model database operations
+    Business logic for blog operations.
     """
-    model = RefreshToken
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    @classmethod
-    async def get_by_hash(
-        cls,
-        session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+    async def get_by_id(self, blog_id: UUID) -> BlogResponse:
         """
-        Get refresh token by its hash
+        Get blog post by ID.
         """
-        result = await session.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        blog = await BlogRepository.get_by_id(self.session, blog_id)
+        if not blog:
+            raise BlogNotFound(str(blog_id))
+        return BlogResponse.model_validate(blog)
+
+    async def list_visible(
+        self,
+        language: Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> BlogListResponse:
+        """
+        List visible blog posts for a language.
+        """
+        blogs = await BlogRepository.get_visible_by_language(
+            self.session,
+            language,
+            skip,
+            limit,
         )
-        return result.scalars().first()
-
-    @classmethod
-    async def get_valid_by_hash(
-        cls,
-        session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
-        """
-        Get valid (not revoked, not expired) refresh token by hash
-        """
-        result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash,
-                RefreshToken.is_revoked == False,
-                RefreshToken.expires_at > datetime.now(UTC),
-            )
+        total = await BlogRepository.count_visible_by_language(
+            self.session,
+            language,
         )
-        return result.scalars().first()
-
-    @classmethod
-    async def create_token(
-        cls,
-        session: AsyncSession,
-        user_id: UUID,
-        token_hash: str,
-        family_id: UUID,
-        expires_at: datetime,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> RefreshToken:
-        """
-        Create a new refresh token
-        """
-        token = RefreshToken(
-            user_id = user_id,
-            token_hash = token_hash,
-            family_id = family_id,
-            expires_at = expires_at,
-            device_id = device_id,
-            device_name = device_name,
-            ip_address = ip_address,
+        return BlogListResponse(
+            items = [BlogResponse.model_validate(b) for b in blogs],
+            total = total,
+            skip = skip,
+            limit = limit,
         )
-        session.add(token)
-        await session.flush()
-        await session.refresh(token)
-        return token
 
-    @classmethod
-    async def revoke_token(
-        cls,
-        session: AsyncSession,
-        token: RefreshToken,
-    ) -> RefreshToken:
+    async def list_featured(
+        self,
+        language: Language,
+        limit: int = config.PAGINATION_FEATURED_LIMIT,
+    ) -> list[BlogResponse]:
         """
-        Revoke a single token
+        List featured blog posts for a language.
+        Used for overview page highlights.
         """
-        token.revoke()
-        await session.flush()
-        await session.refresh(token)
-        return token
+        blogs = await BlogRepository.get_featured_by_language(
+            self.session,
+            language,
+            limit,
+        )
+        return [BlogResponse.model_validate(b) for b in blogs]
 
-    @classmethod
-    async def revoke_family(
-        cls,
-        session: AsyncSession,
-        family_id: UUID,
-    ) -> int:
+    async def list_by_category(
+        self,
+        category: BlogCategory,
+        language: Language,
+    ) -> list[BlogResponse]:
         """
-        Revoke all tokens in a family (for replay attack response)
+        List blog posts by category and language.
+        """
+        blogs = await BlogRepository.get_by_category_and_language(
+            self.session,
+            category,
+            language,
+        )
+        return [BlogResponse.model_validate(b) for b in blogs]
 
-        Returns count of revoked tokens
+    async def get_nav_items(
+        self,
+        language: Language,
+    ) -> list[BlogBriefResponse]:
         """
-        result = await session.execute(
-            update(RefreshToken).where(
-                RefreshToken.family_id == family_id,
-                RefreshToken.is_revoked == False,
-            ).values(is_revoked = True,
-                     revoked_at = datetime.now(UTC)
+        Get brief blog data for sidebar navigation.
+        """
+        blogs = await BlogRepository.get_visible_by_language(
+            self.session,
+            language,
+        )
+        return [BlogBriefResponse.model_validate(b) for b in blogs]
+
 ```
 
 ---
@@ -135,21 +131,35 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
 
 **Pattern Used:** Repository Pattern
 
-The `RefreshTokenRepository` class implements the **Repository Pattern**, which abstracts data access operations, providing a uniform interface to interact with the database. This implementation includes methods for creating, retrieving, updating, and deleting `RefreshToken` objects.
+**Implementation:**
+The `BlogService` class interacts with a `BlogRepository` to perform various operations such as fetching blog posts by ID, listing visible blogs, and categorizing them. The repository handles the data access logic, while the service layer focuses on business logic.
 
-- **Implementation**: The class defines methods like `get_by_hash`, `create_token`, `revoke_token`, etc., each corresponding to CRUD operations on the `RefreshToken` model.
-- **Benefits**:
-  - **Encapsulation**: Abstracts database interactions behind a clean interface, making it easier to switch between different data storage mechanisms if needed.
-  - **Testability**: Methods can be easily tested in isolation without needing an actual database connection.
-  - **Maintainability**: Centralizes all database operations within the repository class, reducing coupling and improving code organization.
+```python
+class BlogService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-- **Deviations**:
-  - The `BaseRepository` class is not shown, but it likely provides common methods that are reused here. This deviation simplifies the implementation by leveraging shared functionality.
-  - Methods like `revoke_family` and `revoke_all_user_tokens` use SQL updates to revoke tokens directly, which might be more efficient than individual delete operations.
+    async def get_by_id(self, blog_id: UUID) -> BlogResponse:
+        blog = await BlogRepository.get_by_id(self.session, blog_id)
+        if not blog:
+            raise BlogNotFound(str(blog_id))
+        return BlogResponse.model_validate(blog)
 
-- **Appropriateness**:
-  - This pattern is highly appropriate for this scenario as it encapsulates database interactions in a structured manner, making the codebase more maintainable and testable. It's particularly useful when dealing with complex data models like `RefreshToken` that require multiple CRUD operations.
+    # Other methods...
+```
+
+**Benefits:**
+1. **Separation of Concerns:** The repository handles data access, while the service layer manages business logic.
+2. **Testability:** Repositories can be easily mocked for unit testing.
+3. **Flexibility:** Easier to change database technology or storage mechanism without affecting the service.
+
+**Deviations:**
+- The `BlogService` class does not implement a strict repository pattern, as it directly interacts with the session object rather than using an abstracted data access layer.
+- The methods in `BlogService` return specific response models (`BlogResponse`, `BlogListResponse`, etc.), which is a deviation from the typical pattern where repositories return raw data.
+
+**Appropriateness:**
+This pattern is appropriate when you need to separate business logic from data access and ensure that your service layer remains clean and focused on high-level operations. However, the direct session interaction might make it less flexible if database changes are required in the future.
 
 ---
 
-*Generated by CodeWorm on 2026-02-26 11:25*
+*Generated by CodeWorm on 2026-02-26 11:41*
