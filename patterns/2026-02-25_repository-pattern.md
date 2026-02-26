@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/core/foundation/repositories/base.py
+**File:** CarterOS-Server/src/aspects/auth/services/auth.py
 **Language:** python
-**Lines:** 1-107
+**Lines:** 1-213
 **Complexity:** 0.0
 
 ---
@@ -13,112 +13,118 @@
 
 ```python
 """
-ⒸAngelaMos | 2026
-base.py
+ⒸAngelaMos | 2025
+auth.py
 """
 
-from collections.abc import Sequence
-from typing import (
-    Any,
-    Generic,
-    TypeVar,
+import uuid6
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
 )
-from uuid import UUID
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from core.exceptions import (
+    InvalidCredentials,
+    TokenError,
+    TokenRevokedError,
+)
+from core.security.auth.jwt import (
+    hash_token,
+    create_access_token,
+    create_refresh_token,
+    verify_password_with_timing_safety,
+)
+from aspects.auth.models.User import User
+from aspects.auth.repositories.user import UserRepository
+from aspects.auth.repositories.refresh_token import RefreshTokenRepository
+from aspects.auth.schemas.auth import (
+    TokenResponse,
+    TokenWithUserResponse,
+)
+from aspects.auth.schemas.user import UserResponse
 
-from core.infrastructure.database.Base import Base
 
-
-ModelT = TypeVar("ModelT", bound = Base)
-
-
-class BaseRepository(Generic[ModelT]):
+class AuthService:
     """
-    Generic repository with common CRUD operations
+    Business logic for authentication operations
     """
-    model: type[ModelT]
-
-    @classmethod
-    async def get_by_id(
-        cls,
+    @staticmethod
+    async def authenticate(
         session: AsyncSession,
-        id: UUID,
-    ) -> ModelT | None:
+        email: str,
+        password: str,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> tuple[str,
+               str,
+               User]:
         """
-        Get a single record by ID
+        Authenticate user and create tokens
         """
-        return await session.get(cls.model, id)
+        user = await UserRepository.get_by_email(session, email)
+        hashed_password = user.hashed_password if user else None
 
-    @classmethod
-    async def get_multi(
-        cls,
-        session: AsyncSession,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> Sequence[ModelT]:
-        """
-        Get multiple records with pagination
-        """
-        result = await session.execute(
-            select(cls.model).offset(skip).limit(limit)
+        is_valid, new_hash = await verify_password_with_timing_safety(
+            password, hashed_password
         )
-        return result.scalars().all()
 
-    @classmethod
-    async def count(cls, session: AsyncSession) -> int:
-        """
-        Count total records
-        """
-        result = await session.execute(
-            select(func.count()).select_from(cls.model)
+        if not is_valid or user is None:
+            raise InvalidCredentials()
+
+        if not user.is_active:
+            raise InvalidCredentials()
+
+        if new_hash:
+            await UserRepository.update_password(session, user, new_hash)
+
+        access_token = create_access_token(user.id, user.token_version)
+
+        family_id = uuid6.uuid7()
+        raw_refresh, token_hash, expires_at = create_refresh_token(user.id, family_id)
+
+        await RefreshTokenRepository.create_token(
+            session,
+            user_id = user.id,
+            token_hash = token_hash,
+            family_id = family_id,
+            expires_at = expires_at,
+            device_id = device_id,
+            device_name = device_name,
+            ip_address = ip_address,
         )
-        return result.scalar_one()
 
-    @classmethod
-    async def create(
-        cls,
+        return access_token, raw_refresh, user
+
+    @staticmethod
+    async def login(
         session: AsyncSession,
-        **kwargs: Any,
-    ) -> ModelT:
+        email: str,
+        password: str,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> tuple[TokenWithUserResponse,
+               str]:
         """
-        Create a new record
+        Login and return tokens with user data
         """
-        instance = cls.model(**kwargs)
-        session.add(instance)
-        await session.flush()
-        await session.refresh(instance)
-        return instance
+        access_token, refresh_token, user = await AuthService.authenticate(
+            session,
+            email,
+            password,
+            device_id,
+            device_name,
+            ip_address,
+        )
 
-    @classmethod
-    async def update(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-        **kwargs: Any,
-    ) -> ModelT:
-        """
-        Update an existing record
-        """
-        for key, value in kwargs.items():
-            setattr(instance, key, value)
-        await session.flush()
-        await session.refresh(instance)
-        return instance
+        response = TokenWithUserResponse(
+            access_token = access_token,
+            user = UserResponse.model_validate(user),
+        )
+        return response, refresh_token
 
-    @classmethod
-    async def delete(
-        cls,
-        session: AsyncSession,
-        instance: ModelT,
-    ) -> None:
-        """
-        Delete a record
-        """
-        await session.delete(instance)
-        await session.flush()
-
+    @staticmethod
+    async def refresh_to
 ```
 
 ---
@@ -129,20 +135,21 @@ class BaseRepository(Generic[ModelT]):
 
 **Pattern Used:** Repository Pattern
 
-The `BaseRepository` class implements a generic repository pattern, providing common CRUD operations for database entities. Each method (`get_by_id`, `get_multi`, `count`, `create`, `update`, and `delete`) operates on a specific model type, ensuring that the business logic is decoupled from the data access layer.
+**Implementation:**
+The `AuthService` class interacts with repositories (`UserRepository`, `RefreshTokenRepository`) to perform operations like getting, updating, and creating user and token data. The methods `authenticate`, `login`, `refresh_tokens`, and `logout` delegate the responsibility of database interactions to these repositories.
 
 **Benefits:**
-- **Decoupling:** The repository abstracts the interaction with the database, making it easier to switch between different storage mechanisms.
-- **Reusability:** Generic methods can be reused across multiple models by simply specifying the model type.
-- **Testability:** Repository methods are isolated and can be easily tested in isolation from the database.
+1. **Decoupling:** By separating business logic from data access, the code is more modular and easier to test.
+2. **Consistency:** Ensures that all data access follows a consistent pattern, making it easier to maintain and scale.
+3. **Testability:** Repositories can be easily mocked or replaced with in-memory databases for unit testing.
 
 **Deviations:**
-- The implementation uses class methods instead of instance methods, which is a common deviation but still adheres to the repository pattern's intent.
-- The use of `TypeVar` for generic type hints enhances code readability and maintainability.
+- The `AuthService` class is not strictly following the repository pattern as defined by Martin Fowler, where repositories should encapsulate all data access logic. Here, the service layer still contains some business logic.
+- Some methods like `logout` are incomplete and might require additional parameters or error handling.
 
 **Appropriateness:**
-This pattern is highly appropriate in this context because it provides a structured way to manage database operations. It ensures that business logic remains separate from data access, making the application more modular and easier to maintain. However, it might be overkill for very simple applications or when working with small datasets where direct ORM usage could suffice.
+This pattern is appropriate in this context because it clearly separates concerns between business logic and data access, making the codebase more maintainable and testable. It is particularly beneficial in a microservices architecture where different services may need to interact with the same database models. However, for simpler applications or scenarios where the service layer is minimal, this level of separation might be overkill.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 20:25*
+*Generated by CodeWorm on 2026-02-25 20:54*
