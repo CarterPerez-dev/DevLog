@@ -1,0 +1,139 @@
+# leaderboard.guards
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/leaderboard/types/leaderboard.guards.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 45920f64
+Message: refactor(domains): migrate small domain interfaces to Zod schemas
+
+Convert newsletter, onboarding, daily, leaderboard, and achievement
+domains from manual TypeScript interfaces + manual type guards to
+Zod schemas + Zod-wrapped guards (Task 2 of Zod migration).
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/leaderboard/types/leaderboard.guards.ts
+Change type: modified
+
+Diff:
+@@ -1,8 +1,19 @@
+ // ===========================
+-// Leaderboard Type Guards
+-// ©AngelaMos | 2025
++// © AngelaMos | 2026
++// leaderboard.guards.ts
+ // ===========================
+ 
++import {
++  leaderboardEntrySchema,
++  publicLeaderboardResponseSchema,
++  privateLeaderboardResponseSchema,
++  userLeaderboardPositionResponseSchema,
++  leaderboardChangeSchema,
++  leaderboardNewEntrySchema,
++  leaderboardLeftEntrySchema,
++  leaderboardChangesSchema,
++  leaderboardStatisticsSchema,
++} from './leaderboard.interfaces';
+ import type {
+   LeaderboardEntry,
+   PublicLeaderboardResponse,
+@@ -18,161 +29,53 @@ import type {
+ export const isValidLeaderboardEntry = (
+   data: unknown,
+ ): data is LeaderboardEntry => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.username === 'string' &&
+-    typeof obj.level === 'number' &&
+-    typeof obj.xp === 'number' &&
+-    typeof obj.rank === 'number' &&
+-    typeof obj.role === 'string' &&
+-    (obj.avatarUrl === null || typeof obj.avatarUrl === 'string')
+-  );
++  return leaderboardEntrySchema.safeParse(data).success;
+ };
+ 
+ export const isValidLeaderboardChange = (
+   data: unknown,
+ ): data is LeaderboardChange => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.username === 'string' &&
+-    typeof obj.old_rank === 'number' &&
+-    typeof obj.new_rank === 'number' &&
+-    typeof obj.change === 'number'
+-  );
++  return leaderboardChangeSchema.safeParse(data).success;
+ };
+ 
+ export const isValidLeaderboardNewEntry = (
+   data: unknown,
+ ): data is LeaderboardNewEntry => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return typeof obj.username === 'string' && typeof obj.rank === 'number';
++  return leaderboardNewEntrySchema.safeParse(data).success;
+ };
+ 
+ export const isValidLeaderboardLeftEntry = (
+   data: unknown,
+ ): data is LeaderboardLeftEntry => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.username === 'string' && typeof obj.old_rank === 'number'
+-  );
++  return leaderboardLeftEntrySchema.safeParse(data).success;
+ };
+ 
+ export const isValidLeaderboardChanges = (
+   data: unknown,
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code in `leaderboard.guards.ts` has been refactored to use Zod schemas instead of manual TypeScript interfaces and type guards. Specifically, the validation functions have been replaced with calls to corresponding Zod schema parsing methods (`safeParse`) that return a boolean indicating whether the data is valid.
+
+**Why it was Likely Changed:**
+This change likely aims to improve code maintainability and reduce redundancy by leveraging Zod's powerful schema validation capabilities. Zod can handle complex validation rules more succinctly and provides better error messages, making the code easier to understand and maintain.
+
+**Impact on Behavior:**
+The behavior of type guards has not changed; they still return `true` or `false` based on whether the input data matches the expected shape. However, under the hood, Zod's schema validation is now used instead of custom logic. This change should not affect external behavior but may improve internal consistency and robustness.
+
+**Risks or Concerns:**
+- **Backward Compatibility:** Ensure that all existing uses of these guards are compatible with Zod schemas.
+- **Error Handling:** Zod provides more detailed error messages, which might require adjustments in how errors are handled and logged.
+- **Performance Impact:** While Zod is optimized for performance, there could be a slight overhead compared to simple type checks. This should be monitored if performance becomes an issue.
+
+Overall, this refactor enhances the codebase by leveraging a robust validation library without altering external behavior.
+
+---
+
+*Generated by CodeWorm on 2026-02-26 07:30*
