@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/auth/repositories/refresh_token.py
+**File:** CarterOS-Server/src/aspects/life_manager/facets/checklist/repository.py
 **Language:** python
-**Lines:** 1-179
+**Lines:** 1-138
 **Complexity:** 0.0
 
 ---
@@ -14,118 +14,115 @@
 ```python
 """
 ⒸAngelaMos | 2026
-refresh_token.py
+repository.py
 """
 
+from collections.abc import Sequence
+from datetime import date
 from uuid import UUID
-from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+import sqlalchemy as sa
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aspects.auth.models.RefreshToken import RefreshToken
 from core.foundation.repositories.base import BaseRepository
+from aspects.life_manager.facets.checklist.models import ChecklistItem, ChecklistLog
 
 
-class RefreshTokenRepository(BaseRepository[RefreshToken]):
+class ChecklistItemRepository(BaseRepository[ChecklistItem]):
     """
-    Repository for RefreshToken model database operations
+    Repository for ChecklistItem operations
     """
-    model = RefreshToken
+    model = ChecklistItem
 
     @classmethod
-    async def get_by_hash(
+    async def get_active(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+    ) -> Sequence[ChecklistItem]:
         """
-        Get refresh token by its hash
+        Get all active items ordered by sort_order
         """
         result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash
+            select(ChecklistItem).where(
+                ChecklistItem.is_active == sa.true()
+            ).order_by(ChecklistItem.sort_order)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def soft_delete(
+        cls,
+        session: AsyncSession,
+        item: ChecklistItem,
+    ) -> ChecklistItem:
+        """
+        Set is_active=False instead of deleting
+        """
+        item.is_active = False
+        await session.flush()
+        await session.refresh(item)
+        return item
+
+
+class ChecklistLogRepository(BaseRepository[ChecklistLog]):
+    """
+    Repository for ChecklistLog operations
+    """
+    model = ChecklistLog
+
+    @classmethod
+    async def get_by_date(
+        cls,
+        session: AsyncSession,
+        log_date: date,
+    ) -> Sequence[ChecklistLog]:
+        """
+        Get all log entries for a date, joined with item for title/sort
+        """
+        result = await session.execute(
+            select(ChecklistLog).join(ChecklistLog.item).where(
+                ChecklistLog.log_date == log_date
+            ).order_by(ChecklistItem.sort_order)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_by_item_and_date(
+        cls,
+        session: AsyncSession,
+        item_id: UUID,
+        log_date: date,
+    ) -> ChecklistLog | None:
+        """
+        Get a specific log entry
+        """
+        result = await session.execute(
+            select(ChecklistLog).where(
+                ChecklistLog.item_id == item_id,
+                ChecklistLog.log_date == log_date,
             )
         )
-        return result.scalars().first()
+        return result.scalar_one_or_none()
 
     @classmethod
-    async def get_valid_by_hash(
+    async def get_heatmap_data(
         cls,
         session: AsyncSession,
-        token_hash: str,
-    ) -> RefreshToken | None:
+        start_date: date,
+        end_date: date,
+    ) -> Sequence[sa.Row]:
         """
-        Get valid (not revoked, not expired) refresh token by hash
+        Get (log_date, completed_count, total_count) aggregates for a date range
         """
         result = await session.execute(
-            select(RefreshToken).where(
-                RefreshToken.token_hash == token_hash,
-                RefreshToken.is_revoked == False,
-                RefreshToken.expires_at > datetime.now(UTC),
-            )
-        )
-        return result.scalars().first()
+            select(
+                ChecklistLog.log_date,
+                func.sum(sa.cast(ChecklistLog.completed,
+                                 sa.Integer)).label("completed_count"),
+                func.count(ChecklistLog.id).label("total_count"),
+            ).where(
 
-    @classmethod
-    async def create_token(
-        cls,
-        session: AsyncSession,
-        user_id: UUID,
-        token_hash: str,
-        family_id: UUID,
-        expires_at: datetime,
-        device_id: str | None = None,
-        device_name: str | None = None,
-        ip_address: str | None = None,
-    ) -> RefreshToken:
-        """
-        Create a new refresh token
-        """
-        token = RefreshToken(
-            user_id = user_id,
-            token_hash = token_hash,
-            family_id = family_id,
-            expires_at = expires_at,
-            device_id = device_id,
-            device_name = device_name,
-            ip_address = ip_address,
-        )
-        session.add(token)
-        await session.flush()
-        await session.refresh(token)
-        return token
-
-    @classmethod
-    async def revoke_token(
-        cls,
-        session: AsyncSession,
-        token: RefreshToken,
-    ) -> RefreshToken:
-        """
-        Revoke a single token
-        """
-        token.revoke()
-        await session.flush()
-        await session.refresh(token)
-        return token
-
-    @classmethod
-    async def revoke_family(
-        cls,
-        session: AsyncSession,
-        family_id: UUID,
-    ) -> int:
-        """
-        Revoke all tokens in a family (for replay attack response)
-
-        Returns count of revoked tokens
-        """
-        result = await session.execute(
-            update(RefreshToken).where(
-                RefreshToken.family_id == family_id,
-                RefreshToken.is_revoked == False,
-            ).values(is_re
 ```
 
 ---
@@ -136,25 +133,24 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
 
 **Pattern Used:** Repository Pattern
 
-The `RefreshTokenRepository` class implements the **Repository Pattern**, which encapsulates database access logic within a dedicated class. This implementation provides methods for common CRUD operations and specific business logic related to refresh tokens.
+The `ChecklistItemRepository` and `ChecklistLogRepository` classes implement the repository pattern, which encapsulates data access logic to provide a consistent interface for interacting with database operations.
 
-#### How Implemented:
-- The class inherits from `BaseRepository`, indicating it is part of a larger repository framework.
-- Methods like `get_by_hash`, `create_token`, `revoke_token`, etc., handle database interactions such as querying, creating, updating, and deleting entities (`RefreshToken`).
+- **Implementation**: Each repository class inherits from `BaseRepository`, defining methods like `get_active`, `soft_delete`, etc., that perform specific CRUD operations on their respective models (`ChecklistItem` and `ChecklistLog`). These methods abstract the underlying database interactions, making them reusable and testable.
+  
+- **Benefits**:
+  - **Encapsulation**: Data access logic is encapsulated within repository classes, reducing coupling between business logic and data storage mechanisms.
+  - **Testability**: Methods are isolated, allowing for easier unit testing without needing a live database.
+  - **Consistency**: A consistent interface across repositories ensures uniformity in how operations are performed.
 
-#### Benefits:
-1. **Encapsulation**: Separates data access logic from business logic, making the code more maintainable.
-2. **Testability**: Easier to mock or stub database operations for unit testing.
-3. **Consistency**: Ensures a consistent approach to handling database interactions across the application.
+- **Deviations**:
+  - The `BaseRepository` class is not shown, but it likely provides common methods and attributes. The provided classes only implement specific methods relevant to their models.
+  - Some methods return sequences of model instances or aggregated data (`sa.Row`), which may require additional processing in the calling code.
 
-#### Deviations:
-- The `BaseRepository` is not explicitly shown in this snippet but is assumed to provide common methods and properties like `model`.
-- Methods use class-level definitions, which is typical of repository patterns in Python.
-- Some methods (like `cleanup_expired`) perform additional cleanup tasks beyond CRUD operations, indicating a mix of business logic.
+- **Appropriateness**:
+  - This pattern is highly appropriate for applications that need to abstract database interactions, especially when working with SQLAlchemy and async operations. It ensures a clean separation of concerns between business logic and data access layers.
 
-#### Appropriateness:
-This pattern is highly appropriate for this scenario as it effectively encapsulates database interactions and provides a clear separation between data access and application logic. It ensures that the code remains clean and maintainable, especially in larger applications where multiple repositories might be used.
+This implementation effectively leverages the repository pattern to manage ChecklistItem and ChecklistLog operations in an organized and maintainable manner.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 21:08*
+*Generated by CodeWorm on 2026-02-25 21:45*
