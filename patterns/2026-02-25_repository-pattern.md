@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** angelamos-operations
-**File:** CarterOS-Server/src/aspects/auth/repositories/user.py
+**File:** CarterOS-Server/src/aspects/auth/repositories/refresh_token.py
 **Language:** python
-**Lines:** 1-109
+**Lines:** 1-179
 **Complexity:** 0.0
 
 ---
@@ -14,113 +14,118 @@
 ```python
 """
 ⒸAngelaMos | 2026
-user.py
+refresh_token.py
 """
-from uuid import UUID
 
-from sqlalchemy import select
+from uuid import UUID
+from datetime import UTC, datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aspects.auth.models.User import User
+from aspects.auth.models.RefreshToken import RefreshToken
 from core.foundation.repositories.base import BaseRepository
 
 
-class UserRepository(BaseRepository[User]):
+class RefreshTokenRepository(BaseRepository[RefreshToken]):
     """
-    Repository for User model database operations
+    Repository for RefreshToken model database operations
     """
-    model = User
+    model = RefreshToken
 
     @classmethod
-    async def get_by_email(
+    async def get_by_hash(
         cls,
         session: AsyncSession,
-        email: str,
-    ) -> User | None:
+        token_hash: str,
+    ) -> RefreshToken | None:
         """
-        Get user by email address
+        Get refresh token by its hash
         """
         result = await session.execute(
-            select(User).where(User.email == email)
+            select(RefreshToken).where(
+                RefreshToken.token_hash == token_hash
+            )
         )
         return result.scalars().first()
 
     @classmethod
-    async def get_by_id(
+    async def get_valid_by_hash(
         cls,
         session: AsyncSession,
-        id: UUID,
-    ) -> User | None:
+        token_hash: str,
+    ) -> RefreshToken | None:
         """
-        Get user by ID
-        """
-        return await session.get(User, id)
-
-    @classmethod
-    async def email_exists(
-        cls,
-        session: AsyncSession,
-        email: str,
-    ) -> bool:
-        """
-        Check if email is already registered
+        Get valid (not revoked, not expired) refresh token by hash
         """
         result = await session.execute(
-            select(User.id).where(User.email == email)
+            select(RefreshToken).where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.is_revoked == False,
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
         )
-        return result.scalars().first() is not None
+        return result.scalars().first()
 
     @classmethod
-    async def create_user(
+    async def create_token(
         cls,
         session: AsyncSession,
-        email: str,
-        hashed_password: str,
-        full_name: str | None = None,
-    ) -> User:
+        user_id: UUID,
+        token_hash: str,
+        family_id: UUID,
+        expires_at: datetime,
+        device_id: str | None = None,
+        device_name: str | None = None,
+        ip_address: str | None = None,
+    ) -> RefreshToken:
         """
-        Create a new user
+        Create a new refresh token
         """
-        user = User(
-            email = email,
-            hashed_password = hashed_password,
-            full_name = full_name,
+        token = RefreshToken(
+            user_id = user_id,
+            token_hash = token_hash,
+            family_id = family_id,
+            expires_at = expires_at,
+            device_id = device_id,
+            device_name = device_name,
+            ip_address = ip_address,
         )
-        session.add(user)
+        session.add(token)
         await session.flush()
-        await session.refresh(user)
-        return user
+        await session.refresh(token)
+        return token
 
     @classmethod
-    async def update_password(
+    async def revoke_token(
         cls,
         session: AsyncSession,
-        user: User,
-        hashed_password: str,
-    ) -> User:
+        token: RefreshToken,
+    ) -> RefreshToken:
         """
-        Update user password and increment token version
+        Revoke a single token
         """
-        user.hashed_password = hashed_password
-        user.increment_token_version()
+        token.revoke()
         await session.flush()
-        await session.refresh(user)
-        return user
+        await session.refresh(token)
+        return token
 
     @classmethod
-    async def increment_token_version(
+    async def revoke_family(
         cls,
         session: AsyncSession,
-        user: User,
-    ) -> User:
+        family_id: UUID,
+    ) -> int:
         """
-        Invalidate all user tokens
-        """
-        user.increment_token_version()
-        await session.flush()
-        await session.refresh(user)
-        return user
+        Revoke all tokens in a family (for replay attack response)
 
+        Returns count of revoked tokens
+        """
+        result = await session.execute(
+            update(RefreshToken).where(
+                RefreshToken.family_id == family_id,
+                RefreshToken.is_revoked == False,
+            ).values(is_re
 ```
 
 ---
@@ -131,20 +136,25 @@ class UserRepository(BaseRepository[User]):
 
 **Pattern Used:** Repository Pattern
 
-**Implementation:**
-The `UserRepository` class in the provided code implements the repository pattern by encapsulating database operations for the `User` model. It provides methods like `get_by_email`, `get_by_id`, `email_exists`, `create_user`, and `update_password`. These methods abstract away the details of interacting with the SQLAlchemy session, providing a clean interface for performing CRUD operations.
+The `RefreshTokenRepository` class implements the **Repository Pattern**, which encapsulates database access logic within a dedicated class. This implementation provides methods for common CRUD operations and specific business logic related to refresh tokens.
 
-**Benefits:**
-- **Encapsulation:** The repository pattern encapsulates database interactions within a single class, making it easier to switch between different data access technologies.
-- **Decoupling:** It decouples business logic from data access logic, allowing changes in the database schema or storage mechanism without affecting other parts of the application.
+#### How Implemented:
+- The class inherits from `BaseRepository`, indicating it is part of a larger repository framework.
+- Methods like `get_by_hash`, `create_token`, `revoke_token`, etc., handle database interactions such as querying, creating, updating, and deleting entities (`RefreshToken`).
 
-**Deviations:**
-- While most methods follow the pattern, some methods like `increment_token_version` and `update_password` modify the user object directly. This is a deviation because typically, repository methods should not alter objects but rather return them after operations.
-- The use of class methods (`@classmethod`) implies that instances are not needed to call these methods, which is standard for repositories.
+#### Benefits:
+1. **Encapsulation**: Separates data access logic from business logic, making the code more maintainable.
+2. **Testability**: Easier to mock or stub database operations for unit testing.
+3. **Consistency**: Ensures a consistent approach to handling database interactions across the application.
 
-**Appropriateness:**
-This pattern is appropriate in this context as it provides a clear separation between business logic and data access. However, the direct modification of objects within certain methods might be better handled through instance methods or by returning modified objects instead.
+#### Deviations:
+- The `BaseRepository` is not explicitly shown in this snippet but is assumed to provide common methods and properties like `model`.
+- Methods use class-level definitions, which is typical of repository patterns in Python.
+- Some methods (like `cleanup_expired`) perform additional cleanup tasks beyond CRUD operations, indicating a mix of business logic.
+
+#### Appropriateness:
+This pattern is highly appropriate for this scenario as it effectively encapsulates database interactions and provides a clear separation between data access and application logic. It ensures that the code remains clean and maintainable, especially in larger applications where multiple repositories might be used.
 
 ---
 
-*Generated by CodeWorm on 2026-02-25 21:06*
+*Generated by CodeWorm on 2026-02-25 21:08*
