@@ -1,0 +1,143 @@
+# WindowAggregator.record_and_aggregate
+
+**Type:** Security Review
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/ai-threat-detection/backend/app/core/features/aggregator.py
+**Language:** python
+**Lines:** 33-121
+**Complexity:** 3.0
+
+---
+
+## Source Code
+
+```python
+async def record_and_aggregate(
+        self,
+        ip: str,
+        request_id: str,
+        path: str,
+        path_depth: int,
+        method: str,
+        status_code: int,
+        user_agent: str,
+        response_size: int,
+        timestamp: float,
+    ) -> dict[str, float]:
+        """
+        Record a request into Redis sorted sets and return all 12
+        per-IP windowed features.
+        """
+        prefix = f"ip:{ip}"
+        keys = {
+            "requests": f"{prefix}:requests",
+            "paths": f"{prefix}:paths",
+            "statuses": f"{prefix}:statuses",
+            "uas": f"{prefix}:uas",
+            "sizes": f"{prefix}:sizes",
+            "methods": f"{prefix}:methods",
+            "depths": f"{prefix}:depths",
+        }
+
+        trim_boundary = timestamp - KEY_TTL
+        w1m = timestamp - WINDOW_1M
+        w5m = timestamp - WINDOW_5M
+        w10m = timestamp - WINDOW_10M
+
+        pipe = self._redis.pipeline()
+
+        pipe.zadd(keys["requests"], {request_id: timestamp})
+        pipe.zadd(keys["paths"], {_hash_member(path): timestamp})
+        pipe.zadd(keys["statuses"], {f"{status_code}:{request_id}": timestamp})
+        pipe.zadd(keys["uas"], {_hash_member(user_agent): timestamp})
+        pipe.zadd(keys["sizes"], {f"{response_size}:{request_id}": timestamp})
+        pipe.zadd(keys["methods"], {f"{method}:{request_id}": timestamp})
+        pipe.zadd(keys["depths"], {f"{path_depth}:{request_id}": timestamp})
+
+        for key in keys.values():
+            pipe.zremrangebyscore(key, "-inf", trim_boundary)
+
+        pipe.zcount(keys["requests"], w1m, "+inf")
+        pipe.zcount(keys["requests"], w5m, "+inf")
+        pipe.zcount(keys["requests"], w10m, "+inf")
+        pipe.zcount(keys["paths"], w5m, "+inf")
+        pipe.zcount(keys["uas"], w10m, "+inf")
+        pipe.zrangebyscore(keys["statuses"], w5m, "+inf")
+        pipe.zrangebyscore(keys["sizes"], w5m, "+inf")
+        pipe.zrangebyscore(keys["methods"], w5m, "+inf")
+        pipe.zrangebyscore(keys["depths"], w5m, "+inf")
+        pipe.zrangebyscore(keys["requests"], w10m, "+inf", withscores=True)
+
+        for key in keys.values():
+            pipe.expire(key, KEY_TTL)
+
+        results = await pipe.execute()
+
+        read_start = len(keys) * 2
+        req_count_1m = results[read_start]
+        req_count_5m = results[read_start + 1]
+        req_count_10m = results[read_start + 2]
+        unique_paths_5m = results[read_start + 3]
+        unique_uas_10m = results[read_start + 4]
+        statuses_5m = results[read_start + 5]
+        sizes_5m = results[read_start + 6]
+        methods_5m = results[read_start + 7]
+        depths_5m = results[read_start + 8]
+        requests_with_scores = results[read_start + 9]
+
+        irt_mean, irt_std = _inter_request_time_stats(requests_with_scores)
+
+        return {
+            "req_count_1m": float(req_count_1m),
+            "req_count_5m": float(req_count_5m),
+            "req_count_10m": float(req_count_10m),
+            "error_rate_5m":
+```
+
+---
+
+## Security Review
+
+### Security Review for `record_and_aggregate` Function
+
+#### Vulnerabilities Found:
+
+1. **Info: Hardcoded Timeouts**
+   - **Line:** `pipe.expire(key, KEY_TTL)`
+   - **Severity:** Info
+   - **Fix:** Use dynamic timeouts based on configuration or context to avoid hardcoding.
+
+2. **Info: Input Validation Gaps**
+   - **Lines:** `_hash_member(path)`, `_error_rate(statuses_5m)`, etc.
+   - **Severity:** Info
+   - **Fix:** Ensure input validation for all functions like `_hash_member` and error handling in `*_entropy`, `*_diversity`.
+
+3. **Info: Insecure Deserialization**
+   - **Lines:** None identified directly, but consider if any serialized data is used.
+   - **Severity:** Info
+   - **Fix:** Review usage of any external libraries or custom deserialization.
+
+4. **Info: Error Handling**
+   - **Line:** `pipe.execute()`
+   - **Severity:** Info
+   - **Fix:** Implement proper error handling to avoid information leakage.
+
+#### Attack Vectors:
+
+- **Time-of-check to time-of-use (TOCTOU) bugs**: Ensure that the expiration of Redis keys is handled correctly to prevent race conditions.
+- **Information Leakage**: Improper error handling could expose sensitive information.
+
+#### Recommended Fixes:
+
+1. Use dynamic timeouts for key expiration.
+2. Validate and sanitize all inputs in functions like `_hash_member`.
+3. Implement robust error handling with logging.
+4. Ensure no hardcoded secrets or credentials are present.
+
+#### Overall Security Posture:
+
+The code is generally secure but can benefit from improved input validation, dynamic configuration management, and better error handling to maintain a strong security posture.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 08:01*
