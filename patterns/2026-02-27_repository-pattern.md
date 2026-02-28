@@ -1,0 +1,151 @@
+# repository_pattern
+
+**Type:** Pattern Analysis
+**Repository:** my-portfolio
+**File:** v1/backend/app/certification/service.py
+**Language:** python
+**Lines:** 1-116
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+service.py
+"""
+
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import config
+from config import (
+    CertificationCategory,
+    Language,
+)
+from core.exceptions import CertificationNotFound
+from .repository import CertificationRepository
+from .schemas import (
+    CertificationBriefResponse,
+    CertificationListResponse,
+    CertificationResponse,
+)
+
+
+class CertificationService:
+    """
+    Business logic for certification operations.
+    """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(
+        self,
+        certification_id: UUID,
+    ) -> CertificationResponse:
+        """
+        Get certification by ID.
+        """
+        certification = await CertificationRepository.get_by_id(
+            self.session,
+            certification_id,
+        )
+        if not certification:
+            raise CertificationNotFound(str(certification_id))
+        return CertificationResponse.model_validate(certification)
+
+    async def list_visible(
+        self,
+        language: Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> CertificationListResponse:
+        """
+        List visible certifications for a language.
+        """
+        certifications = await CertificationRepository.get_visible_by_language(
+            self.session,
+            language,
+            skip,
+            limit,
+        )
+        total = await CertificationRepository.count_visible_by_language(
+            self.session,
+            language,
+        )
+        return CertificationListResponse(
+            items = [
+                CertificationResponse.model_validate(c) for c in certifications
+            ],
+            total = total,
+            skip = skip,
+            limit = limit,
+        )
+
+    async def list_active(
+        self,
+        language: Language,
+    ) -> list[CertificationResponse]:
+        """
+        List non-expired certifications for a language.
+        """
+        certifications = await CertificationRepository.get_active_by_language(
+            self.session,
+            language,
+        )
+        return [CertificationResponse.model_validate(c) for c in certifications]
+
+    async def list_by_category(
+        self,
+        category: CertificationCategory,
+        language: Language,
+    ) -> list[CertificationResponse]:
+        """
+        List certifications by category and language.
+        """
+        certifications = await CertificationRepository.get_by_category_and_language(
+            self.session,
+            category,
+            language,
+        )
+        return [CertificationResponse.model_validate(c) for c in certifications]
+
+    async def get_badges(
+        self,
+        language: Language,
+    ) -> list[CertificationBriefResponse]:
+        """
+        Get brief certification data for overview badges.
+        """
+        certifications = await CertificationR
+```
+
+---
+
+## Pattern Analysis
+
+### Pattern Analysis
+
+**Pattern Used:** Repository Pattern
+
+**Implementation:**
+The `CertificationService` class encapsulates business logic for certification operations, delegating data retrieval to the `CertificationRepository`. The repository methods handle database interactions, such as fetching certifications by ID, listing visible certifications, and filtering by category or language. Each service method interacts with the repository through an `AsyncSession`.
+
+**Benefits:**
+- **Separation of Concerns:** Business logic is separated from data access, making the code more modular and easier to maintain.
+- **Testability:** Repository methods can be easily mocked for unit testing, improving test coverage.
+- **Consistency:** Ensures a consistent approach to database interactions across the application.
+
+**Deviations:**
+- The `CertificationService` class directly instantiates the repository with an `AsyncSession`, which is not typical. Typically, dependency injection would be used through a constructor or setter methods.
+- Some service methods return lists of `CertificationResponse` objects, while others return `CertificationListResponse`. This could lead to inconsistencies in how data is handled.
+
+**Appropriateness:**
+This pattern is appropriate for applications where business logic needs to interact with the database. It provides a clear separation between application services and data access layers, making the codebase more maintainable and testable. However, consider refactoring to use dependency injection for better flexibility and testability.
+
+---
+
+*Generated by CodeWorm on 2026-02-27 23:53*
