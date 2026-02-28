@@ -1,0 +1,140 @@
+# PatternTargetFinder
+
+**Type:** Class Documentation
+**Repository:** CodeWorm
+**File:** codeworm/analysis/targets.py
+**Language:** python
+**Lines:** 463-582
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class PatternTargetFinder:
+    """
+    Finds design patterns across a repository
+    """
+    PATTERN_SIGNATURES: ClassVar[dict] = {
+        "singleton": {
+            "indicators": ["_instance",
+                           "__new__",
+                           "getInstance"],
+            "description": "Singleton pattern",
+        },
+        "factory": {
+            "indicators": ["create_",
+                           "make_",
+                           "build_",
+                           "factory"],
+            "description": "Factory pattern",
+        },
+        "observer": {
+            "indicators": [
+                "subscribe",
+                "notify",
+                "on_event",
+                "emit",
+                "listener",
+                "addEventListener"
+            ],
+            "description":
+            "Observer/Event pattern",
+        },
+        "decorator_pattern": {
+            "indicators": ["wrapper",
+                           "wraps",
+                           "functools.wraps",
+                           "@wraps"],
+            "description": "Decorator pattern",
+        },
+        "strategy": {
+            "indicators": ["Strategy",
+                           "execute",
+                           "set_strategy",
+                           "algorithm"],
+            "description": "Strategy pattern",
+        },
+        "middleware": {
+            "indicators": ["middleware",
+                           "next()",
+                           "dispatch",
+                           "use("],
+            "description": "Middleware/Pipeline pattern",
+        },
+        "repository_pattern": {
+            "indicators":
+            ["Repository",
+             "get_by_id",
+             "find_all",
+             "save(",
+             "delete("],
+            "description": "Repository pattern",
+        },
+    }
+
+    def __init__(self, scanner: RepoScanner) -> None:
+        self.scanner = scanner
+
+    def find(
+        self,
+        repo: RepoEntry,
+        limit: int = 10,
+    ) -> list[DocumentationTarget]:
+        targets: list[DocumentationTarget] = []
+
+        for scanned_file in self.scanner.scan_repo(repo.path, repo.name):
+            try:
+                source = scanned_file.path.read_text(encoding = "utf-8")
+            except Exception:  # noqa: S112
+                continue
+
+            for pattern_name, pattern_info in self.PATTERN_SIGNATURES.items():
+                matches = sum(
+                    1 for indicator in pattern_info["indicators"]
+                    if indicator in source
+                )
+                if matches < 2:
+                    continue
+
+                score = min(100.0, matches * 15 + 30)
+
+                snippet = CodeSnippet(
+                    repo = repo.name,
+                    file_path = scanned_file.path,
+                    function_name = pattern_name,
+                    class_name = None,
+                    language = scanned_file.language,
+                    source = sour
+```
+
+---
+
+## Class Documentation
+
+### PatternTargetFinder
+
+**Responsibility and Purpose:** 
+The `PatternTargetFinder` class is responsible for identifying design pattern implementations within a codebase. It leverages predefined signatures to detect common design patterns such as Singleton, Factory, Observer, Decorator, Strategy, Middleware, and Repository.
+
+**Public Interface:**
+- **Constructor (`__init__`):** Initializes the finder with a `RepoScanner` instance.
+- **Method (`find`):** Scans a repository for code snippets that match predefined pattern signatures. It returns a list of `DocumentationTarget` objects sorted by interest score, which indicates the likelihood of the snippet containing a design pattern.
+
+**Design Patterns Used:**
+The class uses several design patterns:
+- **Factory Method:** The `PATTERN_SIGNATURES` dictionary acts as a factory for different pattern indicators.
+- **Strategy Pattern:** The `find` method dynamically selects and applies strategies based on the detected patterns.
+- **Observer/Event Pattern:** While not directly used, it influences how the class processes and categorizes findings.
+
+**Relationship to Other Classes:**
+- **RepoScanner:** Used to scan the repository for files. This relationship is crucial as the scanner provides the necessary file content for pattern detection.
+- **DocumentationTarget:** The results of the analysis are encapsulated in `DocumentationTarget` objects, which are used to store and present findings.
+
+**State Management Approach:**
+The class maintains state through its attributes (`scanned_file`, `source`) during the scanning process. It dynamically updates these states as it processes each file, ensuring that only relevant snippets are considered for pattern detection.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 15:09*
