@@ -1,0 +1,128 @@
+# ClassTargetFinder
+
+**Type:** Class Documentation
+**Repository:** CodeWorm
+**File:** codeworm/analysis/targets.py
+**Language:** python
+**Lines:** 116-195
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class ClassTargetFinder:
+    """
+    Finds classes worth documenting
+    """
+    def __init__(self, scanner: RepoScanner) -> None:
+        self.scanner = scanner
+
+    def find(
+        self,
+        repo: RepoEntry,
+        limit: int = 20,
+    ) -> list[DocumentationTarget]:
+        targets: list[DocumentationTarget] = []
+
+        for scanned_file in self.scanner.scan_repo(repo.path, repo.name):
+            try:
+                source = scanned_file.path.read_text(encoding = "utf-8")
+            except Exception:  # noqa: S112
+                continue
+
+            extractor = CodeExtractor(source, scanned_file.language)
+
+            for parsed_class in extractor.extract_classes():
+                method_count = len(parsed_class.methods or [])
+                line_count = parsed_class.end_line - parsed_class.start_line + 1
+
+                if line_count < 15:
+                    continue
+
+                score = min(
+                    100.0,
+                    (
+                        min(method_count / 6,
+                            1.0) * 35 + min(line_count / 100,
+                                            1.0) * 25 +
+                        (10 if parsed_class.docstring else 0) +
+                        min(len(parsed_class.decorators or []) * 5,
+                            15) + 15
+                    )
+                )
+
+                snippet = CodeSnippet(
+                    repo = repo.name,
+                    file_path = scanned_file.path,
+                    function_name = None,
+                    class_name = parsed_class.name,
+                    language = scanned_file.language,
+                    source = parsed_class.source[: 4000],
+                    start_line = parsed_class.start_line,
+                    end_line = parsed_class.end_line,
+                    interest_score = score,
+                    doc_type = DocType.CLASS_DOC,
+                )
+
+                targets.append(
+                    DocumentationTarget(
+                        doc_type = DocType.CLASS_DOC,
+                        snippet = snippet,
+                        source_context = parsed_class.source[: 6000],
+                        metadata = {
+                            "method_count":
+                            method_count,
+                            "method_names":
+                            [m.name for m in (parsed_class.methods or [])],
+                            "has_docstring":
+                            bool(parsed_class.docstring),
+                            "relative_path":
+                            str(scanned_file.relative_path),
+                        },
+                    )
+                )
+
+                if len(targets) >= limit * 2:
+                    break
+
+            if len(targets) >= limit * 2:
+                break
+
+        targets.sort(key = lambda t: t.score, reverse = True)
+        return targets[: limit]
+```
+
+---
+
+## Class Documentation
+
+### Class Documentation: `ClassTargetFinder`
+
+**Responsibility and Purpose:**
+The `ClassTargetFinder` class is responsible for identifying classes within a repository that are worth documenting based on specific criteria such as code complexity, presence of docstrings, and method count.
+
+**Public Interface:**
+- **Constructor (`__init__`):** Initializes the finder with a `RepoScanner` instance.
+- **Method (`find`):** Scans a given repository to find classes meeting documentation criteria. It returns a list of `DocumentationTarget` objects sorted by their interest score.
+
+**Design Patterns Used:**
+The class employs several design patterns:
+- **Factory Pattern:** Implicitly used through the `CodeExtractor` which extracts code snippets.
+- **Strategy Pattern:** The `extract_classes` method uses a strategy to determine how classes are extracted from source code.
+- **Observer Pattern:** Although not explicitly implemented, the class could observe changes in the repository state.
+
+**Relationship to Other Classes:**
+- **RepoScanner:** Provides functionality for scanning and reading files within a repository.
+- **CodeExtractor:** Extracts relevant information (e.g., classes) from the scanned code.
+- **DocumentationTarget:** Represents the target of documentation with metadata such as class name, method count, and docstring presence.
+
+**State Management Approach:**
+The state is managed through instance variables like `self.scanner`, which holds a reference to the repository scanner. The `find` method iterates over files and extracts classes without altering the state of other objects, ensuring encapsulation and modularity.
+
+This class fits into the architecture by serving as a core component for identifying and prioritizing classes that need documentation within the CodeWorm analysis module.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 16:23*
