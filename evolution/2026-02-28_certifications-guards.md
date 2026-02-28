@@ -1,0 +1,124 @@
+# certifications.guards
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/account/types/certifications.guards.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: ac61454c
+Message: just did alot of shit basically idk
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/account/types/certifications.guards.ts
+Change type: modified
+
+Diff:
+@@ -1,8 +1,15 @@
+ // ===========================
++// © AngelaMos | 2026
+ // certifications.guards.ts
+-// ©AngelaMos | 2025
+ // ===========================
+ 
++import {
++  certificationDataSchema,
++  uploadCertificationResponseSchema,
++  getUserCertificationsResponseSchema,
++  deleteCertificationResponseSchema,
++  updateCertificationVisibilityResponseSchema,
++} from './certifications.interfaces';
+ import type {
+   CertificationData,
+   UploadCertificationResponse,
+@@ -11,97 +18,51 @@ import type {
+   UpdateCertificationVisibilityResponse,
+ } from './certifications.interfaces';
+ 
++const normalizeCert = (obj: Record<string, unknown>): void => {
++  if (obj.id === undefined && typeof obj._id === 'string') obj.id = obj._id;
++};
++
+ export const isValidCertificationData = (
+   data: unknown,
+ ): data is CertificationData => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.id === 'string' &&
+-    typeof obj.userId === 'string' &&
+-    typeof obj.certificationType === 'string' &&
+-    typeof obj.imageUrl === 'string' &&
+-    (obj.earnedDate === null || typeof obj.earnedDate === 'string') &&
+-    (obj.uploadedAt === null || typeof obj.uploadedAt === 'string') &&
+-    typeof obj.verificationStatus === 'string' &&
+-    (obj.certificationNumber === null ||
+-      typeof obj.certificationNumber === 'string') &&
+-    typeof obj.isPublic === 'boolean'
+-  );
++  if (data === null || data === undefined || typeof data !== 'object') return false;
++  normalizeCert(data as Record<string, unknown>);
++  return certificationDataSchema.safeParse(data).success;
+ };
+ 
+ export const isValidUploadCertificationResponse = (
+   data: unknown,
+ ): data is UploadCertificationResponse => {
+-  if (data === null || data === undefined) return false;
+-  if (typeof data !== 'object') return false;
+-
+-  const obj = data as Record<string, unknown>;
+-
+-  return (
+-    typeof obj.id === 'string' &&
+-    typeof obj.userId === 'string' &&
+-    typeof obj.certificationType === 'string' &&
+-    typeof obj.imageUrl === 'string' &&
+-    (obj.earnedDate === null || typeof obj.earnedDate === 'string') &&
+-    (obj.uploadedAt === null || typeof obj.uploadedAt === 'string') &&
+-    typeof obj.verificationStatus === 'string' &&
+-    (obj.certificationNumber === null ||
+-      typeof obj.certificationNumber === 'string') &&
+-    typeof obj.isPublic === 'boolean'
+-  );
++  if (data === null || data === undefined || typeof data !== 'object') return false;
++  normalizeCert(data as Record<string, unknown>);
++  return uploadCertificationResponseSchema.safeParse(data).success;
+ };
+ 
+ export const isValidGetUserCertificationsResponse = (
+   data: unknown,
+ ): data is GetUserCertificationsRes
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code in `certifications.guards.ts` was modified to use schema validation from the `zod` library instead of manually checking types and properties. Additionally, a new function `normalizeCert` was introduced to handle normalization of certification data.
+
+**Why it Was Likely Changed:**
+This change likely aims to improve code quality by leveraging schema validation for better type safety and consistency. The introduction of `normalizeCert` suggests an effort to standardize how certification data is handled across the application, reducing potential bugs related to inconsistent property names or types.
+
+**Impact on Behavior:**
+The behavior of the functions has changed from manually checking properties to using validated schemas. This should provide more robust validation, ensuring that only correctly formatted data passes through these guards. The `normalizeCert` function ensures that `_id` is converted to `id`, making the code more consistent and easier to maintain.
+
+**Risks or Concerns:**
+While schema validation improves type safety, there's a risk if existing data does not conform to the new schemas, leading to potential runtime errors. Care should be taken during migration to ensure all existing data is correctly formatted before the changes are deployed. Additionally, the introduction of `normalizeCert` might introduce subtle bugs if not implemented correctly for all cases.
+
+Overall, this change enhances code reliability but requires thorough testing and careful handling of legacy data.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 00:07*
