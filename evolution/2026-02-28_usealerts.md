@@ -1,0 +1,148 @@
+# useAlerts
+
+**Type:** Code Evolution
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/ai-threat-detection/frontend/src/api/hooks/useAlerts.ts
+**Language:** typescript
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```typescript
+Commit: 3b4f6ce8
+Message: feat(frontend): add React Query hooks and WebSocket alert feed
+
+Hooks for threats list/detail, stats, model status/retrain, and live
+WebSocket alert stream with auto-reconnect and ring buffer.
+Author: CarterPerez-dev
+File: PROJECTS/advanced/ai-threat-detection/frontend/src/api/hooks/useAlerts.ts
+Change type: new file
+
+Diff:
+@@ -0,0 +1,105 @@
++// ===================
++// © AngelaMos | 2026
++// useAlerts.ts
++// ===================
++
++import { useEffect, useRef } from 'react'
++import { create } from 'zustand'
++import { ALERTS, WS_ENDPOINTS } from '@/config'
++import { WebSocketAlertSchema, type WebSocketAlert } from '@/api/types'
++
++interface AlertState {
++  alerts: WebSocketAlert[]
++  isConnected: boolean
++  connectionError: string | null
++  addAlert: (alert: WebSocketAlert) => void
++  setConnected: (connected: boolean) => void
++  setError: (error: string | null) => void
++  clear: () => void
++}
++
++const useAlertStore = create<AlertState>()((set) => ({
++  alerts: [],
++  isConnected: false,
++  connectionError: null,
++
++  addAlert: (alert) =>
++    set((state) => ({
++      alerts: [alert, ...state.alerts].slice(0, ALERTS.MAX_ITEMS),
++    })),
++
++  setConnected: (connected) =>
++    set({ isConnected: connected, connectionError: null }),
++
++  setError: (error) =>
++    set({ isConnected: false, connectionError: error }),
++
++  clear: () =>
++    set({ alerts: [], isConnected: false, connectionError: null }),
++}))
++
++function getWsUrl(): string {
++  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
++  return `${protocol}//${window.location.host}${WS_ENDPOINTS.ALERTS}`
++}
++
++export function useAlerts() {
++  const wsRef = useRef<WebSocket | null>(null)
++  const retryCountRef = useRef(0)
++  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
++
++  const { alerts, isConnected, connectionError } = useAlertStore()
++  const { addAlert, setConnected, setError, clear } = useAlertStore()
++
++  useEffect(() => {
++    function connect() {
++      const ws = new WebSocket(getWsUrl())
++      wsRef.current = ws
++
++      ws.onopen = () => {
++        retryCountRef.current = 0
++        setConnected(true)
++      }
++
++      ws.onmessage = (event) => {
++        const parsed = WebSocketAlertSchema.safeParse(JSON.parse(event.data))
++        if (parsed.success) {
++          addAlert(parsed.data)
++        }
++      }
++
++      ws.onclose = () => {
++        setConnected(false)
++        scheduleReconnect()
++      }
++
++      ws.onerror = () => {
++        setError('WebSocket connection failed')
++        ws.close()
++      }
++    }
++
++    function scheduleReconnect() {
++      const delay = Math.min(
++        ALERTS.RECONNECT_BASE_MS * 2 ** retryCountRef.current,
++        ALERTS.RECONNECT_MAX_MS,
++      )
++      retryCountRef.current += 1
++      retryTimerRef.current = setTimeout(connect, delay)
++    }
++
++    connect()
++
++    return () => {
++      if (retryTimerRef.current) {
++        clearTimeout(retryTimerRef.current)
++      }
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+A new file `useAlerts.ts` was added to the project, introducing React Query hooks and WebSocket functionality for handling alerts in an AI threat detection frontend. This includes state management using Zustand, connection logic with auto-reconnect, and message handling from a WebSocket server.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance real-time alerting capabilities by integrating WebSocket communication directly into the application. The use of React Query hooks ensures that these functionalities are easily accessible throughout the frontend components, providing an efficient way to manage and display live threat alerts.
+
+**Impact on Behavior:**
+The introduction of `useAlerts` hook allows for dynamic updates to the UI based on real-time data from the WebSocket server. Alerts will be fetched and displayed automatically, with support for reconnection in case of disconnection. This improves the responsiveness and reliability of the application's alert system.
+
+**Risks or Concerns:**
+- **Connection Stability:** The auto-reconnect mechanism may introduce latency issues if the connection is frequently lost.
+- **Resource Management:** Ensuring that WebSocket connections are properly closed on component unmount to avoid memory leaks is crucial.
+- **Error Handling:** Robust error handling, especially for network errors and disconnections, should be thoroughly tested.
+
+Overall, this change significantly enhances the application's ability to handle real-time data, making it more suitable for dynamic threat detection scenarios.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 11:34*
