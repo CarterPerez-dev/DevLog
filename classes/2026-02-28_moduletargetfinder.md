@@ -1,0 +1,141 @@
+# ModuleTargetFinder
+
+**Type:** Class Documentation
+**Repository:** CodeWorm
+**File:** codeworm/analysis/targets.py
+**Language:** python
+**Lines:** 198-353
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class ModuleTargetFinder:
+    """
+    Finds Python packages or directory-level modules to document
+    """
+    def find(
+        self,
+        repo: RepoEntry,
+        limit: int = 10,
+    ) -> list[DocumentationTarget]:
+        targets: list[DocumentationTarget] = []
+
+        if not repo.path.exists():
+            return targets
+
+        for dirpath in repo.path.rglob("__init__.py"):
+            pkg_dir = dirpath.parent
+            rel_dir = pkg_dir.relative_to(repo.path)
+
+            skip_dirs = {
+                "node_modules",
+                ".git",
+                "venv",
+                ".venv",
+                "__pycache__",
+                "dist",
+                "build",
+                "vendor",
+                "target",
+                ".tox",
+                ".mypy_cache"
+            }
+            if any(part in skip_dirs for part in rel_dir.parts):
+                continue
+
+            py_files = list(pkg_dir.glob("*.py"))
+            file_count = len(py_files)
+
+            if file_count < 2:
+                continue
+
+            init_content = ""
+            try:  # noqa: SIM105
+                init_content = dirpath.read_text(encoding = "utf-8")
+            except Exception:  # noqa: S110
+                pass
+
+            file_listing = "\n".join(f"  - {f.name}" for f in sorted(py_files))
+            context = f"Package: {rel_dir}\nFiles ({file_count}):\n{file_listing}"
+
+            if init_content.strip():
+                context += f"\n\n__init__.py:\n{init_content[:2000]}"
+
+            score = min(
+                100.0,
+                (
+                    min(file_count / 8,
+                        1.0) * 40 + min(len(init_content) / 500,
+                                        1.0) * 30 + 30
+                )
+            )
+
+            snippet = CodeSnippet(
+                repo = repo.name,
+                file_path = pkg_dir,
+                function_name = None,
+                class_name = None,
+                language = Language.PYTHON,
+                source = context[: 4000],
+                start_line = 1,
+                end_line = 1,
+                interest_score = score,
+                doc_type = DocType.MODULE_DOC,
+            )
+
+            targets.append(
+                DocumentationTarget(
+                    doc_type = DocType.MODULE_DOC,
+                    snippet = snippet,
+                    source_context = context[: 6000],
+                    metadata = {
+                        "package_path": str(rel_dir),
+                        "file_count": file_count,
+                        "file_names": [f.name for f in py_files],
+                        "has_init_content": bool(init_content.strip()),
+                    },
+                )
+            )
+
+            if len(targets) >= limit:
+                break
+
+        for dirpath in repo.path.rglob("index.ts"):
+            pkg_dir = dirpath.parent
+            rel_dir = pkg_dir.relative_to(repo.path)
+
+            skip_dirs = {"node_modules", ".git", "
+```
+
+---
+
+## Class Documentation
+
+### ModuleTargetFinder
+
+**Class Responsibility and Purpose:**  
+The `ModuleTargetFinder` class is responsible for identifying Python packages or directory-level modules within a repository that need documentation. It iterates through directories, filters out irrelevant ones, and evaluates potential targets based on file counts and content.
+
+**Public Interface:**
+- **find(repo: RepoEntry, limit: int = 10) -> list[DocumentationTarget]:** This method takes a `RepoEntry` object representing the repository and an optional limit for the number of targets to return. It returns a list of `DocumentationTarget` objects that are suitable for documentation.
+
+**Design Patterns Used:**
+- **Strategy Pattern:** The class uses different strategies (Python and TypeScript) to evaluate potential modules based on file counts and content.
+- **Factory Method:** Implicitly, it creates instances of `DocumentationTarget` and `CodeSnippet`.
+
+**Relationship to Other Classes:**
+- **RepoEntry:** Provides metadata about the repository path.
+- **DocumentationTarget:** Represents a target for documentation with relevant metadata.
+- **CodeSnippet:** Contains code snippets and their context.
+
+**State Management Approach:**
+The class maintains state through local variables like `targets` during its execution. It does not rely on external state but rather operates based on the input parameters and repository structure.
+
+This class fits into the architecture by providing a critical step in identifying which parts of the codebase need documentation, ensuring that relevant modules are prioritized for documentation efforts.
+
+---
+
+*Generated by CodeWorm on 2026-02-28 17:19*
