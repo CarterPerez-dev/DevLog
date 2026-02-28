@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** my-portfolio
-**File:** v1/backend/app/core/dependencies.py
+**File:** v1/backend/app/experience/service.py
 **Language:** python
-**Lines:** 1-159
+**Lines:** 1-91
 **Complexity:** 0.0
 
 ---
@@ -14,131 +14,95 @@
 ```python
 """
 ⒸAngelaMos | 2025
-dependencies.py
+service.py
 """
 
-from __future__ import annotations
-
-from typing import Annotated
 from uuid import UUID
 
-import jwt
-from fastapi import Depends, Request
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
-from config import (
-    TokenType,
-    UserRole,
-)
-from .database import get_db_session
-from .exceptions import (
-    InactiveUser,
-    PermissionDenied,
-    TokenError,
-    TokenRevokedError,
-    UserNotFound,
-)
-from user.User import User
-from .security import decode_access_token
-from user.repository import UserRepository
-
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl = f"{config.API_PREFIX}/auth/login",
-    auto_error = True,
+from config import Language
+from core.exceptions import ExperienceNotFound
+from .repository import ExperienceRepository
+from .schemas import (
+    ExperienceBriefResponse,
+    ExperienceListResponse,
+    ExperienceResponse,
 )
 
-oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl = f"{config.API_PREFIX}/auth/login",
-    auto_error = False,
-)
 
-DBSession = Annotated[AsyncSession, Depends(get_db_session)]
-
-
-async def get_current_user(
-    token: Annotated[str,
-                     Depends(oauth2_scheme)],
-    db: DBSession,
-) -> User:
+class ExperienceService:
     """
-    Validate access token and return current user
+    Business logic for experience operations.
     """
-    try:
-        payload = decode_access_token(token)
-    except jwt.InvalidTokenError as e:
-        raise TokenError(message = str(e)) from e
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    if payload.get("type") != TokenType.ACCESS.value:
-        raise TokenError(message = "Invalid token type")
+    async def get_by_id(self, experience_id: UUID) -> ExperienceResponse:
+        """
+        Get experience by ID.
+        """
+        experience = await ExperienceRepository.get_by_id(
+            self.session,
+            experience_id,
+        )
+        if not experience:
+            raise ExperienceNotFound(str(experience_id))
+        return ExperienceResponse.model_validate(experience)
 
-    user_id = UUID(payload["sub"])
-    user = await UserRepository.get_by_id(db, user_id)
-
-    if user is None:
-        raise UserNotFound(identifier = str(user_id))
-
-    if payload.get("token_version") != user.token_version:
-        raise TokenRevokedError()
-
-    return user
-
-
-async def get_current_active_user(
-    user: Annotated[User,
-                    Depends(get_current_user)],
-) -> User:
-    """
-    Ensure user is active
-    """
-    if not user.is_active:
-        raise InactiveUser()
-    return user
-
-
-async def get_optional_user(
-    token: Annotated[str | None,
-                     Depends(oauth2_scheme_optional)],
-    db: DBSession,
-) -> User | None:
-    """
-    Return current user if authenticated, None otherwise
-    """
-    if token is None:
-        return None
-
-    try:
-        payload = decode_access_token(token)
-        if payload.get("type") != TokenType.ACCESS.value:
-            return None
-        user_id = UUID(payload["sub"])
-        user = await UserRepository.get_by_id(db, user_id)
-        if user and user.token_version == payload.get("token_version"):
-            return user
-    except (jwt.InvalidTokenError, ValueError):
-        pass
-
-    return None
-
-
-class RequireRole:
-    """
-    Dependency class to check user role
-    """
-    def __init__(self, *allowed_roles: UserRole) -> None:
-        self.allowed_roles = allowed_roles
-
-    async def __call__(
+    async def list_visible(
         self,
-        user: Annotated[User,
-                        Depends(get_current_active_user)],
-    ) -> User:
-        if user.role not in self.allowed_roles:
-            raise PermissionDenied(
-                message =
-   
+        language: Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> ExperienceListResponse:
+        """
+        List visible experiences for a language.
+        """
+        experiences = await ExperienceRepository.get_visible_by_language(
+            self.session,
+            language,
+            skip,
+            limit,
+        )
+        total = await ExperienceRepository.count_visible_by_language(
+            self.session,
+            language,
+        )
+        return ExperienceListResponse(
+            items = [ExperienceResponse.model_validate(e) for e in experiences],
+            total = total,
+            skip = skip,
+            limit = limit,
+        )
+
+    async def list_current(
+        self,
+        language: Language,
+    ) -> list[ExperienceResponse]:
+        """
+        List current (ongoing) positions for a language.
+        """
+        experiences = await ExperienceRepository.get_current_by_language(
+            self.session,
+            language,
+        )
+        return [ExperienceResponse.model_validate(e) for e in experiences]
+
+    async def get_timeline(
+        self,
+        language: Language,
+    ) -> list[ExperienceBriefResponse]:
+        """
+        Get brief experience data for timeline display.
+        """
+        experiences = await ExperienceRepository.get_visible_by_language(
+            self.session,
+            language,
+        )
+        return [ExperienceBriefResponse.model_validate(e) for e in experiences]
+
 ```
 
 ---
@@ -147,25 +111,23 @@ class RequireRole:
 
 ### Pattern Analysis
 
-**Pattern Used:** Dependency Injection with Repository Pattern
+**Pattern Used:** Repository Pattern
 
-#### Implementation in Code
-The code implements a dependency injection framework using FastAPI's `Depends` mechanism and integrates it with a repository pattern for database operations. The `get_current_user`, `get_current_active_user`, and `get_optional_user` functions are used to manage authentication and authorization, while the `RequireRole` class ensures that users have specific roles.
+**Implementation:**
+The `ExperienceService` class encapsulates business logic for managing experiences, delegating database operations to the `ExperienceRepository`. The repository methods handle fetching and listing experiences based on various criteria.
 
-#### Benefits
-1. **Modularity:** Functions like `get_current_user` and `get_current_active_user` encapsulate authentication logic, making the code easier to maintain.
-2. **Reusability:** These functions can be reused across different endpoints without duplicating code.
-3. **Testability:** Dependency injection makes it easier to mock dependencies during testing.
+**Benefits:**
+- **Separation of Concerns:** Business logic is separated from data access logic.
+- **Testability:** Repository methods can be easily mocked or replaced during testing.
+- **Flexibility:** Easier to change database technology without affecting the service layer.
 
-#### Deviations
-1. **Custom Annotations:** The use of custom annotations like `CurrentUser`, `OptionalUser`, and `ClientIP` is a deviation from the standard pattern, providing more type safety and clarity in function parameters.
-2. **Role Checking:** The `RequireRole` class adds an additional layer of role-based access control, which is not part of the traditional repository pattern but enhances security.
+**Deviations:**
+- The `ExperienceService` class directly initializes with an `AsyncSession`, which could be abstracted further using dependency injection via a constructor parameter.
+- The repository methods are called directly within the service methods, but there is no explicit interface or contract defined between them.
 
-#### Appropriateness
-This pattern is highly appropriate for web applications that require robust authentication and authorization mechanisms. It ensures that sensitive operations are protected and that dependencies are managed effectively. However, it might be overkill for simpler applications where basic dependency injection suffices.
-
-By using this pattern, the code becomes more organized, maintainable, and secure, making it a suitable choice for complex web applications like the one described.
+**Appropriateness:**
+This pattern is appropriate for this context as it clearly separates business logic from data access and provides a clean interface for managing experiences. It is suitable when you need to abstract database operations and ensure that your business logic remains independent of the underlying storage mechanism. However, consider using dependency injection frameworks or libraries like FastAPI's `Depends` to manage session lifetimes more effectively in production environments.
 
 ---
 
-*Generated by CodeWorm on 2026-02-28 01:36*
+*Generated by CodeWorm on 2026-02-28 13:33*
