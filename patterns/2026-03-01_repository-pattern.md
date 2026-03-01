@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** stripe-referral
-**File:** src/stripe_referral/repositories/base.py
+**File:** src/stripe_referral/services/payout_service.py
 **Language:** python
-**Lines:** 1-84
+**Lines:** 1-308
 **Complexity:** 0.0
 
 ---
@@ -14,88 +14,105 @@
 ```python
 """
 ⒸAngelaMos | 2025 | CertGames.com
-Base repository with generic CRUD operations
+Payout service with business logic
 """
 
-from typing import (
-    Any,
-    Generic,
-    TypeVar,
-)
-from sqlalchemy import select
+from typing import Any
 from sqlalchemy.orm import Session
 
-from ..database.Base import Base
+from ..adapters import (
+    ManualBankAdapter,
+    PayoutAdapter,
+    StripeConnectAdapter,
+    WiseAdapter,
+)
+from ..config.enums import (
+    AdapterType,
+    CurrencyCode,
+    PayoutStatus,
+    RewardType,
+)
+from ..exceptions.errors import (
+    InvalidRecipientDataError,
+    PayoutAlreadyExistsError,
+    PayoutNotFoundError,
+    TrackingNotFoundError,
+)
+from ..repositories.payout_repo import PayoutRepository
+from ..repositories.program_repo import ReferralProgramRepository
+from ..repositories.referral_repo import ReferralTrackingRepository
+from ..schemas.types import (
+    PayoutInfo,
+    PayoutResult,
+    ProgramInfo,
+    RecipientValidation,
+)
 
 
-T = TypeVar("T", bound = Base)
-
-
-class BaseRepository(Generic[T]):
+class PayoutService:
     """
-    Base repository with common CRUD operations
+    Service for payout business logic
     """
-    def __init__(self, db: Session, model: type[T]) -> None:
+    @staticmethod
+    def _get_adapter(
+        adapter_type: str,
+        adapter_config: dict[str,
+                             Any] | None = None
+    ) -> PayoutAdapter:
         """
-        Initialize repository with database session and model type
+        Factory method to get the appropriate payout adapter instance
         """
-        self.db = db
-        self.model = model
+        config = adapter_config or {}
 
-    def create(self, **kwargs: Any) -> T:
-        """
-        Create a new record
-        """
-        instance = self.model(**kwargs)
-        self.db.add(instance)
-        self.db.commit()
-        self.db.refresh(instance)
-        return instance
+        if adapter_type == AdapterType.MANUAL.value:
+            return ManualBankAdapter()
+        if adapter_type == AdapterType.STRIPE_CONNECT.value:
+            api_key = config.get("api_key", "")
+            return StripeConnectAdapter(api_key = api_key)
+        if adapter_type == AdapterType.WISE.value:
+            api_token = config.get("api_token", "")
+            sandbox = config.get("sandbox", False)
+            return WiseAdapter(api_token = api_token, sandbox = sandbox)
 
-    def get_by_id(self, record_id: int) -> T | None:
-        """
-        Get record by ID
-        """
-        return self.db.get(self.model, record_id)
+        raise InvalidRecipientDataError(
+            f"Unknown adapter type: {adapter_type}",
+            adapter_type = adapter_type,
+        )
 
-    def get_all(self,
-                limit: int | None = None,
-                offset: int = 0) -> list[T]:
+    @staticmethod
+    def create_program(
+        db: Session,
+        name: str,
+        program_key: str,
+        reward_amount: float,
+        *,
+        reward_currency: str = CurrencyCode.USD.value,
+        reward_type: str = RewardType.ONE_TIME.value,
+        adapter_type: str = AdapterType.MANUAL.value,
+        max_rewards_per_user: int | None = None,
+        conversion_window_days: int | None = None,
+        adapter_config: dict[str,
+                             Any] | None = None,
+    ) -> ProgramInfo:
         """
-        Get all records with pagination
+        Create a new referral program
         """
-        stmt = select(self.model).offset(offset)
-        if limit:
-            stmt = stmt.limit(limit)
-        return list(self.db.execute(stmt).scalars().all())
+        valid_adapter_types = [at.value for at in AdapterType]
+        if adapter_type not in valid_adapter_types:
+            raise InvalidRecipientDataError(
+                f"Invalid adapter_type. Must be one of: {valid_adapter_types}",
+                adapter_type = adapter_type,
+            )
 
-    def update(self, record_id: int, **kwargs: Any) -> T | None:
-        """
-        Update record by ID
-        """
-        instance = self.get_by_id(record_id)
-        if not instance:
-            return None
+        program_repo = ReferralProgramRepository(db)
 
-        for key, value in kwargs.items():
-            setattr(instance, key, value)
-
-        self.db.commit()
-        self.db.refresh(instance)
-        return instance
-
-    def delete(self, record_id: int) -> bool:
-        """
-        Delete record by ID
-        """
-        instance = self.get_by_id(record_id)
-        if not instance:
-            return False
-
-        self.db.delete(instance)
-        self.db.commit()
-        return True
-
+        program = program_repo.create(
+            name = name,
+            program_key = program_key,
+            reward_amount = reward_amount,
+            reward_currency = reward_currency,
+            reward_type = reward_type,
+            adapter_ty
 ```
 
 ---
@@ -104,26 +121,22 @@ class BaseRepository(Generic[T]):
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern
+**Pattern Used:** Repository Pattern  
+**Implementation:**
+The `PayoutService` class uses the repository pattern to abstract data access operations. Specifically, it interacts with three repositories (`ReferralTrackingRepository`, `PayoutRepository`, and `ReferralProgramRepository`) through static methods like `_get_adapter()` and service methods such as `create_program()`, `get_program_info()`, and `create_payout()`.
 
-#### Implementation
-The `BaseRepository` class in the provided code implements the repository pattern, which abstracts data access operations and encapsulates business logic related to database interactions. It uses generic types (`TypeVar`) to make it flexible for any model that inherits from `Base`, a SQLAlchemy ORM base class.
+**Benefits:**
+- **Encapsulation:** Repositories encapsulate data access logic, making the service layer agnostic to how data is stored.
+- **Testability:** By abstracting database interactions into repositories, unit tests can mock these interfaces for more reliable testing.
+- **Flexibility:** Changes in storage mechanisms (e.g., switching from SQL to NoSQL) do not require changes in the service layer.
 
-- **Methods**: The class includes methods like `create`, `get_by_id`, `get_all`, `update`, and `delete` which perform common CRUD operations.
-- **Initialization**: It initializes with a database session (`Session`) and the model type (`model`).
+**Deviations:**
+- The `PayoutService` class includes a factory method `_get_adapter()` which is not directly related to repository operations. This introduces some deviation from the pure repository pattern.
+- The service methods handle exceptions and return specific schemas, adding additional logic beyond typical repository responsibilities.
 
-#### Benefits
-1. **Encapsulation**: Abstracts data access logic, making it easier to switch between different databases or storage mechanisms.
-2. **Flexibility**: Generic types allow reuse across multiple models.
-3. **Maintainability**: Centralizes business logic related to database operations.
-
-#### Deviations
-- The implementation uses SQLAlchemy's `Session` and ORM features directly, which is a common deviation from the pure repository pattern that might separate data access concerns more strictly.
-- Methods like `get_all` use pagination through `offset` and optional `limit`, providing flexibility but potentially making it less generic compared to some patterns.
-
-#### Appropriateness
-This pattern is appropriate in scenarios where you need to abstract database interactions, especially when dealing with multiple models or switching between different databases. It's particularly useful for projects like the `stripe-referral` repository where data access logic needs to be centralized and flexible.
+**Appropriateness:**
+This pattern is appropriate in this context because it effectively separates concerns between business logic and data access. It ensures that the `PayoutService` remains focused on its core responsibilities while delegating data handling to specialized repositories. However, including a factory method for adapters might be better suited elsewhere if not directly related to repository operations.
 
 ---
 
-*Generated by CodeWorm on 2026-03-01 09:20*
+*Generated by CodeWorm on 2026-03-01 11:26*
