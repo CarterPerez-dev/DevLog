@@ -1,0 +1,199 @@
+# dashboard
+
+**Type:** File Overview
+**Repository:** Yoshi-Audit
+**File:** internal/ui/dashboard/dashboard.go
+**Language:** go
+**Lines:** 1-271
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+// ©AngelaMos | 2026
+// dashboard.go
+
+package dashboard
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/CarterPerez-dev/yoshi-audit/internal/system"
+	"github.com/CarterPerez-dev/yoshi-audit/internal/ui/theme"
+)
+
+type SortMode int
+
+const (
+	SortByMemory SortMode = iota
+	SortByCPU
+	SortByGPU
+	SortByPID
+	SortByName
+)
+
+type StatsMsg struct {
+	CPU      float64
+	Memory   system.MemoryInfo
+	Disk     system.DiskInfo
+	GPU      system.GPUInfo
+	GPUProcs []system.GPUProcess
+	Procs    []system.ProcessInfo
+	Err      error
+}
+
+type Dashboard struct {
+	cpu      float64
+	memory   system.MemoryInfo
+	disk     system.DiskInfo
+	gpu      system.GPUInfo
+	gpuProcs []system.GPUProcess
+	procs    []system.ProcessInfo
+	sortMode SortMode
+	err      error
+}
+
+func NewDashboard() Dashboard {
+	return Dashboard{sortMode: SortByMemory}
+}
+
+func FetchStats() tea.Msg {
+	var stats StatsMsg
+
+	cpu, err := system.GetCPUUsage()
+	if err != nil {
+		stats.Err = err
+		return stats
+	}
+	stats.CPU = cpu
+
+	mem, err := system.GetMemoryInfo()
+	if err != nil {
+		stats.Err = err
+		return stats
+	}
+	stats.Memory = mem
+
+	disk, err := system.GetDiskUsage("/")
+	if err != nil {
+		stats.Err = err
+		return stats
+	}
+	stats.Disk = disk
+
+	gpuInfo, err := system.GetGPUInfo()
+	if err == nil {
+		stats.GPU = gpuInfo
+	}
+
+	gpuProcs, err := system.GetGPUProcesses()
+	if err == nil {
+		stats.GPUProcs = gpuProcs
+	}
+
+	procs, err := system.GetProcesses()
+	if err != nil {
+		stats.Err = err
+		return stats
+	}
+	stats.Procs = procs
+
+	return stats
+}
+
+func (d Dashboard) Update(msg tea.Msg) (Dashboard, tea.Cmd) {
+	switch msg := msg.(type) {
+	case StatsMsg:
+		d.cpu = msg.CPU
+		d.memory = msg.Memory
+		d.disk = msg.Disk
+		d.gpu = msg.GPU
+		d.gpuProcs = msg.GPUProcs
+		d.procs = msg.Procs
+		d.err = msg.Err
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "m":
+			d.sortMode = SortByMemory
+		case "c":
+			d.sortMode = SortByCPU
+		case "g":
+			d.sortMode = SortByGPU
+		case "n":
+			d.sortMode = SortByName
+		}
+	}
+	return d, nil
+}
+
+func (d Dashboard) View(width, height int) string {
+	if d.err != nil {
+		return fmt.Sprintf("Error: %v", d.err)
+	}
+
+	var b strings.Builder
+
+	barWidth := width / 3
+	if barWidth < 16 {
+		barWidth = 16
+	}
+	if barWidth > 30 {
+		barWidth = 30
+	}
+
+	labelStyle := lipgloss.NewStyle().Foreground(theme.CoinGold).Bold(true)
+
+	b.WriteString(fmt.Sprintf("  %s %s %s\n",
+		labelStyle.Render("CPU "),
+		theme.ProgressBar(d.cpu, barWidth),
+		fmt.Sprintf(" %.1f%%", d.cpu)))
+
+	ramPct := d.memory.RAMPercent()
+	b.WriteString(fmt.Sprintf("  %s %s %s\n",
+		labelStyle.Render("RAM "),
+		theme.ProgressBar(ramPct, barWidth),
+		fmt.Sprintf(" %s/%s", system.FormatBytes(d.memory.UsedRAM), system.FormatBytes(d.memory.TotalRAM))))
+
+	gpuPct := d.gpu.Utilization
+	b.WriteString(fmt.Sprintf("  %s %s %s\n",
+		labelStyle.Render("GPU "),
+		theme.ProgressBar(gpuPct, barWidth),
+		fmt.Sprintf(" %.1f%%", gpuPct)))
+
+	vramPct := d.gpu.VRAMPercent()
+	b.WriteString(fmt.Sprintf("  %s 
+```
+
+---
+
+## File Overview
+
+# dashboard.go
+
+## Purpose and Responsibility
+This Go source file is responsible for managing and displaying system statistics, including CPU usage, memory, disk, GPU, and process information within a terminal-based UI. It integrates with the `system` package to fetch real-time data and uses `tea` for handling user input.
+
+## Key Exports and Public Interface
+- **Dashboard**: A struct representing the dashboard state.
+- **NewDashboard() Dashboard**: Creates a new instance of the dashboard.
+- **FetchStats() tea.Msg**: Fetches system statistics and returns them as a message.
+- **Update(msg tea.Msg) (Dashboard, tea.Cmd)**: Updates the dashboard state based on messages received from the UI.
+
+## How It Fits into the Project
+This file is part of the `internal/ui/dashboard` package, which provides a user interface for monitoring system health. The dashboard integrates with other modules like `system` and `theme`, allowing it to display detailed information in a visually appealing manner. It fits into the larger project by providing a central point for displaying critical system metrics.
+
+## Notable Design Decisions
+- **Error Handling**: Errors are handled gracefully, ensuring that any issues fetching data do not crash the application.
+- **Sorting Logic**: The dashboard supports sorting processes based on various criteria (memory usage, CPU usage, GPU memory usage, PID, and process name), enhancing usability.
+- **UI Customization**: Utilizes `lipgloss` for styling text and bars, ensuring a consistent look across different terminal environments.
+
+---
+
+*Generated by CodeWorm on 2026-03-01 11:10*
