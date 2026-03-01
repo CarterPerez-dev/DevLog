@@ -1,0 +1,154 @@
+# repository_pattern
+
+**Type:** Pattern Analysis
+**Repository:** my-portfolio
+**File:** v1/backend/app/project/service.py
+**Language:** python
+**Lines:** 1-117
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+service.py
+"""
+
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import config
+from config import Language
+from core.exceptions import ProjectNotFound
+from .repository import ProjectRepository
+from .schemas import (
+    ProjectBriefResponse,
+    ProjectListResponse,
+    ProjectNavResponse,
+    ProjectResponse,
+)
+
+
+class ProjectService:
+    """
+    Business logic for project operations
+    """
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_id(self, project_id: UUID) -> ProjectResponse:
+        """
+        Get project by ID
+        """
+        project = await ProjectRepository.get_by_id(self.session, project_id)
+        if not project:
+            raise ProjectNotFound(str(project_id))
+        return ProjectResponse.model_validate(project)
+
+    async def get_by_slug(
+        self,
+        slug: str,
+        language: Language,
+    ) -> ProjectResponse:
+        """
+        Get project by slug and language
+        Primary lookup for public project pages
+        """
+        project = await ProjectRepository.get_by_slug_and_language(
+            self.session,
+            slug,
+            language,
+        )
+        if not project:
+            raise ProjectNotFound(slug)
+        return ProjectResponse.model_validate(project)
+
+    async def list_visible(
+        self,
+        language: Language,
+        skip: int = config.PAGINATION_DEFAULT_SKIP,
+        limit: int = config.PAGINATION_DEFAULT_LIMIT,
+    ) -> ProjectListResponse:
+        """
+        List visible projects for a language
+        """
+        projects = await ProjectRepository.get_visible_by_language(
+            self.session,
+            language,
+            skip,
+            limit,
+        )
+        total = await ProjectRepository.count_visible_by_language(
+            self.session,
+            language,
+        )
+        return ProjectListResponse(
+            items = [ProjectResponse.model_validate(p) for p in projects],
+            total = total,
+            skip = skip,
+            limit = limit,
+        )
+
+    async def list_featured(
+        self,
+        language: Language,
+        limit: int = config.PAGINATION_FEATURED_LIMIT,
+    ) -> list[ProjectResponse]:
+        """
+        List featured projects for a language
+        Used for overview page highlights
+        """
+        projects = await ProjectRepository.get_featured_by_language(
+            self.session,
+            language,
+            limit,
+        )
+        return [ProjectResponse.model_validate(p) for p in projects]
+
+    async def get_nav_items(
+        self,
+        language: Language,
+    ) -> ProjectNavResponse:
+        """
+        Get minimal project data for sidebar navigation
+        """
+        projects = await ProjectRepository.get_visible_by_language(
+            self.session,
+            language,
+        )
+        total = await ProjectRepository.count_visible_by_language(
+            self.session,
+     
+```
+
+---
+
+## Pattern Analysis
+
+### Pattern Analysis
+
+**Pattern Used: Repository Pattern**
+
+The `ProjectService` class in the provided code implements the **Repository Pattern**, which separates business logic from data access by encapsulating database operations within a repository. Each method in `ProjectService` interacts with the `ProjectRepository` to perform CRUD-like operations.
+
+- **Implementation**: The `ProjectService` class initializes an `AsyncSession` and delegates project retrieval, listing, and navigation tasks to methods in `ProjectRepository`. For example, `get_by_id`, `get_by_slug`, and `list_visible` all call corresponding repository methods.
+  
+- **Benefits**:
+  - **Separation of Concerns**: Business logic is cleanly separated from data access, making the code more modular and easier to maintain.
+  - **Testability**: Repository methods can be easily tested in isolation without needing a database connection.
+
+- **Deviations**:
+  - The `ProjectService` class does not implement CRUD operations directly but rather calls repository methods. This is slightly different from the canonical pattern, which might include direct data access within service methods.
+  
+- **Appropriateness**:
+  - This pattern is highly appropriate in this context because it aligns well with the need to abstract database interactions and keep business logic separate. It also supports easy mocking for testing purposes.
+
+This implementation effectively leverages the Repository Pattern to manage project-related operations, ensuring a clean separation of concerns and enhancing code maintainability.
+
+---
+
+*Generated by CodeWorm on 2026-03-01 00:11*
