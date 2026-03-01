@@ -117,27 +117,24 @@ func FetchDockerData(cfg config.Config) tea.Msg {
 
 ## Documentation
 
-### Purpose and Behavior
+### Documentation for `FetchDockerData`
 
-The `FetchDockerData` function in the provided Go code retrieves disk usage statistics for Docker images, containers, and volumes from a Docker client. It then categorizes these resources based on predefined protection patterns and returns them as structured data.
+**Purpose and Behavior:**
+`FetchDockerData` is a function that retrieves disk usage data from Docker, categorizes it based on protection patterns, and returns structured data representing images, containers, volumes, and build cache. The function handles errors gracefully by returning appropriate error messages.
 
-### Key Implementation Details
+**Key Implementation Details:**
+- **Error Handling:** Uses `docker.NewClient()` to establish a connection and `cli.GetDiskUsage()` to fetch disk usage details.
+- **Categorization:** Utilizes `docker.CategorizeImage`, `docker.CategorizeContainer`, and `docker.CategorizeVolume` for categorizing Docker objects based on protection patterns.
+- **State Determination:** Determines the state of each object (protected or not) using `pe.IsProtected`.
+- **Data Structures:** Returns a structured message containing categorized items for images, containers, volumes, and build cache.
 
-- **Error Handling**: The function checks for errors when creating and closing the Docker client, ensuring proper resource management.
-- **Resource Categorization**: Images, containers, and volumes are categorized using `docker.CategorizeImage`, `docker.CategorizeContainer`, and `docker.CategorizeVolume` functions respectively.
-- **Protection Engine**: A `DockerProtectionEngine` instance is used to determine if a resource should be considered "protected" based on the provided configuration.
+**When/Why to Use:**
+Use this function when you need to gather detailed disk usage information from Docker in a structured format. It is particularly useful for audit or monitoring purposes where categorization based on protection patterns is required.
 
-### When/Why to Use This Code
-
-This function is crucial for generating detailed reports or visualizations of Docker resources, especially in environments where security and compliance are paramount. It can be used in audit tools, monitoring systems, or any application that needs to understand the state of a Docker environment.
-
-### Patterns and Gotchas
-
-- **Resource Management**: The use of `defer cli.Close()` ensures that the Docker client is properly closed after usage.
-- **Categorization Logic**: The categorization logic for images, containers, and volumes is encapsulated in separate functions, promoting code reusability and maintainability.
-- **Potential Performance Issues**: Iterating over large numbers of Docker resources can be resource-intensive. Ensure proper performance tuning if dealing with a vast number of resources.
-
-This function exemplifies Go's emphasis on clear, modular design and robust error handling.
+**Patterns/Gotchas:**
+- **Error Propagation:** Ensure proper error handling, as the function returns an `err` value if any step fails.
+- **Resource Management:** The `cli.Close()` call ensures that resources are properly released after use.
+- **Categorization Logic:** Custom categorization logic is embedded within the function, which may need to be updated based on changing requirements.
 
 ---
 
