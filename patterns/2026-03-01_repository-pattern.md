@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** stripe-referral
-**File:** src/stripe_referral/services/payout_service.py
+**File:** src/stripe_referral/services/referral_service.py
 **Language:** python
-**Lines:** 1-308
+**Lines:** 1-220
 **Complexity:** 0.0
 
 ---
@@ -14,105 +14,112 @@
 ```python
 """
 ⒸAngelaMos | 2025 | CertGames.com
-Payout service with business logic
+Referral service with business logic
 """
 
-from typing import Any
+from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
-from ..adapters import (
-    ManualBankAdapter,
-    PayoutAdapter,
-    StripeConnectAdapter,
-    WiseAdapter,
-)
-from ..config.enums import (
-    AdapterType,
-    CurrencyCode,
-    PayoutStatus,
-    RewardType,
-)
+from ..config.enums import ReferralCodeStatus
 from ..exceptions.errors import (
-    InvalidRecipientDataError,
-    PayoutAlreadyExistsError,
-    PayoutNotFoundError,
-    TrackingNotFoundError,
+    CodeExpiredError,
+    CodeInactiveError,
+    CodeMaxUsesReachedError,
+    CodeNotFoundError,
+    ProgramNotFoundError,
+    SelfReferralError,
 )
-from ..repositories.payout_repo import PayoutRepository
-from ..repositories.program_repo import ReferralProgramRepository
-from ..repositories.referral_repo import ReferralTrackingRepository
+from ..repositories.referral_repo import (
+    ReferralCodeRepository,
+    ReferralTrackingRepository,
+)
+from ..repositories.program_repo import (
+    ReferralProgramRepository,
+)
 from ..schemas.types import (
-    PayoutInfo,
-    PayoutResult,
-    ProgramInfo,
-    RecipientValidation,
+    CodeValidation,
+    CreateCodeResult,
+    ReferralHistoryItem,
+    TrackReferralResult,
+    UserEarnings,
 )
+from ..utils.code_generator import generate_unique_code
 
 
-class PayoutService:
+class ReferralService:
     """
-    Service for payout business logic
+    Service for referral business logic
     """
     @staticmethod
-    def _get_adapter(
-        adapter_type: str,
-        adapter_config: dict[str,
-                             Any] | None = None
-    ) -> PayoutAdapter:
+    def create_code(
+        db: Session,
+        user_id: str,
+        program_key: str
+    ) -> CreateCodeResult:
         """
-        Factory method to get the appropriate payout adapter instance
+        Generate unique referral code for a user
         """
-        config = adapter_config or {}
+        program_repo = ReferralProgramRepository(db)
+        code_repo = ReferralCodeRepository(db)
 
-        if adapter_type == AdapterType.MANUAL.value:
-            return ManualBankAdapter()
-        if adapter_type == AdapterType.STRIPE_CONNECT.value:
-            api_key = config.get("api_key", "")
-            return StripeConnectAdapter(api_key = api_key)
-        if adapter_type == AdapterType.WISE.value:
-            api_token = config.get("api_token", "")
-            sandbox = config.get("sandbox", False)
-            return WiseAdapter(api_token = api_token, sandbox = sandbox)
+        program = program_repo.get_by_key(program_key)
+        if not program or not program.is_active:
+            raise ProgramNotFoundError(
+                f"Program '{program_key}' not found or inactive",
+                program_key = program_key,
+            )
 
-        raise InvalidRecipientDataError(
-            f"Unknown adapter type: {adapter_type}",
-            adapter_type = adapter_type,
+        def check_collision(code_string: str) -> bool:
+            """
+            Check if code already exists in database
+            """
+            existing = code_repo.get_by_code(code_string)
+            return existing is not None
+
+        unique_code = generate_unique_code(
+            user_id,
+            program_key,
+            check_collision
+        )
+
+        code = code_repo.create(
+            code = unique_code,
+            user_id = user_id,
+            program_id = program.id,
+            status = ReferralCodeStatus.ACTIVE.value,
+        )
+
+        return CreateCodeResult(
+            code = code.code,
+            program_id = code.program_id,
+            user_id = code.user_id,
+            created_at = code.created_at.isoformat(),
         )
 
     @staticmethod
-    def create_program(
-        db: Session,
-        name: str,
-        program_key: str,
-        reward_amount: float,
-        *,
-        reward_currency: str = CurrencyCode.USD.value,
-        reward_type: str = RewardType.ONE_TIME.value,
-        adapter_type: str = AdapterType.MANUAL.value,
-        max_rewards_per_user: int | None = None,
-        conversion_window_days: int | None = None,
-        adapter_config: dict[str,
-                             Any] | None = None,
-    ) -> ProgramInfo:
+    def validate_code(db: Session, code: str) -> CodeValidation:
         """
-        Create a new referral program
+        Validate if a code is active and usable
         """
-        valid_adapter_types = [at.value for at in AdapterType]
-        if adapter_type not in valid_adapter_types:
-            raise InvalidRecipientDataError(
-                f"Invalid adapter_type. Must be one of: {valid_adapter_types}",
-                adapter_type = adapter_type,
+        code_repo = ReferralCodeRepository(db)
+
+        code_obj = code_repo.get_by_code(code)
+        if not code_obj:
+            raise CodeNotFoundError(
+                f"Code '{code}' not found",
+                code = code
             )
 
-        program_repo = ReferralProgramRepository(db)
+        if code_obj.status != ReferralCodeStatus.ACTIVE.value:
+            raise CodeInactiveError(
+                f"Code '{code}' is inactive (status: {code_obj.status})",
+                code = code,
+                status = code_obj.status,
+            )
 
-        program = program_repo.create(
-            name = name,
-            program_key = program_key,
-            reward_amount = reward_amount,
-            reward_currency = reward_currency,
-            reward_type = reward_type,
-            adapter_ty
+        if code_obj.expires_at and code_obj.expires_at < datetime.now(UTC
+                                                                      ):
+        
 ```
 
 ---
@@ -121,22 +128,25 @@ class PayoutService:
 
 ### Pattern Analysis
 
-**Pattern Used:** Repository Pattern  
-**Implementation:**
-The `PayoutService` class uses the repository pattern to abstract data access operations. Specifically, it interacts with three repositories (`ReferralTrackingRepository`, `PayoutRepository`, and `ReferralProgramRepository`) through static methods like `_get_adapter()` and service methods such as `create_program()`, `get_program_info()`, and `create_payout()`.
+**Pattern Used:** Repository Pattern
 
-**Benefits:**
-- **Encapsulation:** Repositories encapsulate data access logic, making the service layer agnostic to how data is stored.
-- **Testability:** By abstracting database interactions into repositories, unit tests can mock these interfaces for more reliable testing.
-- **Flexibility:** Changes in storage mechanisms (e.g., switching from SQL to NoSQL) do not require changes in the service layer.
+The `ReferralService` class in the provided code implements the **Repository Pattern**, which abstracts data access and manipulation logic into separate classes (repositories). This separation ensures that business logic remains decoupled from database interactions.
 
-**Deviations:**
-- The `PayoutService` class includes a factory method `_get_adapter()` which is not directly related to repository operations. This introduces some deviation from the pure repository pattern.
-- The service methods handle exceptions and return specific schemas, adding additional logic beyond typical repository responsibilities.
+#### Implementation Details:
+- The `ReferralCodeRepository`, `ReferralTrackingRepository`, and `ReferralProgramRepository` handle CRUD operations for referral codes, tracking, and programs respectively.
+- Methods like `create_code`, `validate_code`, and `track_referral` interact with these repositories to perform their tasks.
 
-**Appropriateness:**
-This pattern is appropriate in this context because it effectively separates concerns between business logic and data access. It ensures that the `PayoutService` remains focused on its core responsibilities while delegating data handling to specialized repositories. However, including a factory method for adapters might be better suited elsewhere if not directly related to repository operations.
+#### Benefits:
+1. **Decoupling:** The business logic is separated from the data access layer, making it easier to change how data is stored or retrieved without affecting the service's core functionality.
+2. **Testability:** Repositories can be easily mocked for unit testing, improving test coverage and reducing dependencies on a database.
+
+#### Deviations:
+- While the pattern is well-implemented, there are no explicit interfaces or abstract classes defining repository methods, which could enhance flexibility in future implementations.
+- The `ReferralService` class uses static methods, which might not be ideal if you need to instantiate it for dependency injection purposes.
+
+#### Appropriate Use Cases:
+This pattern is highly appropriate when dealing with complex data access logic and multiple types of entities (referral codes, tracking records, programs) that require different CRUD operations. It ensures a clean separation of concerns and makes the codebase more maintainable and testable.
 
 ---
 
-*Generated by CodeWorm on 2026-03-01 11:26*
+*Generated by CodeWorm on 2026-03-01 12:25*
