@@ -1,10 +1,10 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** my-portfolio
-**File:** v1/backend/app/project/service.py
+**Repository:** stripe-referral
+**File:** src/stripe_referral/repositories/base.py
 **Language:** python
-**Lines:** 1-117
+**Lines:** 1-84
 **Complexity:** 0.0
 
 ---
@@ -13,116 +13,89 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
-service.py
+ⒸAngelaMos | 2025 | CertGames.com
+Base repository with generic CRUD operations
 """
 
-from uuid import UUID
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-import config
-from config import Language
-from core.exceptions import ProjectNotFound
-from .repository import ProjectRepository
-from .schemas import (
-    ProjectBriefResponse,
-    ProjectListResponse,
-    ProjectNavResponse,
-    ProjectResponse,
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
 )
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..database.Base import Base
 
 
-class ProjectService:
+T = TypeVar("T", bound = Base)
+
+
+class BaseRepository(Generic[T]):
     """
-    Business logic for project operations
+    Base repository with common CRUD operations
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    def __init__(self, db: Session, model: type[T]) -> None:
+        """
+        Initialize repository with database session and model type
+        """
+        self.db = db
+        self.model = model
 
-    async def get_by_id(self, project_id: UUID) -> ProjectResponse:
+    def create(self, **kwargs: Any) -> T:
         """
-        Get project by ID
+        Create a new record
         """
-        project = await ProjectRepository.get_by_id(self.session, project_id)
-        if not project:
-            raise ProjectNotFound(str(project_id))
-        return ProjectResponse.model_validate(project)
+        instance = self.model(**kwargs)
+        self.db.add(instance)
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
 
-    async def get_by_slug(
-        self,
-        slug: str,
-        language: Language,
-    ) -> ProjectResponse:
+    def get_by_id(self, record_id: int) -> T | None:
         """
-        Get project by slug and language
-        Primary lookup for public project pages
+        Get record by ID
         """
-        project = await ProjectRepository.get_by_slug_and_language(
-            self.session,
-            slug,
-            language,
-        )
-        if not project:
-            raise ProjectNotFound(slug)
-        return ProjectResponse.model_validate(project)
+        return self.db.get(self.model, record_id)
 
-    async def list_visible(
-        self,
-        language: Language,
-        skip: int = config.PAGINATION_DEFAULT_SKIP,
-        limit: int = config.PAGINATION_DEFAULT_LIMIT,
-    ) -> ProjectListResponse:
+    def get_all(self,
+                limit: int | None = None,
+                offset: int = 0) -> list[T]:
         """
-        List visible projects for a language
+        Get all records with pagination
         """
-        projects = await ProjectRepository.get_visible_by_language(
-            self.session,
-            language,
-            skip,
-            limit,
-        )
-        total = await ProjectRepository.count_visible_by_language(
-            self.session,
-            language,
-        )
-        return ProjectListResponse(
-            items = [ProjectResponse.model_validate(p) for p in projects],
-            total = total,
-            skip = skip,
-            limit = limit,
-        )
+        stmt = select(self.model).offset(offset)
+        if limit:
+            stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
 
-    async def list_featured(
-        self,
-        language: Language,
-        limit: int = config.PAGINATION_FEATURED_LIMIT,
-    ) -> list[ProjectResponse]:
+    def update(self, record_id: int, **kwargs: Any) -> T | None:
         """
-        List featured projects for a language
-        Used for overview page highlights
+        Update record by ID
         """
-        projects = await ProjectRepository.get_featured_by_language(
-            self.session,
-            language,
-            limit,
-        )
-        return [ProjectResponse.model_validate(p) for p in projects]
+        instance = self.get_by_id(record_id)
+        if not instance:
+            return None
 
-    async def get_nav_items(
-        self,
-        language: Language,
-    ) -> ProjectNavResponse:
+        for key, value in kwargs.items():
+            setattr(instance, key, value)
+
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+    def delete(self, record_id: int) -> bool:
         """
-        Get minimal project data for sidebar navigation
+        Delete record by ID
         """
-        projects = await ProjectRepository.get_visible_by_language(
-            self.session,
-            language,
-        )
-        total = await ProjectRepository.count_visible_by_language(
-            self.session,
-     
+        instance = self.get_by_id(record_id)
+        if not instance:
+            return False
+
+        self.db.delete(instance)
+        self.db.commit()
+        return True
+
 ```
 
 ---
@@ -131,24 +104,26 @@ class ProjectService:
 
 ### Pattern Analysis
 
-**Pattern Used: Repository Pattern**
+**Pattern Used:** Repository Pattern
 
-The `ProjectService` class in the provided code implements the **Repository Pattern**, which separates business logic from data access by encapsulating database operations within a repository. Each method in `ProjectService` interacts with the `ProjectRepository` to perform CRUD-like operations.
+#### Implementation
+The `BaseRepository` class in the provided code implements the repository pattern, which abstracts data access operations and encapsulates business logic related to database interactions. It uses generic types (`TypeVar`) to make it flexible for any model that inherits from `Base`, a SQLAlchemy ORM base class.
 
-- **Implementation**: The `ProjectService` class initializes an `AsyncSession` and delegates project retrieval, listing, and navigation tasks to methods in `ProjectRepository`. For example, `get_by_id`, `get_by_slug`, and `list_visible` all call corresponding repository methods.
-  
-- **Benefits**:
-  - **Separation of Concerns**: Business logic is cleanly separated from data access, making the code more modular and easier to maintain.
-  - **Testability**: Repository methods can be easily tested in isolation without needing a database connection.
+- **Methods**: The class includes methods like `create`, `get_by_id`, `get_all`, `update`, and `delete` which perform common CRUD operations.
+- **Initialization**: It initializes with a database session (`Session`) and the model type (`model`).
 
-- **Deviations**:
-  - The `ProjectService` class does not implement CRUD operations directly but rather calls repository methods. This is slightly different from the canonical pattern, which might include direct data access within service methods.
-  
-- **Appropriateness**:
-  - This pattern is highly appropriate in this context because it aligns well with the need to abstract database interactions and keep business logic separate. It also supports easy mocking for testing purposes.
+#### Benefits
+1. **Encapsulation**: Abstracts data access logic, making it easier to switch between different databases or storage mechanisms.
+2. **Flexibility**: Generic types allow reuse across multiple models.
+3. **Maintainability**: Centralizes business logic related to database operations.
 
-This implementation effectively leverages the Repository Pattern to manage project-related operations, ensuring a clean separation of concerns and enhancing code maintainability.
+#### Deviations
+- The implementation uses SQLAlchemy's `Session` and ORM features directly, which is a common deviation from the pure repository pattern that might separate data access concerns more strictly.
+- Methods like `get_all` use pagination through `offset` and optional `limit`, providing flexibility but potentially making it less generic compared to some patterns.
+
+#### Appropriateness
+This pattern is appropriate in scenarios where you need to abstract database interactions, especially when dealing with multiple models or switching between different databases. It's particularly useful for projects like the `stripe-referral` repository where data access logic needs to be centralized and flexible.
 
 ---
 
-*Generated by CodeWorm on 2026-03-01 00:11*
+*Generated by CodeWorm on 2026-03-01 09:20*
