@@ -1,0 +1,135 @@
+# WakeWordEngine.initialize
+
+**Type:** Performance Analysis
+**Repository:** angelamos-3d
+**File:** frontend/src/lib/wakeword/WakeWordEngine.ts
+**Language:** typescript
+**Lines:** 22-110
+**Complexity:** 2.0
+
+---
+
+## Source Code
+
+```typescript
+async initialize(): Promise<void> {
+		const config = getAngelaConfig();
+		const wsEndpoint = `${config.api.wsBaseUrl}/ws/wake`;
+
+		try {
+			logger.wake.log("Connecting to Angela-Wake...");
+			await this.connect(wsEndpoint);
+
+			this.stream = await navigator.mediaDevices.getUserMedia({
+				audio: {
+					channelCount: 1,
+					echoCancellation: true,
+					noiseSuppression: true,
+				},
+			});
+
+			this.audioContext = new AudioContext();
+			const sampleRate = this.audioContext.sampleRate;
+			const chunkSamples = Math.floor((sampleRate * CHUNK_MS) / 1000);
+
+			logger.wake.log(
+				`Audio sample rate: ${sampleRate}Hz, chunk size: ${chunkSamples}`,
+			);
+
+			const workletCode = `
+        class AudioChunkProcessor extends AudioWorkletProcessor {
+          constructor() {
+            super()
+            this.buffer = new Float32Array(0)
+            this.chunkSize = ${chunkSamples}
+            this.enabled = false
+            this.port.onmessage = (e) => {
+              if (e.data === 'start') {
+                this.buffer = new Float32Array(0)
+                this.enabled = true
+              } else if (e.data === 'stop') {
+                this.enabled = false
+              }
+            }
+          }
+
+          process(inputs) {
+            if (!this.enabled) return true
+            const input = inputs[0]
+            if (input.length > 0 && input[0].length > 0) {
+              const samples = input[0]
+              const newBuffer = new Float32Array(this.buffer.length + samples.length)
+              newBuffer.set(this.buffer)
+              newBuffer.set(samples, this.buffer.length)
+              this.buffer = newBuffer
+
+              while (this.buffer.length >= this.chunkSize) {
+                const chunk = this.buffer.slice(0, this.chunkSize)
+                this.buffer = this.buffer.slice(this.chunkSize)
+
+                const int16 = new Int16Array(chunk.length)
+                for (let i = 0; i < chunk.length; i++) {
+                  int16[i] = Math.max(-32768, Math.min(32767, Math.floor(chunk[i] * 32767)))
+                }
+                this.port.postMessage(int16.buffer, [int16.buffer])
+              }
+            }
+            return true
+          }
+        }
+        registerProcessor('audio-chunk-processor', AudioChunkProcessor)
+      `;
+
+			const blob = new Blob([workletCode], { type: "application/javascript" });
+			const url = URL.createObjectURL(blob);
+			await this.audioContext.audioWorklet.addModule(url);
+			URL.revokeObjectURL(url);
+
+			this.workletNode = new AudioWorkletNode(
+				this.audioContext,
+				"audio-chunk-processor",
+			);
+			this.workletNode.port.onmessage = (e) => {
+				if (this.ws?.readyState === WebSocket.OPEN && this.isListening) {
+					this.ws.send(e.data);
+				}
+			};
+
+			logger.wake.log("Angela-Wake initialized");
+		} catch (error) {
+			logger.wake.error("Failed to initialize:", error);
+			throw error;
+		}
+	}
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of `initialize` is primarily determined by the async operations, such as connecting to a WebSocket and getUserMedia. The overall complexity is O(1) since these operations are constant-time calls.
+
+#### Space Complexity
+Space complexity is also O(1) for most parts of the function. However, the creation of large arrays in the `AudioChunkProcessor` class can be costly if audio data processing is frequent or high-volume.
+
+#### Bottlenecks and Inefficiencies
+- **Redundant Operations**: The `Math.max`, `Math.min`, and `Math.floor` operations inside the loop are redundant. These could be optimized by precomputing values.
+- **Blocking Calls in Async Contexts**: The WebSocket connection and getUserMedia calls are async, but there's no need to await them sequentially if they can run concurrently.
+
+#### Optimization Opportunities
+1. **Optimize Array Operations**: Precompute constants for `Math.max`, `Math.min`, and `Math.floor` to avoid repeated calculations.
+2. **Parallelize Async Operations**: Use parallel processing for WebSocket connection and getUserMedia initialization if they are independent.
+3. **Caching Worklet Code**: The worklet code is recreated each time, which can be optimized by caching the compiled module.
+
+#### Resource Usage Concerns
+- **Memory Leaks**: Ensure that all created objects (e.g., `Float32Array`, `Int16Array`) are properly managed to avoid memory leaks.
+- **WebSocket Handling**: Ensure WebSocket connections are closed properly when not in use to prevent resource exhaustion.
+
+By addressing these points, you can improve the performance and efficiency of your code.
+
+---
+
+*Generated by CodeWorm on 2026-03-02 08:36*
