@@ -1,0 +1,163 @@
+# achievement_migration_commands
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/migrations/achievement_migration_commands.js
+**Language:** javascript
+**Lines:** 1-945
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```javascript
+/**
+ * Achievement Migration Commands for MongoDB Shell
+ *
+ * Paste this entire file into your Mongo shell (Atlas or mongosh)
+ *
+ * What this does:
+ * - Updates existing achievements with new fields (xpReward, coinReward, titles, etc.)
+ * - Keeps old achievementIds so users don't lose their unlocks
+ * - Inserts new achievements that don't exist yet
+ *
+ * Run with: mongosh "mongodb+srv://..." --file achievement_migration_commands.js
+ * Or paste directly into Atlas shell
+ */
+
+db.achievements.bulkWrite([
+
+  // ============= TEST CATEGORY =============
+  // Updates existing, preserves achievementId for user unlocks
+
+  {
+    updateOne: {
+      filter: { achievementId: "test_rookie" },
+      update: {
+        $set: {
+          title: "Test Rookie",
+          description: "Complete your first test. Welcome to the grind!",
+          category: "test",
+          criteria: { testCount: 1 },
+          xpReward: 50,
+          coinReward: 25
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "bronze_grinder" },
+      update: {
+        $set: {
+          title: "Bronze Grinder",
+          description: "Complete 5 tests. You are putting in the work!",
+          category: "test",
+          criteria: { testCount: 5 },
+          xpReward: 100,
+          coinReward: 50
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "test_enthusiast" },
+      update: {
+        $set: {
+          title: "Test Enthusiast",
+          description: "Complete 10 tests. Building momentum!",
+          category: "test",
+          criteria: { testCount: 10 },
+          xpReward: 150,
+          coinReward: 75
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "silver_scholar" },
+      update: {
+        $set: {
+          title: "Silver Scholar",
+          description: "Complete 25 tests. Starting to look like a pro!",
+          category: "test",
+          criteria: { testCount: 25 },
+          xpReward: 250,
+          coinReward: 125
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "gold_god" },
+      update: {
+        $set: {
+          title: "Gold God",
+          description: "Complete 50 tests. Unstoppable!",
+          category: "test",
+          criteria: { testCount: 50 },
+          xpReward: 500,
+          coinReward: 250
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "platinum_pro" },
+      update: {
+        $set: {
+          title: "Platinum Pro",
+          description: "Complete 100 tests. No life, just tests!",
+          category: "test",
+          criteria: { testCount: 100 },
+          xpReward: 750,
+          coinReward: 500
+        }
+      },
+      upsert: true
+    }
+  },
+  {
+    updateOne: {
+      filter: { achievementId: "test_legend" },
+      update: {
+        $set: {
+          title: "Test Legend",
+          description: "Co
+```
+
+---
+
+## File Overview
+
+### Documenting `achievement_migration_commands.js`
+
+**File Purpose and Responsibility:**
+This JavaScript file contains MongoDB bulk write commands for migrating achievements within a game application. It updates existing achievements with new fields such as `xpReward`, `coinReward`, `titles`, etc., while preserving the original `achievementId` to maintain user unlocks. Additionally, it inserts new achievements that do not yet exist in the database.
+
+**Key Exports or Public Interface:**
+- None; this file is executed directly via MongoDB shell commands (`mongosh`).
+
+**How It Fits into the Project:**
+This script is part of a larger migration process for updating the game's achievement system. It runs as a one-off operation to ensure that all achievements are correctly configured with new fields and categories, thereby enhancing the user experience without disrupting existing data.
+
+**Notable Design Decisions:**
+- **Bulk Write Operations:** The use of `db.achievements.bulkWrite` allows for efficient batch processing of multiple update operations.
+- **Preservation of Achievement IDs:** Ensuring that `achievementId` remains unchanged helps maintain user progress and unlocks, preventing any loss of data during the migration.
+- **Category-Based Updates:** Achievements are categorized into "test" and "milestone," making it easier to manage and display them within the game interface.
+
+This script is crucial for maintaining backward compatibility while introducing new features and improvements in the achievement system. It runs directly in the MongoDB shell, ensuring that all necessary updates are applied seamlessly.
+
+---
+
+*Generated by CodeWorm on 2026-03-02 11:29*
