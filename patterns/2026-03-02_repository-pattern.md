@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** stripe-referral
-**File:** src/stripe_referral/repositories/program_repo.py
+**File:** src/stripe_referral/repositories/payout_repo.py
 **Language:** python
-**Lines:** 1-75
+**Lines:** 1-105
 **Complexity:** 0.0
 
 ---
@@ -14,78 +14,108 @@
 ```python
 """
 ⒸAngelaMos | 2025 | CertGames.com
-Referral program repository
+Payout repository
 """
+
+from datetime import (
+    UTC,
+    datetime,
+)
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models.ReferralProgram import ReferralProgram
+from ..config.enums import PayoutStatus
+from ..models.Payout import Payout
 
 from .base import BaseRepository
 
 
-class ReferralProgramRepository(BaseRepository[ReferralProgram]):
+class PayoutRepository(BaseRepository[Payout]):
     """
-    Repository for ReferralProgram database operations
+    Repository for Payout database operations
     """
     def __init__(self, db: Session) -> None:
         """
-        Initialize with ReferralProgram model
+        Initialize with Payout model
         """
-        super().__init__(db, ReferralProgram)
+        super().__init__(db, Payout)
 
-    def get_by_key(self, program_key: str) -> ReferralProgram | None:
+    def get_by_user(self, user_id: str) -> list[Payout]:
         """
-        Get program by unique program key
+        Get all payouts for a user
         """
-        stmt = select(ReferralProgram).where(
-            ReferralProgram.program_key == program_key
-        )
-        return self.db.execute(stmt).scalar_one_or_none()
-
-    def get_by_name(self, name: str) -> ReferralProgram | None:
-        """
-        Get program by unique name
-        """
-        stmt = select(ReferralProgram).where(ReferralProgram.name == name)
-        return self.db.execute(stmt).scalar_one_or_none()
-
-    def get_active_programs(self) -> list[ReferralProgram]:
-        """
-        Get all active programs
-        """
-        stmt = select(ReferralProgram).where(ReferralProgram.is_active)
+        stmt = select(Payout).where(Payout.user_id == user_id)
         return list(self.db.execute(stmt).scalars().all())
 
-    def deactivate_program(
+    def get_by_tracking_id(self, tracking_id: int) -> Payout | None:
+        """
+        Get payout by tracking ID
+        """
+        stmt = select(Payout).where(Payout.tracking_id == tracking_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_pending_payouts(self,
+                            limit: int | None = None) -> list[Payout]:
+        """
+        Get all pending payouts with optional limit
+        """
+        stmt = select(Payout).where(
+            Payout.status == PayoutStatus.PENDING.value
+        )
+        if limit:
+            stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_failed_payouts(self,
+                           limit: int | None = None) -> list[Payout]:
+        """
+        Get all failed payouts with optional limit
+        """
+        stmt = select(Payout).where(
+            Payout.status == PayoutStatus.FAILED.value
+        )
+        if limit:
+            stmt = stmt.limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def mark_as_paid(
         self,
-        program_id: int
-    ) -> ReferralProgram | None:
+        payout_id: int,
+        transaction_id: str
+    ) -> Payout | None:
         """
-        Deactivate a program
+        Mark payout as paid with transaction ID
         """
-        program = self.get_by_id(program_id)
-        if not program:
+        payout = self.get_by_id(payout_id)
+        if not payout:
             return None
 
-        program.is_active = False
+        payout.status = PayoutStatus.PAID.value
+        payout.external_transaction_id = transaction_id
+        payout.processed_at = datetime.now(UTC)
         self.db.commit()
-        self.db.refresh(program)
-        return program
+        self.db.refresh(payout)
+        return payout
 
-    def activate_program(self, program_id: int) -> ReferralProgram | None:
+    def mark_as_failed(
+        self,
+        payout_id: int,
+        error_message: str
+    ) -> Payout | None:
         """
-        Activate a program
+        Mark payout as failed with error message
         """
-        program = self.get_by_id(program_id)
-        if not program:
+        payout = self.get_by_id(payout_id)
+        if not payout:
             return None
 
-        program.is_active = True
+        payout.status = PayoutStatus.FAILED.value
+        payout.error_message = error_message
+        payout.failed_at = datetime.now(UTC)
         self.db.commit()
-        self.db.refresh(program)
-        return program
+        self.db.refresh(payout)
+        return payout
 
 ```
 
@@ -97,21 +127,24 @@ class ReferralProgramRepository(BaseRepository[ReferralProgram]):
 
 **Pattern Used:** Repository Pattern
 
-**Implementation:**
-The `ReferralProgramRepository` class implements the repository pattern by encapsulating database operations for the `ReferralProgram` model. It provides methods like `get_by_key`, `get_by_name`, and `get_active_programs` to interact with the database in a structured way, using SQLAlchemy's ORM.
+The `PayoutRepository` class implements the **Repository Pattern**, which abstracts database operations behind a clean interface, making it easier to manage data access and persistence.
 
-**Benefits:**
-- **Encapsulation:** The repository abstracts the database interactions, making it easier to switch between different data storage solutions.
-- **Testability:** By separating business logic from persistence concerns, unit testing becomes simpler and more straightforward.
-- **Maintainability:** Changes in database schema or queries can be managed within the repository without affecting other parts of the application.
+- **Implementation**: The repository provides methods like `get_by_user`, `get_by_tracking_id`, `get_pending_payouts`, `get_failed_payouts`, `mark_as_paid`, and `mark_as_failed`. Each method performs specific database queries or updates using SQLAlchemy.
+  
+- **Benefits**:
+  - **Encapsulation**: Abstracts the data access logic, making it easier to switch between different data sources (e.g., from a database to an in-memory store).
+  - **Testability**: Facilitates unit testing by decoupling business logic from direct database interactions.
+  - **Maintainability**: Eases maintenance and updates by centralizing data operations.
 
-**Deviations:**
-- The `get_by_id` method is not explicitly defined but used internally by methods like `deactivate_program` and `activate_program`.
-- Methods return a single entity (`ReferralProgram | None`) or a list of entities, providing flexibility in handling different query results.
+- **Deviations**:
+  - The `mark_as_paid` and `mark_as_failed` methods use a custom `get_by_id` method, which is not defined in the provided code snippet. This could be a deviation from the standard pattern.
+  
+- **Appropriateness**: This pattern is highly appropriate for this context as it encapsulates database operations, making the codebase more modular and easier to manage.
 
-**Appropriateness:**
-This pattern is highly appropriate for applications that need to interact with a database in a structured manner. It ensures that the application logic remains clean and decoupled from the data access layer, making it easier to manage and scale.
+### Conclusion
+
+The `PayoutRepository` effectively implements the Repository Pattern by abstracting database interactions. It provides a clear interface for data access and manipulation while maintaining testability and maintainability. The slight deviation in using an undefined method (`get_by_id`) should be addressed, but otherwise, it adheres well to the pattern's principles.
 
 ---
 
-*Generated by CodeWorm on 2026-03-02 01:26*
+*Generated by CodeWorm on 2026-03-02 02:59*
