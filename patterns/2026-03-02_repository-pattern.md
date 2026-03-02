@@ -1,10 +1,10 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** stripe-referral
-**File:** src/stripe_referral/repositories/payout_repo.py
+**Repository:** vuemantics
+**File:** backend/models/Base.py
 **Language:** python
-**Lines:** 1-105
+**Lines:** 1-230
 **Complexity:** 0.0
 
 ---
@@ -13,110 +13,121 @@
 
 ```python
 """
-ⒸAngelaMos | 2025 | CertGames.com
-Payout repository
+ⒸAngelaMos | 2025
+Base.py
 """
 
-from datetime import (
-    UTC,
-    datetime,
-)
+from datetime import datetime
+from typing import Any, TypeVar
+from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from asyncpg import Record
 
-from ..config.enums import PayoutStatus
-from ..models.Payout import Payout
-
-from .base import BaseRepository
+import config
+import database
 
 
-class PayoutRepository(BaseRepository[Payout]):
+T = TypeVar("T", bound = "BaseModel")
+
+
+class BaseModel:
     """
-    Repository for Payout database operations
+    Base class for all database models
+
+    Provides:
+    - Common fields: id, created_at, updated_at
+    - CRUD operations: create, save, delete
+    - Query helpers: find_by_id, find_all
+    - Serialization: to_dict, from_record
     """
-    def __init__(self, db: Session) -> None:
-        """
-        Initialize with Payout model
-        """
-        super().__init__(db, Payout)
+    __tablename__: str = ""
+    __table_created__: bool = False
 
-    def get_by_user(self, user_id: str) -> list[Payout]:
+    def __init__(self, **kwargs: Any) -> None:
         """
-        Get all payouts for a user
+        Initialize model instance with field values
         """
-        stmt = select(Payout).where(Payout.user_id == user_id)
-        return list(self.db.execute(stmt).scalars().all())
+        self.id: UUID | None = kwargs.get("id")
+        self.created_at: datetime | None = kwargs.get("created_at")
+        self.updated_at: datetime | None = kwargs.get("updated_at")
 
-    def get_by_tracking_id(self, tracking_id: int) -> Payout | None:
+    @classmethod
+    async def create_table(cls) -> None:
         """
-        Get payout by tracking ID
-        """
-        stmt = select(Payout).where(Payout.tracking_id == tracking_id)
-        return self.db.execute(stmt).scalar_one_or_none()
+        Create the table if it doesn't exist.
 
-    def get_pending_payouts(self,
-                            limit: int | None = None) -> list[Payout]:
+        Must be implemented by subclasses with their specific schema.
         """
-        Get all pending payouts with optional limit
-        """
-        stmt = select(Payout).where(
-            Payout.status == PayoutStatus.PENDING.value
+        raise NotImplementedError(
+            "Subclasses must implement create_table()"
         )
-        if limit:
-            stmt = stmt.limit(limit)
-        return list(self.db.execute(stmt).scalars().all())
 
-    def get_failed_payouts(self,
-                           limit: int | None = None) -> list[Payout]:
+    @classmethod
+    async def ensure_table_exists(cls) -> None:
         """
-        Get all failed payouts with optional limit
+        Ensure table exists, create if not
         """
-        stmt = select(Payout).where(
-            Payout.status == PayoutStatus.FAILED.value
-        )
-        if limit:
-            stmt = stmt.limit(limit)
-        return list(self.db.execute(stmt).scalars().all())
+        if not cls.__table_created__:
+            await cls.create_table()
+            cls.__table_created__ = True
 
-    def mark_as_paid(
-        self,
-        payout_id: int,
-        transaction_id: str
-    ) -> Payout | None:
+    @classmethod
+    def from_record(cls: type[T], record: Record | None) -> T | None:
         """
-        Mark payout as paid with transaction ID
+        Create model instance from asyncpg Record
         """
-        payout = self.get_by_id(payout_id)
-        if not payout:
+        if record is None:
             return None
 
-        payout.status = PayoutStatus.PAID.value
-        payout.external_transaction_id = transaction_id
-        payout.processed_at = datetime.now(UTC)
-        self.db.commit()
-        self.db.refresh(payout)
-        return payout
+        return cls(**dict(record))
 
-    def mark_as_failed(
-        self,
-        payout_id: int,
-        error_message: str
-    ) -> Payout | None:
+    @classmethod
+    def from_records(cls: type[T], records: list[Record]) -> list[T]:
         """
-        Mark payout as failed with error message
+        Create multiple model instances from asyncpg Records
         """
-        payout = self.get_by_id(payout_id)
-        if not payout:
-            return None
+        result: list[T] = []
+        for record in records:
+            if record is not None:
+                instance = cls.from_record(record)
+                if instance is not None:
+                    result.append(instance)
+        return result
 
-        payout.status = PayoutStatus.FAILED.value
-        payout.error_message = error_message
-        payout.failed_at = datetime.now(UTC)
-        self.db.commit()
-        self.db.refresh(payout)
-        return payout
+    def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
+        """
+        Convert model instance to dictionary
+        """
+        exclude = exclude or set()
 
+        result = {}
+        for key, value in self.__dict__.items():
+            if key.startswith("_") or key in exclude:
+                continue
+
+            if isinstance(value, UUID):
+                result[key] = str(value)
+            elif isinstance(value, datetime):
+                result[key] = value.isoformat()
+            else:
+                result[key] = value
+
+        return result
+
+    @classmethod
+    async def find_by_id(cls: type[T], id: UUID | str) -> T | None:
+        """
+        Find a record by ID
+        """
+        await cls.ensure_table_exists()
+
+        if isinstance(id, str):
+            id = UUID(id)
+
+        query = f"""
+            SELECT * FROM {cls.__tablename__}
+            WHERE id = $1
+        "
 ```
 
 ---
@@ -127,24 +138,28 @@ class PayoutRepository(BaseRepository[Payout]):
 
 **Pattern Used:** Repository Pattern
 
-The `PayoutRepository` class implements the **Repository Pattern**, which abstracts database operations behind a clean interface, making it easier to manage data access and persistence.
+The `BaseModel` class in the provided code implements a simplified version of the **Repository Pattern**, which abstracts data access and manipulation logic.
 
-- **Implementation**: The repository provides methods like `get_by_user`, `get_by_tracking_id`, `get_pending_payouts`, `get_failed_payouts`, `mark_as_paid`, and `mark_as_failed`. Each method performs specific database queries or updates using SQLAlchemy.
-  
-- **Benefits**:
-  - **Encapsulation**: Abstracts the data access logic, making it easier to switch between different data sources (e.g., from a database to an in-memory store).
-  - **Testability**: Facilitates unit testing by decoupling business logic from direct database interactions.
-  - **Maintainability**: Eases maintenance and updates by centralizing data operations.
+#### Implementation Details:
+- The `BaseModel` class provides common fields (`id`, `created_at`, `updated_at`) and methods for CRUD operations, query helpers, serialization, and table management.
+- Methods like `create_table()`, `ensure_table_exists()`, and `find_by_id()` handle database interactions, ensuring that the table exists before performing operations.
 
-- **Deviations**:
-  - The `mark_as_paid` and `mark_as_failed` methods use a custom `get_by_id` method, which is not defined in the provided code snippet. This could be a deviation from the standard pattern.
-  
-- **Appropriateness**: This pattern is highly appropriate for this context as it encapsulates database operations, making the codebase more modular and easier to manage.
+#### Benefits:
+1. **Encapsulation:** The pattern encapsulates data access logic within a base class, making it easier to manage and extend.
+2. **Flexibility:** Subclasses can implement specific schema details and business rules without altering the core structure.
+3. **Testability:** By abstracting database interactions, unit testing becomes more straightforward.
 
-### Conclusion
+#### Deviations:
+- The pattern is simplified; some advanced features like transaction management or complex query building are not included.
+- The `create_table()` method must be implemented by subclasses, which adds a layer of complexity but ensures schema consistency.
 
-The `PayoutRepository` effectively implements the Repository Pattern by abstracting database interactions. It provides a clear interface for data access and manipulation while maintaining testability and maintainability. The slight deviation in using an undefined method (`get_by_id`) should be addressed, but otherwise, it adheres well to the pattern's principles.
+#### Appropriate Use Cases:
+- **When** you need to standardize data access and manipulation across multiple models in a project.
+- **When** you want to decouple business logic from database-specific operations.
+- **When** your application requires consistent handling of common CRUD operations, query execution, and serialization.
+
+This pattern is particularly appropriate for projects where the core structure needs to be flexible yet maintainable.
 
 ---
 
-*Generated by CodeWorm on 2026-03-02 02:59*
+*Generated by CodeWorm on 2026-03-02 16:18*
