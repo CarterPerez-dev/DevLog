@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** stripe-referral
-**File:** src/stripe_referral/services/referral_service.py
+**File:** src/stripe_referral/repositories/referral_repo.py
 **Language:** python
-**Lines:** 1-220
+**Lines:** 1-128
 **Complexity:** 0.0
 
 ---
@@ -14,112 +14,103 @@
 ```python
 """
 ⒸAngelaMos | 2025 | CertGames.com
-Referral service with business logic
+Referral code and tracking repositories
 """
 
-from datetime import UTC, datetime
+from sqlalchemy import (
+    case,
+    func,
+    select,
+)
 from sqlalchemy.orm import Session
 
-from ..config.enums import ReferralCodeStatus
-from ..exceptions.errors import (
-    CodeExpiredError,
-    CodeInactiveError,
-    CodeMaxUsesReachedError,
-    CodeNotFoundError,
-    ProgramNotFoundError,
-    SelfReferralError,
-)
-from ..repositories.referral_repo import (
-    ReferralCodeRepository,
-    ReferralTrackingRepository,
-)
-from ..repositories.program_repo import (
-    ReferralProgramRepository,
-)
-from ..schemas.types import (
-    CodeValidation,
-    CreateCodeResult,
-    ReferralHistoryItem,
-    TrackReferralResult,
-    UserEarnings,
-)
-from ..utils.code_generator import generate_unique_code
+from ..config.enums import ReferralTrackingStatus
+from ..models.ReferralCode import ReferralCode
+from ..models.ReferralTracking import ReferralTracking
+
+from .base import BaseRepository
 
 
-class ReferralService:
+class ReferralCodeRepository(BaseRepository[ReferralCode]):
     """
-    Service for referral business logic
+    Repository for ReferralCode database operations
     """
-    @staticmethod
-    def create_code(
-        db: Session,
-        user_id: str,
-        program_key: str
-    ) -> CreateCodeResult:
+    def __init__(self, db: Session) -> None:
         """
-        Generate unique referral code for a user
+        Initialize with ReferralCode model
         """
-        program_repo = ReferralProgramRepository(db)
-        code_repo = ReferralCodeRepository(db)
+        super().__init__(db, ReferralCode)
 
-        program = program_repo.get_by_key(program_key)
-        if not program or not program.is_active:
-            raise ProgramNotFoundError(
-                f"Program '{program_key}' not found or inactive",
-                program_key = program_key,
-            )
+    def get_by_code(self, code: str) -> ReferralCode | None:
+        """
+        Get referral code by code string
+        """
+        stmt = select(ReferralCode).where(ReferralCode.code == code)
+        return self.db.execute(stmt).scalar_one_or_none()
 
-        def check_collision(code_string: str) -> bool:
-            """
-            Check if code already exists in database
-            """
-            existing = code_repo.get_by_code(code_string)
-            return existing is not None
+    def get_by_user(self,
+                    user_id: str,
+                    program_id: int | None = None) -> list[ReferralCode]:
+        """
+        Get all codes for a user optionally filtered by program
+        """
+        stmt = select(ReferralCode).where(ReferralCode.user_id == user_id)
+        if program_id:
+            stmt = stmt.where(ReferralCode.program_id == program_id)
+        return list(self.db.execute(stmt).scalars().all())
 
-        unique_code = generate_unique_code(
-            user_id,
-            program_key,
-            check_collision
+    def increment_uses(self, code_id: int) -> bool:
+        """
+        Atomically increment uses count
+        """
+        code = self.get_by_id(code_id)
+        if not code:
+            return False
+
+        code.uses_count += 1
+        self.db.commit()
+        return True
+
+
+class ReferralTrackingRepository(BaseRepository[ReferralTracking]):
+    """
+    Repository for ReferralTracking database operations
+    """
+    def __init__(self, db: Session) -> None:
+        """
+        Initialize with ReferralTracking model
+        """
+        super().__init__(db, ReferralTracking)
+
+    def get_by_referrer(self, user_id: str) -> list[ReferralTracking]:
+        """
+        Get all referral conversions for a referrer
+        """
+        stmt = select(ReferralTracking).where(
+            ReferralTracking.referrer_user_id == user_id
         )
+        return list(self.db.execute(stmt).scalars().all())
 
-        code = code_repo.create(
-            code = unique_code,
-            user_id = user_id,
-            program_id = program.id,
-            status = ReferralCodeStatus.ACTIVE.value,
-        )
-
-        return CreateCodeResult(
-            code = code.code,
-            program_id = code.program_id,
-            user_id = code.user_id,
-            created_at = code.created_at.isoformat(),
-        )
-
-    @staticmethod
-    def validate_code(db: Session, code: str) -> CodeValidation:
+    def get_pending_payouts(self,
+                            program_id: int | None = None
+                            ) -> list[ReferralTracking]:
         """
-        Validate if a code is active and usable
+        Get all tracking records with pending payouts
         """
-        code_repo = ReferralCodeRepository(db)
+        stmt = select(ReferralTracking).where(
+            ReferralTracking.payout_status ==
+            ReferralTrackingStatus.PENDING.value
+        )
+        if program_id:
+            stmt = stmt.where(ReferralTracking.program_id == program_id)
+        return list(self.db.execute(stmt).scalars().all())
 
-        code_obj = code_repo.get_by_code(code)
-        if not code_obj:
-            raise CodeNotFoundError(
-                f"Code '{code}' not found",
-                code = code
-            )
-
-        if code_obj.status != ReferralCodeStatus.ACTIVE.value:
-            raise CodeInactiveError(
-                f"Code '{code}' is inactive (status: {code_obj.status})",
-                code = code,
-                status = code_obj.status,
-            )
-
-        if code_obj.expires_at and code_obj.expires_at < datetime.now(UTC
-                                                                      ):
-        
+    def get_user_earnings(self, user_id: str) -> dict[str, float]:
+        """
+        Calculate total earnings for a user
+        """
+        stmt = select(
+            func.sum(ReferralTracking.amount_earned
 ```
 
 ---
@@ -130,23 +121,21 @@ class ReferralService:
 
 **Pattern Used:** Repository Pattern
 
-The `ReferralService` class in the provided code implements the **Repository Pattern**, which abstracts data access and manipulation logic into separate classes (repositories). This separation ensures that business logic remains decoupled from database interactions.
+**Implementation:**
+The code implements a repository pattern, where `ReferralCodeRepository` and `ReferralTrackingRepository` classes encapsulate database operations for specific models (`ReferralCode` and `ReferralTracking`). Each repository class inherits from a base repository class, which provides common methods like `get_by_id`. Specific methods are defined to handle CRUD-like operations tailored to the model's requirements.
 
-#### Implementation Details:
-- The `ReferralCodeRepository`, `ReferralTrackingRepository`, and `ReferralProgramRepository` handle CRUD operations for referral codes, tracking, and programs respectively.
-- Methods like `create_code`, `validate_code`, and `track_referral` interact with these repositories to perform their tasks.
+**Benefits:**
+- **Encapsulation:** Operations related to each model are grouped together, making the codebase more organized and easier to maintain.
+- **Testability:** Repository classes can be easily mocked or replaced with in-memory databases for unit testing.
+- **Separation of Concerns:** Business logic is separated from data access logic.
 
-#### Benefits:
-1. **Decoupling:** The business logic is separated from the data access layer, making it easier to change how data is stored or retrieved without affecting the service's core functionality.
-2. **Testability:** Repositories can be easily mocked for unit testing, improving test coverage and reducing dependencies on a database.
+**Deviations:**
+- The base repository class `BaseRepository` does not follow the canonical pattern strictly, as it only provides a generic method without concrete implementations. This might lead to redundancy if more specific methods are needed in derived classes.
+- Some methods like `increment_uses` use direct attribute manipulation (`code.uses_count += 1`) instead of database transactions, which could be improved for consistency.
 
-#### Deviations:
-- While the pattern is well-implemented, there are no explicit interfaces or abstract classes defining repository methods, which could enhance flexibility in future implementations.
-- The `ReferralService` class uses static methods, which might not be ideal if you need to instantiate it for dependency injection purposes.
-
-#### Appropriate Use Cases:
-This pattern is highly appropriate when dealing with complex data access logic and multiple types of entities (referral codes, tracking records, programs) that require different CRUD operations. It ensures a clean separation of concerns and makes the codebase more maintainable and testable.
+**When Appropriate:**
+This pattern is appropriate when you need to abstract data access operations and ensure that business logic remains separate from the persistence layer. It's particularly useful in applications with complex queries or multiple models requiring similar CRUD operations.
 
 ---
 
-*Generated by CodeWorm on 2026-03-01 12:25*
+*Generated by CodeWorm on 2026-03-01 19:20*
