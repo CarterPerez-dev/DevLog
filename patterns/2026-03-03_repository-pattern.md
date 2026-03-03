@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** ios-test
-**File:** fastapi/app/period_log/repository.py
+**File:** fastapi/app/daily_log/service.py
 **Language:** python
-**Lines:** 1-121
+**Lines:** 1-168
 **Complexity:** 0.0
 
 ---
@@ -14,118 +14,114 @@
 ```python
 """
 ⒸAngelaMos | 2026
-repository.py
+service.py
 """
 
 from collections.abc import Sequence
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.base_repository import BaseRepository
-from .PeriodLog import PeriodLog
+from core.exceptions import DailyLogNotFound, DailyLogAlreadyExists, PartnerNotFound
+from partner.repository import PartnerRepository
+from .DailyLog import DailyLog
+from .repository import DailyLogRepository
+from .schemas import DailyLogCreate, DailyLogResponse, DailyLogUpdate
 
 
-class PeriodLogRepository(BaseRepository[PeriodLog]):
+class DailyLogService:
     """
-    Database operations for PeriodLog model
+    Business logic for daily log operations
     """
-    model = PeriodLog
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    @classmethod
-    async def get_by_partner_id(
-        cls,
-        session: AsyncSession,
-        partner_id: UUID,
+    async def _get_partner_id(self, user_id: UUID) -> UUID:
+        """
+        Get partner ID for user, raise if not found
+        """
+        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
+        if not partner:
+            raise PartnerNotFound(str(user_id))
+        return partner.id
+
+    async def create_daily_log(
+        self,
+        user_id: UUID,
+        data: DailyLogCreate,
+    ) -> DailyLogResponse:
+        """
+        Create a new daily log entry
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        existing = await DailyLogRepository.get_by_partner_and_date(
+            self.session,
+            partner_id,
+            data.log_date,
+        )
+        if existing:
+            raise DailyLogAlreadyExists(str(data.log_date))
+
+        daily_log = await DailyLogRepository.create(
+            self.session,
+            partner_id = partner_id,
+            log_date = data.log_date,
+            mood = data.mood,
+            energy_level = data.energy_level,
+            symptoms = data.symptoms,
+            notes = data.notes,
+        )
+        return DailyLogResponse.model_validate(daily_log)
+
+    async def get_daily_logs(
+        self,
+        user_id: UUID,
         skip: int = 0,
-        limit: int = 100,
-    ) -> Sequence[PeriodLog]:
+        limit: int = 30,
+    ) -> Sequence[DailyLogResponse]:
         """
-        Get period logs for a partner, ordered by start_date descending
+        Get daily logs for user's partner
         """
-        result = await session.execute(
-            select(PeriodLog)
-            .where(PeriodLog.partner_id == partner_id)
-            .order_by(PeriodLog.start_date.desc())
-            .offset(skip)
-            .limit(limit)
-        )
-        return result.scalars().all()
+        partner_id = await self._get_partner_id(user_id)
 
-    @classmethod
-    async def get_by_partner_and_date(
-        cls,
-        session: AsyncSession,
-        partner_id: UUID,
+        logs = await DailyLogRepository.get_by_partner_id(
+            self.session,
+            partner_id,
+            skip = skip,
+            limit = limit,
+        )
+        return [DailyLogResponse.model_validate(log) for log in logs]
+
+    async def get_daily_log_by_date(
+        self,
+        user_id: UUID,
+        log_date: date,
+    ) -> DailyLogResponse:
+        """
+        Get daily log for a specific date
+        """
+        partner_id = await self._get_partner_id(user_id)
+
+        log = await DailyLogRepository.get_by_partner_and_date(
+            self.session,
+            partner_id,
+            log_date,
+        )
+        if not log:
+            raise DailyLogNotFound(str(log_date))
+
+        return DailyLogResponse.model_validate(log)
+
+    async def get_date_range(
+        self,
+        user_id: UUID,
         start_date: date,
-    ) -> PeriodLog | None:
+        end_date: date,
+    ) -> Sequence[DailyLogResponse]:
         """
-        Get period log by partner and start date (unique constraint)
-        """
-        result = await session.execute(
-            select(PeriodLog)
-            .where(
-                PeriodLog.partner_id == partner_id,
-                PeriodLog.start_date == start_date,
-            )
-        )
-        return result.scalars().first()
-
-    @classmethod
-    async def get_latest_for_partner(
-        cls,
-        session: AsyncSession,
-        partner_id: UUID,
-    ) -> PeriodLog | None:
-        """
-        Get most recent period log for a partner
-        """
-        result = await session.execute(
-            select(PeriodLog)
-            .where(PeriodLog.partner_id == partner_id)
-            .order_by(PeriodLog.start_date.desc())
-            .limit(1)
-        )
-        return result.scalars().first()
-
-    @classmethod
-    async def get_actual_logs(
-        cls,
-        session: AsyncSession,
-        partner_id: UUID,
-        limit: int = 12,
-    ) -> Sequence[PeriodLog]:
-        """
-        Get actual (non-predicted) period logs for cycle calculations
-        """
-        result = await session.execute(
-            select(PeriodLog)
-            .where(
-                PeriodLog.partner_id == partner_id,
-                PeriodLog.is_predicted == False,
-            )
-            .order_by(PeriodLog.start_date.desc())
-            .limit(limit)
-        )
-        return result.scalars().all()
-
-    @classmethod
-    async def delete_predicted_after_date(
-        cls,
-        session: AsyncSession,
-        partner_id: UUID,
-        after_date: date,
-    ) -> int:
-        """
-        Delete predicted period logs after a given date (cleanup after new actual log)
-        """
-        from sqlalchemy import delete
-
-        result = await session.execute(
-            delete(PeriodLog)
-         
+       
 ```
 
 ---
@@ -136,21 +132,24 @@ class PeriodLogRepository(BaseRepository[PeriodLog]):
 
 **Pattern Used:** Repository Pattern
 
+The `DailyLogService` class implements the **Repository Pattern**, which encapsulates data access logic within a dedicated repository layer. This pattern is evident in methods like `_get_partner_id`, `create_daily_log`, `get_daily_logs`, and others, where business logic interacts with the database through the `DailyLogRepository`.
+
 **Implementation:**
-The `PeriodLogRepository` class implements the repository pattern by encapsulating database operations for the `PeriodLog` model. It provides methods to interact with the database in a structured manner, abstracting away the details of SQL queries and session management.
+- The `DailyLogService` class acts as a service layer that abstracts the data access operations.
+- Methods such as `create_daily_log`, `get_daily_logs`, and `update_daily_log` delegate to the `DailyLogRepository` for actual database interactions.
 
 **Benefits:**
-- **Encapsulation:** The repository handles all database interactions, making the application code cleaner and more maintainable.
-- **Testability:** Repository methods can be easily tested independently of the database.
-- **Flexibility:** Changes in the database schema or query logic are isolated to the repository class.
+1. **Separation of Concerns:** The business logic is separated from the data access code, making the service layer more focused on business rules.
+2. **Testability:** Repository methods can be easily mocked or replaced in unit tests, improving testability.
+3. **Maintainability:** Changes to database queries or storage mechanisms are isolated within the repository.
 
 **Deviations:**
-- The `PeriodLogRepository` is a concrete implementation rather than an interface, which might limit flexibility if different repositories need to share common functionality.
-- The methods use class-level methods (`@classmethod`) instead of instance methods, which could be less flexible in some scenarios but are appropriate here given the utility nature of these methods.
+- The `_get_partner_id` method is a helper function rather than part of the `DailyLogRepository`, which might not strictly follow the canonical pattern where all data access logic resides in the repository.
+- The use of `model_validate` for converting database models to Pydantic schemas adds an extra step, but it ensures data validation and type hints.
 
 **Appropriateness:**
-This pattern is highly appropriate for this context as it effectively abstracts database interactions and promotes a clean separation of concerns. It is particularly useful when dealing with complex queries or multiple data access points, ensuring that the application logic remains clear and manageable.
+This pattern is appropriate here because it aligns well with the need to separate business logic from data access. It provides a clear structure that can be easily extended or modified without impacting other parts of the application.
 
 ---
 
-*Generated by CodeWorm on 2026-03-03 09:57*
+*Generated by CodeWorm on 2026-03-03 10:57*
