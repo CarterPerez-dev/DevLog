@@ -1,10 +1,10 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** vuemantics
-**File:** backend/models/Base.py
+**Repository:** ios-test
+**File:** fastapi/app/period_log/service.py
 **Language:** python
-**Lines:** 1-230
+**Lines:** 1-162
 **Complexity:** 0.0
 
 ---
@@ -13,121 +13,107 @@
 
 ```python
 """
-ⒸAngelaMos | 2025
-Base.py
+ⒸAngelaMos | 2026
+service.py
 """
 
-from datetime import datetime
-from typing import Any, TypeVar
+from collections.abc import Sequence
 from uuid import UUID
 
-from asyncpg import Record
+from sqlalchemy.ext.asyncio import AsyncSession
 
-import config
-import database
+from core.exceptions import PeriodLogNotFound, PeriodLogAlreadyExists, PartnerNotFound
+from partner.repository import PartnerRepository
+from .PeriodLog import PeriodLog
+from .repository import PeriodLogRepository
+from .schemas import PeriodLogCreate, PeriodLogResponse, PeriodLogUpdate
 
 
-T = TypeVar("T", bound = "BaseModel")
-
-
-class BaseModel:
+class PeriodLogService:
     """
-    Base class for all database models
-
-    Provides:
-    - Common fields: id, created_at, updated_at
-    - CRUD operations: create, save, delete
-    - Query helpers: find_by_id, find_all
-    - Serialization: to_dict, from_record
+    Business logic for period log operations
     """
-    __tablename__: str = ""
-    __table_created__: bool = False
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
 
-    def __init__(self, **kwargs: Any) -> None:
+    async def _get_partner_id(self, user_id: UUID) -> UUID:
         """
-        Initialize model instance with field values
+        Get partner ID for user, raise if not found
         """
-        self.id: UUID | None = kwargs.get("id")
-        self.created_at: datetime | None = kwargs.get("created_at")
-        self.updated_at: datetime | None = kwargs.get("updated_at")
+        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
+        if not partner:
+            raise PartnerNotFound(str(user_id))
+        return partner.id
 
-    @classmethod
-    async def create_table(cls) -> None:
+    async def create_period_log(
+        self,
+        user_id: UUID,
+        data: PeriodLogCreate,
+    ) -> PeriodLogResponse:
         """
-        Create the table if it doesn't exist.
+        Create a new period log entry
+        """
+        partner_id = await self._get_partner_id(user_id)
 
-        Must be implemented by subclasses with their specific schema.
-        """
-        raise NotImplementedError(
-            "Subclasses must implement create_table()"
+        existing = await PeriodLogRepository.get_by_partner_and_date(
+            self.session,
+            partner_id,
+            data.start_date,
+        )
+        if existing:
+            raise PeriodLogAlreadyExists(str(data.start_date))
+
+        previous_log = await PeriodLogRepository.get_latest_for_partner(
+            self.session,
+            partner_id,
+        )
+        cycle_length = None
+        if previous_log and not previous_log.is_predicted:
+            days_diff = (data.start_date - previous_log.start_date).days
+            if 21 <= days_diff <= 45:
+                cycle_length = days_diff
+
+        await PeriodLogRepository.delete_predicted_after_date(
+            self.session,
+            partner_id,
+            data.start_date,
         )
 
-    @classmethod
-    async def ensure_table_exists(cls) -> None:
-        """
-        Ensure table exists, create if not
-        """
-        if not cls.__table_created__:
-            await cls.create_table()
-            cls.__table_created__ = True
+        period_log = await PeriodLogRepository.create(
+            self.session,
+            partner_id = partner_id,
+            start_date = data.start_date,
+            end_date = data.end_date,
+            flow_intensity = data.flow_intensity,
+            notes = data.notes,
+            cycle_length = cycle_length,
+            is_predicted = False,
+        )
 
-    @classmethod
-    def from_record(cls: type[T], record: Record | None) -> T | None:
+        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
+        if partner:
+            await PartnerRepository.update_last_period(
+                self.session,
+                partner,
+                data.start_date,
+            )
+
+        return PeriodLogResponse.model_validate(period_log)
+
+    async def get_period_logs(
+        self,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> Sequence[PeriodLogResponse]:
         """
-        Create model instance from asyncpg Record
+        Get period logs for user's partner
         """
-        if record is None:
-            return None
+        partner_id = await self._get_partner_id(user_id)
 
-        return cls(**dict(record))
-
-    @classmethod
-    def from_records(cls: type[T], records: list[Record]) -> list[T]:
-        """
-        Create multiple model instances from asyncpg Records
-        """
-        result: list[T] = []
-        for record in records:
-            if record is not None:
-                instance = cls.from_record(record)
-                if instance is not None:
-                    result.append(instance)
-        return result
-
-    def to_dict(self, exclude: set[str] | None = None) -> dict[str, Any]:
-        """
-        Convert model instance to dictionary
-        """
-        exclude = exclude or set()
-
-        result = {}
-        for key, value in self.__dict__.items():
-            if key.startswith("_") or key in exclude:
-                continue
-
-            if isinstance(value, UUID):
-                result[key] = str(value)
-            elif isinstance(value, datetime):
-                result[key] = value.isoformat()
-            else:
-                result[key] = value
-
-        return result
-
-    @classmethod
-    async def find_by_id(cls: type[T], id: UUID | str) -> T | None:
-        """
-        Find a record by ID
-        """
-        await cls.ensure_table_exists()
-
-        if isinstance(id, str):
-            id = UUID(id)
-
-        query = f"""
-            SELECT * FROM {cls.__tablename__}
-            WHERE id = $1
-        "
+        logs = await PeriodLogRepository.get_by_partner_id(
+            self.session,
+        
 ```
 
 ---
@@ -138,28 +124,21 @@ class BaseModel:
 
 **Pattern Used:** Repository Pattern
 
-The `BaseModel` class in the provided code implements a simplified version of the **Repository Pattern**, which abstracts data access and manipulation logic.
+**Implementation:**
+The `PeriodLogService` class encapsulates business logic for period log operations, delegating data access to the `PeriodLogRepository`. Methods like `create_period_log`, `get_period_logs`, and `update_period_log` interact with the repository through asynchronous methods. The repository handles database interactions such as creating, reading, updating, and deleting records.
 
-#### Implementation Details:
-- The `BaseModel` class provides common fields (`id`, `created_at`, `updated_at`) and methods for CRUD operations, query helpers, serialization, and table management.
-- Methods like `create_table()`, `ensure_table_exists()`, and `find_by_id()` handle database interactions, ensuring that the table exists before performing operations.
+**Benefits:**
+- **Separation of Concerns:** Business logic is separated from data access, making the code more maintainable.
+- **Testability:** Repository methods can be easily mocked or replaced for unit testing.
+- **Flexibility:** Easier to switch between different database implementations if needed.
 
-#### Benefits:
-1. **Encapsulation:** The pattern encapsulates data access logic within a base class, making it easier to manage and extend.
-2. **Flexibility:** Subclasses can implement specific schema details and business rules without altering the core structure.
-3. **Testability:** By abstracting database interactions, unit testing becomes more straightforward.
+**Deviations:**
+- The `PeriodLogService` class directly handles some business logic (e.g., calculating cycle length) that could potentially be moved into the repository for a more pure implementation of the pattern.
+- Some methods like `_get_partner_id` are helper functions within the service, which might not strictly follow the pattern's separation but provide utility.
 
-#### Deviations:
-- The pattern is simplified; some advanced features like transaction management or complex query building are not included.
-- The `create_table()` method must be implemented by subclasses, which adds a layer of complexity but ensures schema consistency.
-
-#### Appropriate Use Cases:
-- **When** you need to standardize data access and manipulation across multiple models in a project.
-- **When** you want to decouple business logic from database-specific operations.
-- **When** your application requires consistent handling of common CRUD operations, query execution, and serialization.
-
-This pattern is particularly appropriate for projects where the core structure needs to be flexible yet maintainable.
+**Appropriateness:**
+This pattern is appropriate here because it effectively separates business logic from data access. It ensures that the service layer remains focused on business rules while the repository handles database interactions. This design makes the codebase more modular and easier to maintain, especially as the application grows or requirements change.
 
 ---
 
-*Generated by CodeWorm on 2026-03-02 16:18*
+*Generated by CodeWorm on 2026-03-02 22:48*
