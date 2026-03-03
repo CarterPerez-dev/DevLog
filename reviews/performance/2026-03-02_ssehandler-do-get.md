@@ -1,0 +1,141 @@
+# SSEHandler.do_GET
+
+**Type:** Performance Analysis
+**Repository:** Cybersecurity-Projects
+**File:** PROJECTS/advanced/haskell-reverse-proxy/examples/websockets/sse_server.py
+**Language:** python
+**Lines:** 13-103
+**Complexity:** 8.0
+
+---
+
+## Source Code
+
+```python
+def do_GET(self):
+        if self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "healthy"}).encode())
+            return
+
+        if self.path == "/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            print(f"[SSE] Client connected: {self.client_address}")
+
+            try:
+                event_id = 0
+                while True:
+                    event_id += 1
+                    data = {
+                        "id": event_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "message": f"Event #{event_id}"
+                    }
+
+                    event = f"id: {event_id}\nevent: tick\ndata: {json.dumps(data)}\n\n"
+                    self.wfile.write(event.encode())
+                    self.wfile.flush()
+
+                    print(f"[SSE] Sent event #{event_id}")
+                    time.sleep(1)
+
+            except (BrokenPipeError, ConnectionResetError):
+                print(f"[SSE] Client {self.client_address} disconnected")
+            return
+
+        if self.path == "/stream/fast":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            print(f"[SSE-FAST] Client connected: {self.client_address}")
+
+            try:
+                for i in range(100):
+                    data = {"seq": i, "ts": datetime.now().isoformat()}
+                    event = f"data: {json.dumps(data)}\n\n"
+                    self.wfile.write(event.encode())
+                    self.wfile.flush()
+                    time.sleep(0.05)
+
+                self.wfile.write(b"event: done\ndata: complete\n\n")
+                self.wfile.flush()
+                print(f"[SSE-FAST] Stream complete")
+
+            except (BrokenPipeError, ConnectionResetError):
+                print(f"[SSE-FAST] Client disconnected early")
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.end_headers()
+        html = """<!DOCTYPE html>
+<html>
+<head><title>SSE Test</title></head>
+<body>
+<h1>SSE Test Endpoints</h1>
+<ul>
+  <li><a href="/events">/events</a> - Continuous 1-second ticks</li>
+  <li><a href="/stream/fast">/stream/fast</a> - Fast burst (100 events)</li>
+  <li><a href="/health">/health</a> - Health check</li>
+</ul>
+<h2>Live Events:</h2>
+<pre id="output"></pre>
+<script>
+const es = new EventSource('/events');
+es.onmessage = (e) => {
+  document.getElementById
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity
+The time complexity of the `do_GET` method is primarily determined by the number of operations in each branch, with a worst-case scenario being O(n) due to the loop in handling SSE connections.
+
+#### Space Complexity and Memory Allocation
+- **Memory Usage**: The primary concern is the memory used for storing event data. Each event object creation (`data = {...}`) can be costly if not optimized.
+- **Buffering**: Using `self.wfile.flush()` frequently can lead to unnecessary I/O operations, impacting performance.
+
+#### Bottlenecks or Inefficiencies
+1. **Redundant Operations**: The `send_header` and `end_headers` calls are repeated for each path, which is inefficient.
+2. **Blocking Calls**: `time.sleep(1)` in the SSE loop blocks the event loop, preventing other connections from being processed.
+
+#### Optimization Opportunities
+1. **Combine Header Sentences**: Combine repeated header sends to reduce overhead.
+   ```python
+   self.send_response(200)
+   headers = {
+       "Content-Type": "text/event-stream",
+       "Cache-Control": "no-cache",
+       "Connection": "keep-alive",
+       "X-Accel-Buffering": "no"
+   }
+   for k, v in headers.items():
+       self.send_header(k, v)
+   self.end_headers()
+   ```
+2. **Use Non-blocking Sleep**: Replace `time.sleep` with a non-blocking mechanism like `asyncio.sleep`.
+
+#### Resource Usage Concerns
+1. **Resource Leaks**: Ensure all file handles and connections are properly closed.
+2. **Memory Management**: Optimize event data creation to reduce memory overhead.
+
+By applying these optimizations, the code will be more efficient and scalable.
+
+---
+
+*Generated by CodeWorm on 2026-03-02 19:38*
