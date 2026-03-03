@@ -66,20 +66,22 @@ Diff:
 ### Change Analysis
 
 **What was Changed:**
-- The `useThreats` and `useThreat` hooks now use the schema parsers (`ThreatListSchema.parse` and `ThreatEventSchema.parse`) to validate the API responses.
-- The type of the response data in both hooks is changed from `ThreatList` and `ThreatEvent` to `unknown`, indicating a temporary relaxation of type safety.
+- The `useThreats` and `useThreat` hooks now use the `unknown` type for the API response, followed by parsing with `ThreatListSchema` and `ThreatEventSchema`.
+- The import statement for schema validation has been added.
 
 **Why it was Likely Changed:**
-- To ensure that the API responses are validated against their respective schemas, which helps catch potential deserialization errors or unexpected data formats.
-- The change likely occurred during an update where the initial type definitions were not fully implemented or tested thoroughly.
+- This change likely aims to improve type safety. By using `unknown` as an intermediate type, the code can handle any potential changes in the API response structure more flexibly before validating it with the appropriate schema.
+- Adding explicit schema parsing ensures that only valid data is used, reducing the risk of runtime errors.
 
 **Impact on Behavior:**
-- The behavior of fetching and handling threat events and lists remains largely unchanged. However, any invalid data received from the API will now be caught at runtime when parsed with the schema.
-- There is a temporary risk that unexpected data formats could pass through without being detected, potentially leading to runtime errors.
+- The behavior remains largely unchanged. Data fetching and querying still work as before. However, now there's an additional step to validate the response against schemas, which can help catch issues early during development.
+- The use of `unknown` allows for more dynamic handling of API responses, making the code more adaptable to future changes.
 
 **Risks or Concerns:**
-- The use of `unknown` as the type for the API response temporarily relaxes type safety, which could introduce bugs if not handled carefully.
-- Ensuring that all possible edge cases and invalid responses are properly managed is crucial to maintain robustness.
+- There is a potential risk if the schema validation fails, leading to runtime errors. This could happen if the API response does not match the expected structure after parsing.
+- The use of `unknown` might temporarily mask issues in the API response structure until validated by the schema, which could delay bug detection.
+
+Overall, this change improves type safety and robustness while maintaining existing functionality.
 
 ---
 
