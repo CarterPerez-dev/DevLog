@@ -2,9 +2,9 @@
 
 **Type:** Pattern Analysis
 **Repository:** ios-test
-**File:** fastapi/app/partner/service.py
+**File:** fastapi/app/period_log/repository.py
 **Language:** python
-**Lines:** 1-115
+**Lines:** 1-121
 **Complexity:** 0.0
 
 ---
@@ -14,105 +14,118 @@
 ```python
 """
 ⒸAngelaMos | 2026
-service.py
+repository.py
 """
 
+from collections.abc import Sequence
+from datetime import date
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import PartnerAlreadyExists, PartnerNotFound
-from .Partner import Partner
-from .repository import PartnerRepository
-from .schemas import PartnerCreate, PartnerResponse, PartnerUpdate
+from core.base_repository import BaseRepository
+from .PeriodLog import PeriodLog
 
 
-class PartnerService:
+class PeriodLogRepository(BaseRepository[PeriodLog]):
     """
-    Business logic for partner operations
+    Database operations for PeriodLog model
     """
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+    model = PeriodLog
 
-    async def create_partner(
-        self,
-        user_id: UUID,
-        data: PartnerCreate,
-    ) -> PartnerResponse:
+    @classmethod
+    async def get_by_partner_id(
+        cls,
+        session: AsyncSession,
+        partner_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[PeriodLog]:
         """
-        Create partner profile for user (enforces one per user)
+        Get period logs for a partner, ordered by start_date descending
         """
-        if await PartnerRepository.exists_for_user(self.session, user_id):
-            raise PartnerAlreadyExists(str(user_id))
-
-        partner = await PartnerRepository.create(
-            self.session,
-            user_id = user_id,
-            name = data.name,
-            average_cycle_length = data.average_cycle_length,
-            average_period_length = data.average_period_length,
-            cycle_regularity = data.cycle_regularity,
-            last_period_start = data.last_period_start,
-            notification_period_reminder = data.notification_period_reminder,
-            notification_pms_alert = data.notification_pms_alert,
-            notification_ovulation_alert = data.notification_ovulation_alert,
-            reminder_days_before = data.reminder_days_before,
-            timezone = data.timezone,
+        result = await session.execute(
+            select(PeriodLog)
+            .where(PeriodLog.partner_id == partner_id)
+            .order_by(PeriodLog.start_date.desc())
+            .offset(skip)
+            .limit(limit)
         )
-        return PartnerResponse.model_validate(partner)
+        return result.scalars().all()
 
-    async def get_partner(
-        self,
-        user_id: UUID,
-    ) -> PartnerResponse:
+    @classmethod
+    async def get_by_partner_and_date(
+        cls,
+        session: AsyncSession,
+        partner_id: UUID,
+        start_date: date,
+    ) -> PeriodLog | None:
         """
-        Get partner profile for user
+        Get period log by partner and start date (unique constraint)
         """
-        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
-        if not partner:
-            raise PartnerNotFound(str(user_id))
-        return PartnerResponse.model_validate(partner)
-
-    async def get_partner_model(
-        self,
-        user_id: UUID,
-    ) -> Partner:
-        """
-        Get partner model for internal use
-        """
-        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
-        if not partner:
-            raise PartnerNotFound(str(user_id))
-        return partner
-
-    async def update_partner(
-        self,
-        user_id: UUID,
-        data: PartnerUpdate,
-    ) -> PartnerResponse:
-        """
-        Update partner profile
-        """
-        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
-        if not partner:
-            raise PartnerNotFound(str(user_id))
-
-        update_dict = data.model_dump(exclude_unset = True)
-        updated = await PartnerRepository.update(
-            self.session,
-            partner,
-            **update_dict,
+        result = await session.execute(
+            select(PeriodLog)
+            .where(
+                PeriodLog.partner_id == partner_id,
+                PeriodLog.start_date == start_date,
+            )
         )
-        return PartnerResponse.model_validate(updated)
+        return result.scalars().first()
 
-    async def delete_partner(
-        self,
-        user_id: UUID,
-    ) -> None:
+    @classmethod
+    async def get_latest_for_partner(
+        cls,
+        session: AsyncSession,
+        partner_id: UUID,
+    ) -> PeriodLog | None:
         """
-        Delete partner profile
+        Get most recent period log for a partner
         """
-        pa
+        result = await session.execute(
+            select(PeriodLog)
+            .where(PeriodLog.partner_id == partner_id)
+            .order_by(PeriodLog.start_date.desc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
+    @classmethod
+    async def get_actual_logs(
+        cls,
+        session: AsyncSession,
+        partner_id: UUID,
+        limit: int = 12,
+    ) -> Sequence[PeriodLog]:
+        """
+        Get actual (non-predicted) period logs for cycle calculations
+        """
+        result = await session.execute(
+            select(PeriodLog)
+            .where(
+                PeriodLog.partner_id == partner_id,
+                PeriodLog.is_predicted == False,
+            )
+            .order_by(PeriodLog.start_date.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def delete_predicted_after_date(
+        cls,
+        session: AsyncSession,
+        partner_id: UUID,
+        after_date: date,
+    ) -> int:
+        """
+        Delete predicted period logs after a given date (cleanup after new actual log)
+        """
+        from sqlalchemy import delete
+
+        result = await session.execute(
+            delete(PeriodLog)
+         
 ```
 
 ---
@@ -124,20 +137,20 @@ class PartnerService:
 **Pattern Used:** Repository Pattern
 
 **Implementation:**
-The `PartnerService` class encapsulates business logic for partner operations, delegating data access to a `PartnerRepository`. This repository handles interactions with the database through methods like `create`, `get_by_user_id`, and `update`.
+The `PeriodLogRepository` class implements the repository pattern by encapsulating database operations for the `PeriodLog` model. It provides methods to interact with the database in a structured manner, abstracting away the details of SQL queries and session management.
 
 **Benefits:**
-- **Separation of Concerns:** The service layer focuses on business rules while the repository manages data persistence.
-- **Testability:** Repository methods can be easily mocked or replaced for unit testing, enhancing testability.
-- **Flexibility:** Changes in database technology or storage mechanisms are isolated to the repository.
+- **Encapsulation:** The repository handles all database interactions, making the application code cleaner and more maintainable.
+- **Testability:** Repository methods can be easily tested independently of the database.
+- **Flexibility:** Changes in the database schema or query logic are isolated to the repository class.
 
 **Deviations:**
-- The `PartnerService` class directly interacts with the session object, which might not be ideal. Typically, a dependency injection framework would manage the session lifecycle and pass it to the service layer.
-- Some methods (e.g., `get_partner_model`) return internal models, potentially exposing implementation details.
+- The `PeriodLogRepository` is a concrete implementation rather than an interface, which might limit flexibility if different repositories need to share common functionality.
+- The methods use class-level methods (`@classmethod`) instead of instance methods, which could be less flexible in some scenarios but are appropriate here given the utility nature of these methods.
 
 **Appropriateness:**
-This pattern is appropriate when you need to separate business logic from data access and ensure that your application can easily switch between different data storage mechanisms. However, in a more complex system or with stricter separation of concerns, consider using an adapter pattern for the session management.
+This pattern is highly appropriate for this context as it effectively abstracts database interactions and promotes a clean separation of concerns. It is particularly useful when dealing with complex queries or multiple data access points, ensuring that the application logic remains clear and manageable.
 
 ---
 
-*Generated by CodeWorm on 2026-03-03 08:19*
+*Generated by CodeWorm on 2026-03-03 09:57*
