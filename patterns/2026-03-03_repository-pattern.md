@@ -1,10 +1,10 @@
 # repository_pattern
 
 **Type:** Pattern Analysis
-**Repository:** ios-test
-**File:** fastapi/app/daily_log/service.py
+**Repository:** social-media-notes
+**File:** backend/app/video/service.py
 **Language:** python
-**Lines:** 1-168
+**Lines:** 1-205
 **Complexity:** 0.0
 
 ---
@@ -13,115 +13,122 @@
 
 ```python
 """
-ⒸAngelaMos | 2026
+ⒸAngelaMos | 2025
 service.py
 """
 
-from collections.abc import Sequence
-from datetime import date
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import DailyLogNotFound, DailyLogAlreadyExists, PartnerNotFound
-from partner.repository import PartnerRepository
-from .DailyLog import DailyLog
-from .repository import DailyLogRepository
-from .schemas import DailyLogCreate, DailyLogResponse, DailyLogUpdate
+from config import Platform
+from core.exceptions import NotFoundError
+from .VideoEntry import VideoEntry
+from .repository import VideoEntryRepository
+from .schemas import (
+    VideoEntryCreate,
+    VideoEntryUpdate,
+    VideoEntryResponse,
+    VideoEntryListResponse,
+)
 
 
-class DailyLogService:
+class VideoEntryService:
     """
-    Business logic for daily log operations
+    Business logic for video entry operations
     """
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def _get_partner_id(self, user_id: UUID) -> UUID:
-        """
-        Get partner ID for user, raise if not found
-        """
-        partner = await PartnerRepository.get_by_user_id(self.session, user_id)
-        if not partner:
-            raise PartnerNotFound(str(user_id))
-        return partner.id
-
-    async def create_daily_log(
+    async def create_entry(
         self,
         user_id: UUID,
-        data: DailyLogCreate,
-    ) -> DailyLogResponse:
+        data: VideoEntryCreate,
+    ) -> VideoEntryResponse:
         """
-        Create a new daily log entry
+        Create a new video entry
         """
-        partner_id = await self._get_partner_id(user_id)
+        video_number = data.video_number
+        if video_number == 0:
+            video_number = await VideoEntryRepository.get_next_video_number(
+                self.session,
+                user_id,
+                data.platform,
+            )
 
-        existing = await DailyLogRepository.get_by_partner_and_date(
+        entry = await VideoEntryRepository.create(
             self.session,
-            partner_id,
-            data.log_date,
+            user_id=user_id,
+            platform=data.platform,
+            video_number=video_number,
+            description=data.description,
+            youtube_description=data.youtube_description,
+            scheduled_time=data.scheduled_time,
         )
-        if existing:
-            raise DailyLogAlreadyExists(str(data.log_date))
+        return VideoEntryResponse.model_validate(entry)
 
-        daily_log = await DailyLogRepository.create(
-            self.session,
-            partner_id = partner_id,
-            log_date = data.log_date,
-            mood = data.mood,
-            energy_level = data.energy_level,
-            symptoms = data.symptoms,
-            notes = data.notes,
-        )
-        return DailyLogResponse.model_validate(daily_log)
-
-    async def get_daily_logs(
+    async def get_entry(
         self,
+        entry_id: UUID,
         user_id: UUID,
-        skip: int = 0,
-        limit: int = 30,
-    ) -> Sequence[DailyLogResponse]:
+    ) -> VideoEntryResponse:
         """
-        Get daily logs for user's partner
+        Get a video entry by ID
         """
-        partner_id = await self._get_partner_id(user_id)
-
-        logs = await DailyLogRepository.get_by_partner_id(
+        entry = await VideoEntryRepository.get_by_id_and_user(
             self.session,
-            partner_id,
-            skip = skip,
-            limit = limit,
+            entry_id,
+            user_id,
         )
-        return [DailyLogResponse.model_validate(log) for log in logs]
+        if not entry:
+            raise NotFoundError("Video entry not found")
+        return VideoEntryResponse.model_validate(entry)
 
-    async def get_daily_log_by_date(
+    async def update_entry(
         self,
+        entry_id: UUID,
         user_id: UUID,
-        log_date: date,
-    ) -> DailyLogResponse:
+        data: VideoEntryUpdate,
+    ) -> VideoEntryResponse:
         """
-        Get daily log for a specific date
+        Update a video entry
         """
-        partner_id = await self._get_partner_id(user_id)
-
-        log = await DailyLogRepository.get_by_partner_and_date(
+        entry = await VideoEntryRepository.get_by_id_and_user(
             self.session,
-            partner_id,
-            log_date,
+            entry_id,
+            user_id,
         )
-        if not log:
-            raise DailyLogNotFound(str(log_date))
+        if not entry:
+            raise NotFoundError("Video entry not found")
 
-        return DailyLogResponse.model_validate(log)
+        update_dict = data.model_dump(exclude_unset=True)
+        updated = await VideoEntryRepository.update(
+            self.session,
+            entry,
+            **update_dict,
+        )
+        return VideoEntryResponse.model_validate(updated)
 
-    async def get_date_range(
+    async def delete_entry(
         self,
+        entry_id: UUID,
         user_id: UUID,
-        start_date: date,
-        end_date: date,
-    ) -> Sequence[DailyLogResponse]:
+    ) -> None:
         """
-       
+        Delete a video entry
+        """
+        entry = await VideoEntryRepository.get_by_id_and_user(
+            self.session,
+            entry_id,
+            user_id,
+        )
+        if not entry:
+            raise NotFoundError("Video entry not found")
+        await VideoEntryRepository.delete(self.session, entry)
+
+    async def list_entries(
+        self,
+     
 ```
 
 ---
@@ -132,24 +139,48 @@ class DailyLogService:
 
 **Pattern Used:** Repository Pattern
 
-The `DailyLogService` class implements the **Repository Pattern**, which encapsulates data access logic within a dedicated repository layer. This pattern is evident in methods like `_get_partner_id`, `create_daily_log`, `get_daily_logs`, and others, where business logic interacts with the database through the `DailyLogRepository`.
+The `VideoEntryService` class in this code implements the **Repository Pattern**, which encapsulates data access logic and provides a clean interface for business logic to interact with data.
 
-**Implementation:**
-- The `DailyLogService` class acts as a service layer that abstracts the data access operations.
-- Methods such as `create_daily_log`, `get_daily_logs`, and `update_daily_log` delegate to the `DailyLogRepository` for actual database interactions.
+#### Implementation:
+- The service layer (`VideoEntryService`) interacts with the repository layer through methods like `create_entry`, `get_entry`, etc.
+- These methods delegate data operations (like creating, updating, deleting) to the `VideoEntryRepository` class.
 
-**Benefits:**
-1. **Separation of Concerns:** The business logic is separated from the data access code, making the service layer more focused on business rules.
-2. **Testability:** Repository methods can be easily mocked or replaced in unit tests, improving testability.
-3. **Maintainability:** Changes to database queries or storage mechanisms are isolated within the repository.
+#### Benefits:
+1. **Separation of Concerns:** Business logic is separated from data access concerns, making the code more maintainable and testable.
+2. **Flexibility:** Easier to change storage mechanisms or add caching without affecting business logic.
+3. **Encapsulation:** Data access methods are encapsulated within the repository, reducing complexity in service layer.
 
-**Deviations:**
-- The `_get_partner_id` method is a helper function rather than part of the `DailyLogRepository`, which might not strictly follow the canonical pattern where all data access logic resides in the repository.
-- The use of `model_validate` for converting database models to Pydantic schemas adds an extra step, but it ensures data validation and type hints.
+#### Deviations:
+- The `VideoEntryService` class directly interacts with session objects (`AsyncSession`), which is not ideal as it tightly couples the service to the database session.
+- Some methods like `_shorten_description` are mixed into the service logic, deviating slightly from pure repository pattern principles.
 
-**Appropriateness:**
-This pattern is appropriate here because it aligns well with the need to separate business logic from data access. It provides a clear structure that can be easily extended or modified without impacting other parts of the application.
+#### Appropriateness:
+This pattern is appropriate for this scenario because it clearly separates business logic from data access. However, consider refactoring to use dependency injection for session objects and move utility functions out of the service class for better adherence to the pattern.
+
+```python
+class VideoEntryService:
+    def __init__(self, repository: VideoEntryRepository) -> None:
+        self.repository = repository
+
+# Usage in a service method
+async def create_entry(self, user_id: UUID, data: VideoEntryCreate):
+    video_number = await self.repository.get_next_video_number(
+        user_id,
+        data.platform,
+    )
+    entry = await self.repository.create(
+        user_id=user_id,
+        platform=data.platform,
+        video_number=video_number,
+        description=data.description,
+        youtube_description=data.youtube_description,
+        scheduled_time=data.scheduled_time,
+    )
+    return VideoEntryResponse.model_validate(entry)
+```
+
+This refactoring enhances the pattern's purity and maintainability.
 
 ---
 
-*Generated by CodeWorm on 2026-03-03 10:57*
+*Generated by CodeWorm on 2026-03-03 11:35*
