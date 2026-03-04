@@ -1,0 +1,156 @@
+# repository_pattern
+
+**Type:** Pattern Analysis
+**Repository:** social-media-notes
+**File:** backend/app/video/repository.py
+**Language:** python
+**Lines:** 1-124
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+"""
+ⒸAngelaMos | 2025
+repository.py
+"""
+
+from uuid import UUID
+from collections.abc import Sequence
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config import Platform
+from core.base_repository import BaseRepository
+from .VideoEntry import VideoEntry
+
+
+class VideoEntryRepository(BaseRepository[VideoEntry]):
+    """
+    Repository for VideoEntry model database operations
+    """
+    model = VideoEntry
+
+    @classmethod
+    async def get_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
+        """
+        Get all video entries for a user
+        """
+        result = await session.execute(
+            select(VideoEntry)
+            .where(VideoEntry.user_id == user_id)
+            .order_by(VideoEntry.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def get_by_user_and_platform(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Sequence[VideoEntry]:
+        """
+        Get video entries for a user filtered by platform
+        """
+        result = await session.execute(
+            select(VideoEntry)
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+            .order_by(VideoEntry.video_number.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @classmethod
+    async def count_by_user(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform | None = None,
+    ) -> int:
+        """
+        Count video entries for a user, optionally filtered by platform
+        """
+        from sqlalchemy import func
+        query = select(func.count()).select_from(VideoEntry).where(
+            VideoEntry.user_id == user_id
+        )
+        if platform:
+            query = query.where(VideoEntry.platform == platform)
+        result = await session.execute(query)
+        return result.scalar_one()
+
+    @classmethod
+    async def get_next_video_number(
+        cls,
+        session: AsyncSession,
+        user_id: UUID,
+        platform: Platform,
+    ) -> int:
+        """
+        Get the next available video number for a platform
+        """
+        from sqlalchemy import func
+        result = await session.execute(
+            select(func.max(VideoEntry.video_number))
+            .where(
+                VideoEntry.user_id == user_id,
+                VideoEntry.platform == platform,
+            )
+        )
+        max_num = result.scalar_one_or_none()
+        return (max_num or 0) + 1
+
+    @classmethod
+    async def get_by_id_and_user(
+        cls,
+        session: AsyncSession,
+        entry_id: UUID,
+        user_id: UUID,
+    ) -> VideoEntry | None:
+
+```
+
+---
+
+## Pattern Analysis
+
+### Pattern Analysis
+
+**Pattern Used:** Repository Pattern
+
+**Implementation:**
+The `VideoEntryRepository` class in the provided code implements the repository pattern, which encapsulates data access logic and provides a consistent interface for interacting with database operations. The methods like `get_by_user`, `get_by_user_and_platform`, `count_by_user`, `get_next_video_number`, and `get_by_id_and_user` handle various CRUD operations specific to `VideoEntry`.
+
+**Benefits:**
+1. **Encapsulation:** The repository pattern encapsulates the data access logic, making it easier to switch between different database systems or even in-memory storage if needed.
+2. **Testability:** By abstracting the database interactions, unit testing becomes more straightforward as you can mock the repository methods.
+3. **Separation of Concerns:** It separates business logic from data access concerns, promoting cleaner and more maintainable code.
+
+**Deviations:**
+- The `VideoEntryRepository` class is a concrete implementation rather than an interface or abstract base class, which might limit flexibility in future changes.
+- Some methods like `count_by_user` accept optional parameters (`platform: Platform | None = None`), allowing for flexible querying without breaking the pattern.
+
+**Appropriateness:**
+This pattern is highly appropriate for this context as it effectively manages database interactions and provides a clear, maintainable structure. It is particularly useful in applications where data access logic needs to be abstracted from business logic. However, if more flexibility or extensibility is needed, using an interface or abstract base class might be considered.
+
+---
+
+*Generated by CodeWorm on 2026-03-04 00:28*
