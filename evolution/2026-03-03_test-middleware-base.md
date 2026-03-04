@@ -1,0 +1,140 @@
+# test_middleware_base
+
+**Type:** Code Evolution
+**Repository:** Telehook
+**File:** tests/test_middleware_base.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: a7dbc2be
+Message: feat: implement telehook notification package
+
+Async-first Telegram notification library with middleware pipeline.
+
+Core: Notifier with async send + sync wrapper, TelehookConfig with
+env var fallback, Message dataclass, httpx Transport to Bot API.
+
+Middleware: RateLimiter (token bucket), Retry (exponential backoff),
+Dedup (suppress duplicates), Batch (combine rapid messages).
+
+Formatters: error (condensed traceback), alert, health — all HTML
+output truncated to Telegram's 4096 char limit.
+
+Adapters: Python logging.Handler, FastAPI exception handler.
+
+56 tests, all passing.
+Author: CarterPerez-dev
+File: tests/test_middleware_base.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,83 @@
++"""
++©AngelaMos | 2026
++test_middleware_base.py
++"""
++
++from telehook.message import Message
++from telehook.middleware.base import SendFunc, build_chain
++
++
++class TestMiddlewareChain:
++    async def test_empty_chain(self):
++        sent: list[Message] = []
++
++        async def terminal(msg: Message) -> None:
++            sent.append(msg)
++
++        chain = build_chain([], terminal)
++        await chain(Message(text="hello"))
++        assert len(sent) == 1
++        assert sent[0].text == "hello"
++
++    async def test_single_middleware(self):
++        call_order: list[str] = []
++
++        async def middleware(msg: Message, next_: SendFunc) -> None:
++            call_order.append("before")
++            await next_(msg)
++            call_order.append("after")
++
++        sent: list[Message] = []
++
++        async def terminal(msg: Message) -> None:
++            sent.append(msg)
++            call_order.append("terminal")
++
++        chain = build_chain([middleware], terminal)
++        await chain(Message(text="hello"))
++        assert call_order == ["before", "terminal", "after"]
++
++    async def test_middleware_can_modify_message(self):
++        async def uppercase_mw(msg: Message, next_: SendFunc) -> None:
++            msg.text = msg.text.upper()
++            await next_(msg)
++
++        sent: list[Message] = []
++
++        async def terminal(msg: Message) -> None:
++            sent.append(msg)
++
++        chain = build_chain([uppercase_mw], terminal)
++        await chain(Message(text="hello"))
++        assert sent[0].text == "HELLO"
++
++    async def test_middleware_can_drop_message(self):
++        async def drop_mw(msg: Message, next_: SendFunc) -> None:
++            pass
++
++        sent: list[Message] = []
++
++        async def terminal(msg: Message) -> None:
++            sent.append(msg)
++
++        chain = build_chain([drop_mw], terminal)
++        await chain(Message(text="hello"))
++        assert len(sent) == 0
++
++    async def test_chain_ordering(self):
++        call_order: list[str] = []
++
++        async def mw_a(msg: Message, next_: SendFunc) -> None:
++            call_order.append("A")
++            await next_(msg)
++
++        async def mw_b(msg: Message, next_: SendFunc) -> None:
++            call_order.append("B")
++            await next_(msg)
++
++
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The commit `a7dbc2be` introduced a new test file, `test_middleware_base.py`, which contains five test cases for the middleware pipeline in the Telehook notification package. The tests cover various scenarios such as an empty chain, single middleware execution, message modification by middleware, dropping messages, and correct ordering of multiple middlewares.
+
+**Why it was Likely Changed:**
+This change likely aims to ensure that the middleware pipeline functions correctly under different conditions. By testing edge cases like empty chains, message modifications, and order dependencies, the developers can verify the robustness and reliability of the middleware system.
+
+**Impact on Behavior:**
+The tests validate that middlewares are executed in the correct sequence, messages are processed as expected (modified or dropped), and the terminal function is called appropriately. This ensures that the notification flow behaves as intended when various types of middleware are applied.
+
+**Risks or Concerns:**
+While the tests cover a range of scenarios, there might be additional edge cases not covered here. For instance, testing how middlewares interact with different message types (e.g., images, files) could provide more comprehensive coverage. Additionally, ensuring that all middlewares can handle asynchronous operations correctly is crucial for maintaining performance and reliability in production environments.
+
+Overall, these tests are a good starting point to ensure the middleware pipeline works as expected, but further testing might be necessary to cover all possible use cases.
+
+---
+
+*Generated by CodeWorm on 2026-03-03 21:54*
