@@ -1,0 +1,160 @@
+# categorize_test
+
+**Type:** Code Evolution
+**Repository:** Yoshi-Audit
+**File:** internal/docker/categorize_test.go
+**Language:** go
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```go
+Commit: 3304591f
+Message: add docker resource safety categorization
+Author: CarterPerez-dev
+File: internal/docker/categorize_test.go
+Change type: new file
+
+Diff:
+@@ -0,0 +1,175 @@
++// ©AngelaMos | 2026
++// categorize_test.go
++
++package docker
++
++import (
++	"testing"
++)
++
++func TestCategorizeImage_Dangling(t *testing.T) {
++	img := ImageInfo{
++		Repository: "<none>",
++		Tag:        "<none>",
++		Containers: 0,
++		Dangling:   true,
++	}
++	cat := CategorizeImage(img, nil)
++	if cat != CategorySafe {
++		t.Errorf("dangling image should be CategorySafe, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeImage_InUse(t *testing.T) {
++	img := ImageInfo{
++		Repository: "nginx",
++		Tag:        "latest",
++		Containers: 1,
++	}
++	cat := CategorizeImage(img, nil)
++	if cat != CategoryDoNotTouch {
++		t.Errorf("image with containers=1 should be CategoryDoNotTouch, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeImage_MatchesProtection(t *testing.T) {
++	img := ImageInfo{
++		Repository: "certgames-prod",
++		Tag:        "latest",
++		Containers: 0,
++	}
++	cat := CategorizeImage(img, []string{"*certgames*"})
++	if cat != CategoryDoNotTouch {
++		t.Errorf("image matching *certgames* should be CategoryDoNotTouch, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeImage_Named(t *testing.T) {
++	img := ImageInfo{
++		Repository: "redis",
++		Tag:        "7-alpine",
++		Containers: 0,
++	}
++	cat := CategorizeImage(img, nil)
++	if cat != CategoryProbablySafe {
++		t.Errorf("named image with containers=0 should be CategoryProbablySafe, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeVolume_Backup(t *testing.T) {
++	vol := VolumeInfo{
++		Name:  "my-backup-data",
++		Size:  1024,
++		Links: 0,
++	}
++	cat := CategorizeVolume(vol, nil)
++	if cat != CategoryCheckFirst {
++		t.Errorf("volume with 'backup' in name should be CategoryCheckFirst, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeVolume_MatchesProtection(t *testing.T) {
++	vol := VolumeInfo{
++		Name:  "certgames-mongo_data",
++		Size:  5000,
++		Links: 0,
++	}
++	cat := CategorizeVolume(vol, []string{"*mongo*"})
++	if cat != CategoryDoNotTouch {
++		t.Errorf("volume matching *mongo* should be CategoryDoNotTouch, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeVolume_Attached(t *testing.T) {
++	vol := VolumeInfo{
++		Name:  "web-data",
++		Size:  2048,
++		Links: 1,
++	}
++	cat := CategorizeVolume(vol, nil)
++	if cat != CategoryDoNotTouch {
++		t.Errorf("volume with links > 0 should be CategoryDoNotTouch, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeVolume_UnusedNamed(t *testing.T) {
++	vol := VolumeInfo{
++		Name:  "old-project-data",
++		Size:  4096,
++		Links: 0,
++	}
++	cat := CategorizeVolume(vol, nil)
++	if cat != CategoryProbablySafe {
++		t.Errorf("unused named volume with size > 0 should be CategoryProbablySafe, got %s", CategoryLabel(cat))
++	}
++}
++
++func TestCategorizeVolume_HashSmall(t *testing.T) {
++	vol := VolumeInfo{
++		Name:  "abcdef0123456789abcdef0123456789abcdef01",
++		Size:  0,
++	
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:** 
+A new file `categorize_test.go` was added to the `internal/docker` package, containing multiple test functions for categorizing Docker resources (images, volumes, and containers) based on their properties.
+
+**Why it Was Likely Changed:**
+This change likely aims to improve resource management by providing a clear categorization of Docker resources. The tests cover various scenarios such as dangling images, in-use images, protected images, named images, backed-up volumes, attached volumes, unused named volumes, hash-named small volumes, running containers, stopped containers, and stopped protected containers.
+
+**Impact on Behavior:**
+The addition of these test cases ensures that the categorization logic is robust and covers a wide range of scenarios. This will help in making informed decisions about which Docker resources can be safely modified or deleted without impacting critical operations.
+
+**Risks or Concerns:**
+- **Potential False Positives/Negatives:** The categorization rules might not cover all edge cases, leading to false positives (resources incorrectly categorized as safe) or false negatives (resources incorrectly categorized as unsafe).
+- **Maintainability:** As the number of categories and tests increases, maintaining the logic and ensuring its correctness over time may become challenging.
+- **Performance Impact:** The categorization process might introduce a slight overhead in performance if it is called frequently.
+
+Overall, this change enhances the safety and reliability of resource management within the Docker environment.
+
+---
+
+*Generated by CodeWorm on 2026-03-04 07:10*
