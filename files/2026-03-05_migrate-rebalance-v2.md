@@ -4,7 +4,7 @@
 **Repository:** CertGames-Core
 **File:** backend/devtools/data/migrations/migrate_rebalance_v2.py
 **Language:** python
-**Lines:** 1-174
+**Lines:** 1-173
 **Complexity:** 0.0
 
 ---
@@ -24,15 +24,24 @@ XP formula changes (in xp_engine.py):
   New: 2-10 = +75,  11-30 = +150, 31-60 = +175,   61-100 = +1000, 100+ = +1500
 
 Run from backend/ directory:
-  uv run python devtools/data/migrations/migrate_rebalance_v2.py
-  uv run python devtools/data/migrations/migrate_rebalance_v2.py --dry-run
+  uv run python devtools/data/migrations/migrate_rebalance_v2.py --env development --dry-run
+  uv run python devtools/data/migrations/migrate_rebalance_v2.py --env development
+  uv run python devtools/data/migrations/migrate_rebalance_v2.py --env production --dry-run
+  uv run python devtools/data/migrations/migrate_rebalance_v2.py --env production
 """
 
 import os
 import sys
+import argparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-os.environ.setdefault('ENVIRONMENT', 'production')
+
+parser = argparse.ArgumentParser(description="Rebalance XP curve and shop prices")
+parser.add_argument("--env", choices=["development", "production"], default="production", help="Target environment")
+parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing to DB")
+args = parser.parse_args()
+
+os.environ["ENVIRONMENT"] = args.env
 
 try:
     from bson import ObjectId
@@ -67,22 +76,7 @@ SHOP_UPDATES = {
     "67c8019eafc1b9f001544cd6": {"cost": 20000, "levelRequired": 95},
     "67c8019eafc1b9f001544cc7": {"cost": 22000, "levelRequired": 98},
     "67c8019eafc1b9f001544ccd": {"cost": 25000, "levelRequired": 100},
-    "67c8033dafc1b9f001544cdb": {"cost": 1500,  "levelRequired": 5},
-    "67c8033dafc1b9f001544cd8": {"cost": 3000,  "levelRequired": 15},
-    "67c8033dafc1b9f001544cdc": {"cost": 5000,  "levelRequired": 25},
-    "67c8033dafc1b9f001544cd9": {"cost": 8000,  "levelRequired": 40},
-    "67c8033dafc1b9f001544cda": {"cost": 12000, "levelRequired": 60},
-}
-
-
-def xp_required_for_level(level: int) -> int:
-    if level < 1 or level == 1:
-        return 0
-    if level <= 10:
-        return 75 * (level - 1)
-    if level <= 30:
-        base = 75 * 9
-        return base + 150 * (level - 
+    "67c8033dafc1b9f001544cdb": {"cost
 ```
 
 ---
@@ -91,27 +85,27 @@ def xp_required_for_level(level: int) -> int:
 
 # migrate_rebalance_v2.py
 
-**Purpose and Responsibility:**
-This script is responsible for rebalancing the XP curve and shop item costs/levels in a production environment. It updates the XP requirements for different levels and recalculates user levels based on their accumulated XP.
+**Purpose & Responsibility:**
+This script is responsible for rebalancing the XP curve and shop item costs/levels in a game backend system. It updates the XP requirements for different levels and adjusts the cost and level requirements of various shop items based on new formulas.
 
-**Key Exports or Public Interface:**
-- `xp_required_for_level(level: int) -> int`: Calculates the XP required to reach a given level.
-- `calculate_level_from_xp(xp: float) -> int`: Determines the level corresponding to a given amount of XP.
-- `migrate_shop_items(dry_run: bool) -> None`: Migrates shop item costs and levels, optionally in dry-run mode.
-- `migrate_user_levels(dry_run: bool) -> None`: Recalculates user levels based on their accumulated XP, also supporting dry-run.
+**Key Exports & Public Interface:**
+- `xp_required_for_level(level: int) -> int`: Calculates the required XP to reach a given player level.
+- `calculate_level_from_xp(xp: float) -> int`: Determines the player level from their accumulated XP.
+- `migrate_shop_items(dry_run: bool) -> None`: Migrates shop items' costs and level requirements based on predefined updates.
+- `migrate_user_levels(dry_run: bool) -> None`: Recalculates user levels based on updated XP formulas.
 
-**How it Fits into the Project:**
-This script is part of a larger migration process for rebalancing game mechanics. It runs from the backend directory and interacts with MongoDB through the `Shop` and `User` models defined in `api.domains`. The changes are significant enough to warrant careful testing, hence the `--dry-run` option.
+**How It Fits in the Project:**
+This script is part of a larger migration process for updating game mechanics. It runs as a command-line tool from within the backend directory, using environment-specific configurations and database interactions via `init_db`. The changes can be previewed or applied directly to the production database depending on the `--dry-run` flag.
 
 **Notable Design Decisions:**
-- **Dry Run Support:** Allows for previewing changes without committing them, ensuring safety during migrations.
-- **Explicit Imports:** Ensures all dependencies are loaded correctly and avoids runtime errors.
-- **Custom XP Calculation Logic:** Implements a complex XP formula with multiple tiers to accurately reflect the new balance.
-- **Database Interaction:** Uses PyMongo (`ObjectId`) and custom models for database operations, maintaining consistency with the project's architecture.
+- **Modular Functions:** Functions are designed to handle specific tasks (XP calculation, shop item migration, user level recalculations) for better maintainability.
+- **Dry Run Support:** The script supports a dry run mode, allowing developers to preview changes without committing them to the database.
+- **Environment Configuration:** Uses `argparse` to manage command-line arguments and sets environment variables accordingly.
+- **Database Interaction:** Utilizes MongoDB models (`Shop`, `User`) for interacting with the database, ensuring data integrity during migrations.
 ```
 
-This documentation provides an overview of the file’s purpose, key functions, integration within the project, and significant design choices.
+This documentation provides a high-level overview of the file's purpose, key functions, integration within the project, and design choices.
 
 ---
 
-*Generated by CodeWorm on 2026-03-05 02:56*
+*Generated by CodeWorm on 2026-03-05 03:06*
