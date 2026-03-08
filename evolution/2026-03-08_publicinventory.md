@@ -1,0 +1,120 @@
+# publicInventory
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/account/ui/components/publicProfile/components/publicInventory.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: bb370e96
+Message: checkpoint - roughl 80% theme addition
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/account/ui/components/publicProfile/components/publicInventory.tsx
+Change type: modified
+
+Diff:
+@@ -13,8 +13,10 @@ import {
+   GiRocketFlight,
+ } from 'react-icons/gi';
+ import { Username } from '@/core/components/username';
++import { useTheme } from '@/core/lib/theme/useTheme';
+ import type { UserInventory } from '@/domains/account/types';
+-import styles from './publicInventory.module.scss';
++import defaultStyles from './publicInventory.module.scss';
++import simpleStyles from './publicInventory.simple.module.scss';
+ 
+ interface PublicInventoryProps {
+   inventory: UserInventory;
+@@ -25,6 +27,9 @@ type InventoryCategory = 'avatars' | 'nameColors' | 'xpBoosts';
+ export function PublicInventory({
+   inventory,
+ }: PublicInventoryProps): React.ReactElement {
++  const { isSimple } = useTheme();
++  const s = isSimple ? simpleStyles : defaultStyles;
++
+   const [activeCategory, setActiveCategory] =
+     useState<InventoryCategory>('avatars');
+ 
+@@ -32,36 +37,36 @@ export function PublicInventory({
+     if (activeCategory === 'avatars') {
+       if (inventory.avatars.length === 0) {
+         return (
+-          <div className={styles.emptyState}>
+-            <FiPackage className={styles.emptyIcon} />
+-            <p className={styles.emptyText}>No avatars owned</p>
++          <div className={s.emptyState}>
++            <FiPackage className={s.emptyIcon} />
++            <p className={s.emptyText}>No avatars owned</p>
+           </div>
+         );
+       }
+ 
+       return (
+-        <div className={styles.avatarGrid}>
++        <div className={s.avatarGrid}>
+           {inventory.avatars.map((item) => {
+             const avatarUrl = item.imageUrl;
+ 
+             return (
+               <div
+                 key={item.id}
+-                className={styles.avatarCard}
++                className={s.avatarCard}
+               >
+-                <div className={styles.avatarImageContainer}>
++                <div className={s.avatarImageContainer}>
+                   <img
+                     src={avatarUrl}
+                     alt={item.title}
+-                    className={styles.avatarImg}
++                    className={s.avatarImg}
+                     onError={(e) => {
+                       const target = e.target as HTMLImageElement;
+                       target.src = '/avatars/avatar1.webp';
+                     }}
+                   />
+                 </div>
+-                <div className={styles.avatarCardFooter}>
+-                  <span className={styles.avatarTitle}>{item.title}</span>
++                <div className={s.avatarCardFooter}>
++                  <span className={s.avatarTitle}>{item.title}</span>
+                 </div>
+               </div>
+             );
+@@ -73,32 +78,32 @@ export function PublicInventory({
+     if (activeCategory === 'nameColors') {
+       if (inventory.nameColors.length === 0) {
+      
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code introduced conditional styling based on the theme context (`useTheme`). It imports two different style modules, `defaultStyles` and `simpleStyles`, and uses them conditionally depending on whether the theme is simple or not.
+
+**Why it Was Likely Changed:**
+This change likely aims to support a simpler, more minimalistic design for users who prefer a less cluttered interface. By using dynamic styles based on the theme context, the component can adapt its appearance without modifying the underlying structure of the component.
+
+**Impact on Behavior:**
+The behavior remains largely unchanged; the component still displays avatars and name colors as before. However, the visual presentation will differ slightly depending on the selected theme (simple or default). For instance, text and icon styles might be altered to fit a simpler aesthetic.
+
+**Risks or Concerns:**
+- **Code Duplication:** The introduction of two style modules could lead to code duplication if not managed carefully.
+- **Maintainability:** Adding conditional logic for theme-based styling may complicate the component's maintenance. Ensuring both `defaultStyles` and `simpleStyles` are kept in sync might be challenging.
+- **Performance:** Additional context checks (`useTheme`) can introduce minor performance overhead, though this is usually negligible unless the application is highly performance-sensitive.
+
+Overall, this change enhances theme flexibility without significantly altering the component's core functionality.
+
+---
+
+*Generated by CodeWorm on 2026-03-08 16:49*
