@@ -1,0 +1,111 @@
+# seed_shop_items
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** backend/devtools/data/dev-seed/seed_shop_items.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: bb370e96
+Message: checkpoint - roughl 80% theme addition
+Author: CarterPerez-dev
+File: backend/devtools/data/dev-seed/seed_shop_items.py
+Change type: modified
+
+Diff:
+@@ -49,7 +49,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Blue Sentinel",
+                 "description": "Forged in honor, crowned in victor",
+-                "cost": 10000,
++                "cost": 300,
+                 "imageUrl": "/avatars/avatar5.png",
+                 "levelRequired": 5,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -59,7 +59,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Cosmos",
+                 "description": "Warden of the astral void",
+-                "cost": 12500,
++                "cost": 500,
+                 "imageUrl": "/avatars/avatar10.png",
+                 "levelRequired": 10,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -69,7 +69,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Abyssal Empress",
+                 "description": "Power flows with the eternal tides",
+-                "cost": 15000,
++                "cost": 750,
+                 "imageUrl": "/avatars/avatar15.png",
+                 "levelRequired": 15,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -79,7 +79,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Flarebound",
+                 "description": "Guardian of the eternal flame",
+-                "cost": 17500,
++                "cost": 1000,
+                 "imageUrl": "/avatars/avatar20.png",
+                 "levelRequired": 20,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -89,7 +89,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Shadow Nyx",
+                 "description": "Silent shadow with daggers of truth",
+-                "cost": 20000,
++                "cost": 1500,
+                 "imageUrl": "/avatars/avatar25.png",
+                 "levelRequired": 25,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -99,7 +99,7 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Astral Revenant",
+                 "description": "Craftsman of the unknown",
+-                "cost": 22500,
++                "cost": 2000,
+                 "imageUrl": "/avatars/avatar30.png",
+                 "levelRequired": 30,
+                 "acquisitionType": AcquisitionType.PURCHASE_ONLY.value
+@@ -109,9 +109,9 @@ class ShopItemsSeeder:
+                 "type": "avatar",
+                 "title": "Leviathan's Bride",
+                 "description": "Monarch of the watery abyss",
+-                "cost": 25000,
++                "cost": 2500,
+                 "imageUrl": "/avatars/avatar40.png",
+-                "levelRequired": 40,
++                "levelR
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The cost of several avatar items in the `seed_shop_items.py` file has been significantly reduced. Specifically, the costs have been decreased from 1000 to 300 for "Blue Sentinel," and similarly for other avatars like "Cosmos," "Abyssal Empress," "Flarebound," "Shadow Nyx," "Astral Revenant," "Leviathan's Bride," "Necroforge," "Frostbane," "Infernal Bastion," and "Celestial Bloom." Additionally, the `levelRequired` for "Leviathan's Bride" has been lowered from 40 to 35.
+
+**Why it was Likely Changed:**
+This change likely aims to make avatar acquisition more accessible to players, potentially increasing engagement by reducing the financial barrier. It could also be part of a testing phase where developers are experimenting with different pricing strategies or balancing changes.
+
+**Impact on Behavior:**
+Reducing the cost of avatars will allow more players to purchase them earlier in their progression, which can enhance player satisfaction and retention. However, this change might also affect the game's economy if not balanced properly, potentially leading to inflation or other economic imbalances.
+
+**Risks or Concerns:**
+- **Economic Imbalance:** Lowering costs could disrupt the intended balance of the game’s economy.
+- **Player Behavior:** Players might focus more on acquiring avatars rather than progressing through levels or completing quests.
+- **Testing Phase:** Ensure that these changes do not introduce unintended side effects before full deployment.
+
+Overall, this change is likely a feature aimed at improving player experience but requires careful monitoring to maintain the game's balance.
+
+---
+
+*Generated by CodeWorm on 2026-03-08 12:28*
