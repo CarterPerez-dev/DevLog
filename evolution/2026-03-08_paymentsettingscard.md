@@ -1,0 +1,119 @@
+# paymentSettingsCard
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/account/ui/components/referral/paymentSettingsCard.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: bb370e96
+Message: checkpoint - roughl 80% theme addition
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/account/ui/components/referral/paymentSettingsCard.tsx
+Change type: modified
+
+Diff:
+@@ -14,7 +14,9 @@ import {
+ import { usePaymentSettingsUIStore } from '@/domains/account/stores/paymentSettings.ui.store';
+ import type { UpdatePaymentSettingsRequest } from '@/domains/account/types/referral.interfaces';
+ import { LoadingSpinner } from '@/core/components/loadingSpinner';
+-import styles from './paymentSettingsCard.module.scss';
++import defaultStyles from './paymentSettingsCard.module.scss';
++import simpleStyles from './paymentSettingsCard.simple.module.scss';
++import { useTheme } from '@/core/lib/theme';
+ 
+ const paymentMethodOptions = [
+   { value: 'paypal', label: 'PayPal' },
+@@ -34,6 +36,8 @@ type PaymentMethod =
+   | 'bitcoin';
+ 
+ export function PaymentSettingsCard(): React.ReactElement {
++  const { isSimple } = useTheme();
++  const s = isSimple ? simpleStyles : defaultStyles;
+   const { user } = useAuthStore();
+   const [showSuccess, setShowSuccess] = useState(false);
+   const [validationError, setValidationError] = useState<string | null>(
+@@ -202,31 +206,31 @@ export function PaymentSettingsCard(): React.ReactElement {
+ 
+   if (isLoading) {
+     return (
+-      <div className={styles.paymentCard}>
++      <div className={s.paymentCard}>
+         <LoadingSpinner size="small" />
+       </div>
+     );
+   }
+ 
+   return (
+-    <div className={styles.paymentCard}>
+-      <div className={styles.header}>
+-        <div className={styles.title}>
+-          <GiWallet className={styles.icon} />
++    <div className={s.paymentCard}>
++      <div className={s.header}>
++        <div className={s.title}>
++          <GiWallet className={s.icon} />
+           <span>PAYMENT SETTINGS</span>
+         </div>
+       </div>
+ 
+       {currentPayment !== null ? (
+-        <div className={styles.currentPayment}>
+-          <FiCreditCard className={styles.currentIcon} />
+-          <div className={styles.currentInfo}>
+-            <span className={styles.currentLabel}>Current Method:</span>
+-            <span className={styles.currentMethod}>
++        <div className={s.currentPayment}>
++          <FiCreditCard className={s.currentIcon} />
++          <div className={s.currentInfo}>
++            <span className={s.currentLabel}>Current Method:</span>
++            <span className={s.currentMethod}>
+               {currentPayment.method}
+             </span>
+             {currentPayment.detail !== '' ? (
+-              <span className={styles.currentDetail}>
++              <span className={s.currentDetail}>
+                 {currentPayment.detail}
+               </span>
+             ) : null}
+@@ -235,45 +239,45 @@ export function PaymentSettingsCard(): React.ReactElement {
+       ) : null}
+ 
+       {showSuccess ? (
+-        <div className={styles.successMessage}>
++        <div className={s.successMessage}>
+           <FiCheck />
+           <span>Paymen
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code introduced a new theme-based styling system by importing two different style modules (`defaultStyles` and `simpleStyles`) based on the current theme determined by `useTheme`. The class names in JSX elements are conditionally assigned to either `defaultStyles` or `simpleStyles`, depending on whether the theme is simple or not.
+
+**Why it was Likely Changed:**
+This change likely aims to support a simpler, more minimalistic UI design for certain themes. By using different styles based on the theme, the application can adapt its visual appearance without changing the underlying logic significantly. This approach enhances flexibility and maintainability by centralizing style changes in separate modules.
+
+**Impact on Behavior:**
+The behavior of the `PaymentSettingsCard` component remains largely unchanged. The card's layout and functionality are preserved; however, the visual presentation will differ based on the selected theme. For example, a simple theme might use fewer colors or less complex styling, making the UI more streamlined.
+
+**Risks or Concerns:**
+- **Potential Inconsistencies:** If not all components follow this pattern, inconsistencies in styling could arise across different parts of the application.
+- **Maintenance Overhead:** Introducing multiple style modules can increase maintenance complexity if changes need to be made to styles used by both themes.
+- **Performance Impact:** Conditionally applying styles might introduce minor performance overhead due to additional rendering checks.
+
+Overall, this change enhances theme support while maintaining component functionality.
+
+---
+
+*Generated by CodeWorm on 2026-03-08 17:47*
