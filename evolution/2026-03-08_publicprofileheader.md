@@ -1,0 +1,121 @@
+# publicProfileHeader
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/account/ui/components/publicProfile/components/publicProfileHeader.tsx
+**Language:** tsx
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```tsx
+Commit: bb370e96
+Message: checkpoint - roughl 80% theme addition
+Author: CarterPerez-dev
+File: frontend/user-app/src/domains/account/ui/components/publicProfile/components/publicProfileHeader.tsx
+Change type: modified
+
+Diff:
+@@ -28,7 +28,9 @@ import {
+ } from '@/domains/account/api';
+ import { useSocialUIStore } from '@/domains/account/stores';
+ import type { GetPublicProfileResponse } from '@/domains/account/types';
+-import styles from './publicProfileHeader.module.scss';
++import defaultStyles from './publicProfileHeader.module.scss';
++import simpleStyles from './publicProfileHeader.simple.module.scss';
++import { useTheme } from '@/core/lib/theme/useTheme';
+ 
+ interface PublicProfileHeaderProps {
+   profile: GetPublicProfileResponse;
+@@ -37,6 +39,8 @@ interface PublicProfileHeaderProps {
+ export function PublicProfileHeader({
+   profile,
+ }: PublicProfileHeaderProps): React.ReactElement {
++  const { isSimple } = useTheme();
++  const s = isSimple ? simpleStyles : defaultStyles;
+   const navigate = useNavigate();
+   const { user: currentUser, isAuthenticated } = useAuthStore();
+   const { openChallengeSendModal } = useSocialUIStore();
+@@ -101,7 +105,7 @@ export function PublicProfileHeader({
+     if (isFriend) {
+       return (
+         <button
+-          className={styles.friendsButton}
++          className={s.friendsButton}
+           disabled
+         >
+           <FiUserCheck />
+@@ -113,7 +117,7 @@ export function PublicProfileHeader({
+     if (hasSentRequest) {
+       return (
+         <button
+-          className={styles.requestSentButton}
++          className={s.requestSentButton}
+           disabled
+         >
+           <FiUserCheck />
+@@ -125,7 +129,7 @@ export function PublicProfileHeader({
+     return (
+       <button
+         onClick={handleAddFriend}
+-        className={styles.addFriendButton}
++        className={s.addFriendButton}
+         disabled={isSending}
+       >
+         {isSending ? (
+@@ -164,19 +168,12 @@ export function PublicProfileHeader({
+   const avatarUrl = getAvatarUrl(profile.currentAvatar);
+ 
+   const calculateXpRequiredForLevel = (level: number): number => {
+-    if (level < 1) return 0;
+-    if (level === 1) return 0;
+-    if (level <= 30) return 500 * (level - 1);
+-    if (level <= 60) {
+-      const base = 500 * 29;
+-      return base + 750 * (level - 30);
+-    }
+-    if (level <= 100) {
+-      const base = 500 * 29 + 750 * 30;
+-      return base + 1000 * (level - 60);
+-    }
+-    const base = 500 * 29 + 750 * 30 + 1000 * 40;
+-    return base + 1500 * (level - 100);
++    if (level < 1 || level === 1) return 0;
++    if (level <= 10) return 75 * (level - 1);
++    if (level <= 30) return 75 * 9 + 150 * (level - 10);
++    if (level <= 60) return 75 * 9 + 150 * 20 + 175 * (level - 30);
++    if (level <= 100) return 75 * 9 + 150 * 20 + 175 * 30 + 1000 * (level - 60);
++    return 75 * 9 + 150 * 20 + 175 * 30 + 1000 * 40 + 1500 * (level - 100);
+   };
+ 
+   const xpForCurrentLevel = calculateXpRequiredForLevel(profile.le
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis
+
+**What was Changed:**
+The code introduces two new style modules, `defaultStyles` and `simpleStyles`, which are conditionally imported based on the theme context provided by `useTheme`. The class names for various components within `PublicProfileHeader` are dynamically assigned using a variable `s` that selects between these styles. Additionally, the logic to calculate XP required for levels has been updated with more concise conditions.
+
+**Why it was Likely Changed:**
+This change likely aims to enhance theme flexibility and consistency across different themes (e.g., simple vs. default). By conditionally applying styles based on the current theme, the developer can ensure that the UI adapts seamlessly to different design requirements without duplicating code.
+
+**Impact on Behavior:**
+The behavior of the `PublicProfileHeader` component will now vary slightly depending on the selected theme. For instance, button classes and avatar styles might differ between simple and default themes. The updated XP calculation function also ensures more accurate level progression tracking.
+
+**Risks or Concerns:**
+- **Potential Bugs:** If not handled correctly, dynamically selecting styles could lead to unexpected visual glitches.
+- **Performance Impact:** Conditionally applying styles might introduce minor performance overhead due to the additional logic.
+- **Maintainability:** While this approach enhances theme flexibility, it may complicate future maintenance if more themes are added.
+
+Overall, these changes provide a good foundation for implementing multiple UI themes while maintaining code clarity and reusability.
+
+---
+
+*Generated by CodeWorm on 2026-03-08 17:03*
