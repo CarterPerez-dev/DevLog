@@ -1,0 +1,125 @@
+# scrape_profile
+
+**Type:** Documentation
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/scripts/scrape_tiktok.py
+**Language:** python
+**Lines:** 110-205
+**Complexity:** 15.0
+
+---
+
+## Source Code
+
+```python
+async def scrape_profile(
+    username: str,
+    ms_token: str,
+    max_count: int,
+) -> list[dict]:
+    """
+    Scrape all videos from a TikTok user profile via direct API calls.
+    """
+    print(f"  Resolving secUid for @{username}...")
+    sec_uid = await get_sec_uid(username, ms_token)
+    print(f"  Got secUid: {sec_uid[:30]}...")
+
+    videos = []
+    cursor = 0
+    has_more = True
+
+    cookies = {"msToken": ms_token}
+
+    async with httpx.AsyncClient(
+        headers=TIKTOK_HEADERS,
+        cookies=cookies,
+        follow_redirects=True,
+        timeout=30.0,
+    ) as client:
+        while has_more and len(videos) < max_count:
+            print(f"  Fetching page (cursor={cursor})...")
+            data = await fetch_videos_page(client, sec_uid, cursor)
+
+            item_list = data.get("itemList", [])
+            if not item_list:
+                break
+
+            for raw in item_list:
+                if len(videos) >= max_count:
+                    break
+
+                stats = raw.get("stats", {})
+                video_meta = raw.get("video", {})
+                challenges = raw.get("challenges", [])
+                create_time = raw.get("createTime", 0)
+
+                hashtags = [
+                    f"#{c.get('title', '')}" for c in challenges
+                    if c.get("title")
+                ]
+
+                desc = raw.get("desc", "")
+                hook = desc.split("\n")[0].strip() if desc else ""
+                if not hook:
+                    hook = desc[:100].strip() if desc else "No description"
+
+                posted_date = datetime.fromtimestamp(
+                    int(create_time)
+                ).strftime("%Y-%m-%d") if create_time else date.today().isoformat()
+
+                video_id = raw.get("id", "")
+
+                mapped = {
+                    "tiktok_id": video_id,
+                    "rank": len(videos) + 1,
+                    "date_posted": posted_date,
+                    "video_url": f"https://www.tiktok.com/@{username}/video/{video_id}",
+                    "views": stats.get("playCount", 0),
+                    "comments": stats.get("commentCount", 0),
+                    "likes": stats.get("diggCount", 0),
+                    "bookmarks": stats.get("collectCount", 0),
+                    "shares": stats.get("shareCount", 0),
+                    "avg_watch_time": 0.0,
+                    "new_followers": 0,
+                    "watched_full_video_percentage": 0.0,
+                    "top_comment_words": None,
+                    "search_queries": None,
+                    "traffic_sources": None,
+                    "hook": hook if hook else "No hook",
+                    "text_on_screen_hook": None,
+                    "length": float(video_meta.get("duration", 0)),
+                    "description": desc if desc else "No description",
+                    "hashtags": hashtags if hashtags else None,
+                    "cta": None,
+                    "full_transcription": None,
+              
+```
+
+---
+
+## Documentation
+
+### Documentation for `scrape_profile`
+
+**Purpose and Behavior:**
+The `scrape_profile` function asynchronously scrapes TikTok user profiles by fetching video data via direct API calls. It resolves the `secUid`, iterates through multiple pages of videos, and extracts detailed metadata such as views, comments, likes, and timestamps.
+
+**Key Implementation Details:**
+- **Parameters:** Takes a `username`, `ms_token`, and `max_count` to specify the TikTok user, authentication token, and maximum number of videos to scrape.
+- **API Calls:** Uses an `AsyncClient` from `httpx` for making API requests. It handles pagination by tracking `cursor` values and checking `hasMore`.
+- **Metadata Extraction:** Constructs a dictionary with various video metrics like views, comments, likes, and timestamps. It also processes hashtags and descriptions.
+- **Rate Limiting:** Implements a 1.5-second delay between API calls to avoid rate limiting.
+
+**When/Why to Use:**
+Use this function when you need to gather comprehensive data on TikTok user profiles for analytics or reporting purposes. The asynchronous nature ensures efficient processing of large datasets, making it suitable for batch scraping tasks.
+
+**Patterns and Gotchas:**
+- **Error Handling:** While not explicitly shown, ensure robust error handling for API failures.
+- **Rate Limiting:** Be cautious with the 1.5-second delay; adjust as needed to avoid hitting rate limits.
+- **Data Integrity:** Ensure `secUid` resolution is accurate, as it significantly impacts data retrieval.
+
+This function exemplifies efficient asynchronous scraping and metadata extraction in Python, leveraging modern libraries like `httpx`.
+
+---
+
+*Generated by CodeWorm on 2026-03-11 19:38*
