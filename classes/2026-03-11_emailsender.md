@@ -1,0 +1,130 @@
+# EmailSender
+
+**Type:** Class Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/core/services/senders/email.py
+**Language:** python
+**Lines:** 11-463
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+class EmailSender:
+    """
+    A utility class for sending emails through Resend
+    with different sender addresses and templates.
+    """
+    def __init__(
+        self,
+        resend_api_key: str,
+        frontend_url: str,
+        admin_url: str | None = None
+    ) -> None:
+        resend.api_key = resend_api_key
+
+        self.default_addresses: dict[str,
+                                     str] = {
+                                         "password_reset":
+                                         Email.PASSWORD_RESET_SENDER,
+                                         "newsletter":
+                                         Email.NEWSLETTER_SENDER,
+                                         "support": Email.SUPPORT_SENDER,
+                                         "admin_invite":
+                                         Email.ADMIN_INVITE_SENDER,
+                                         "mentorship":
+                                         Email.MENTORSHIP_SENDER,
+                                     }
+        self.frontend_url: str = frontend_url
+        self.admin_url: str = admin_url or f"{frontend_url}:8080"
+
+    def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        *,
+        email_type: str = "password_reset",
+        from_email: str | None = None,
+    ) -> bool:
+        """
+        Send an email using Resend.
+        """
+        sender: str | None = from_email or self.default_addresses.get(
+            email_type
+        )
+
+        if not sender:
+            sender = Email.DEFAULT_SENDER
+
+        try:
+            response = resend.Emails.send(
+                {
+                    "from":
+                    f"CertGames Support <{sender or Email.DEFAULT_SENDER}>",
+                    "to": to_email,
+                    "subject": subject,
+                    "html": html_content,
+                    "reply_to": "support@certgames.com",
+                    "headers": {
+                        "X-Entity-Ref-ID":
+                        f"{email_type}-{to_email}",
+                        "List-Unsubscribe":
+                        "<mailto:support@certgames.com?subject=Unsubscribe>"
+                    }
+                }
+            )
+
+            if response and response.get("id"):
+                current_app.logger.info(
+                    "Email sent to %s (type: %s, id: %s)",
+                    to_email,
+                    email_type,
+                    response.get('id')
+                )
+                return True
+
+            current_app.logger.error(
+                "Failed to send email: No ID returned"
+            )
+            return False
+
+        except Exception as e:
+            current_app.logger.error(f"Error sending email: {str(e)}")
+            return False
+
+    def send_password_reset_email(
+        self,
+        to_email: str,
+        reset_token: str,
+        frontend_url: str | None = None
+    ) -> bool:
+        """
+        Send a password reset email with a 
+```
+
+---
+
+## Class Documentation
+
+### EmailSender Class Documentation
+
+**Class Responsibility and Purpose:**
+The `EmailSender` class is a utility for sending emails using Resend, a third-party email service provider. It encapsulates the logic to send emails with different sender addresses and templates based on predefined types.
+
+**Public Interface (Key Methods):**
+- **`__init__(self, resend_api_key: str, frontend_url: str, admin_url: str | None = None)`:** Initializes the `EmailSender` instance with a Resend API key, frontend URL, and optional admin URL.
+- **`send_email(self, to_email: str, subject: str, html_content: str, *, email_type: str = "password_reset", from_email: str | None = None) -> bool`:** Sends an email using the specified parameters. It uses default sender addresses if not provided and logs success or failure.
+- **`send_password_reset_email(self, to_email: str, reset_token: str, frontend_url: str | None = None) -> bool`:** A specialized method for sending a password reset email with a unique link.
+
+**Design Patterns Used:**
+The class does not explicitly use any design patterns but follows the Single Responsibility Principle by focusing on sending emails. It leverages Resend's API to handle the actual sending of emails, adhering to the Strategy pattern in terms of different sender addresses and templates.
+
+**How it Fits in the Architecture:**
+`EmailSender` is part of the backend services layer, specifically for email functionality. It interacts with other components like the frontend URL and logging mechanisms (via `current_app.logger`). The class provides a clean interface for sending emails across various parts of the application, ensuring consistent behavior and easy maintenance.
+
+---
+
+*Generated by CodeWorm on 2026-03-11 18:52*
