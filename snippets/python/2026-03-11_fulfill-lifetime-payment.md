@@ -1,0 +1,123 @@
+# fulfill_lifetime_payment
+
+**Type:** Documentation
+**Repository:** CertGames-Core
+**File:** backend/api/domains/account/controllers/subscription/stripe_ctrl.py
+**Language:** python
+**Lines:** 469-560
+**Complexity:** 10.0
+
+---
+
+## Source Code
+
+```python
+def fulfill_lifetime_payment(session_data):
+    customer_id = session_data.get("customer")
+    session_id = session_data.get("id")
+
+    current_app.logger.info(
+        f"Fulfilling lifetime purchase for session: {session_id}, customer: {customer_id}"
+    )
+
+    try:
+        user = _resolve_user_for_session(session_data, session_id)
+        if not user:
+            current_app.logger.error(
+                f"Could not find or create user for lifetime session: {session_id}"
+            )
+            raise BusinessRuleError(
+                f"Could not find or create user for session: {session_id}"
+            )
+
+        user_id = str(user.id)
+
+        metadata = session_data.get("metadata", {})
+        referral_code = metadata.get("referral_code")
+        if referral_code and not user.referralCodeUsed:
+            try:
+                from api.domains.account.models.User import User as UserModel
+                UserModel.objects(id=user.id).update_one(
+                    set__referralCodeUsed=referral_code
+                )
+                user.reload()
+                current_app.logger.info(
+                    f"Stored referral code {referral_code} for lifetime user {user_id}"
+                )
+            except Exception as e:
+                current_app.logger.error(
+                    f"Failed to store referral code for user {user_id}: {str(e)}"
+                )
+
+        update_data = {
+            "subscriptionActive": True,
+            "subscriptionStatus": "active",
+            "subscriptionPlatform": "stripe",
+            "stripeCustomerId": customer_id,
+            "subscriptionStartDate": datetime.now(UTC),
+            "subscriptionType": "premium",
+            "subscriptionEndDate": datetime(2046, 1, 1),
+            "subscriptionCanceledAt": None,
+        }
+
+        SubscriptionService.update_subscription_data(user_id, update_data)
+
+        if user.referralCodeUsed:
+            try:
+                amount_paid = session_data.get("amount_total")
+                amount_in_dollars = amount_paid / 100 if amount_paid else None
+
+                ReferralOperations.track_conversion(
+                    code=user.referralCodeUsed,
+                    referred_user_id=user_id,
+                    subscription_id=None,
+                    amount=amount_in_dollars
+                )
+            except Exception as referral_error:
+                current_app.logger.error(
+                    f"Failed to track referral conversion for lifetime user {user_id}: {str(referral_error)}",
+                    exc_info=True
+                )
+
+        AuditLogger.log_action(
+            "lifetime_purchase_activated",
+            user_id=user_id,
+            data={
+                "platform": "stripe",
+                "customer_id": customer_id,
+                "session_id": session_id,
+            },
+        )
+
+        if session.get("temp_registration_data"):
+            session.pop("temp_registration_data", None)
+            session.pop("is_oauth_flow",
+```
+
+---
+
+## Documentation
+
+### Documentation for `fulfill_lifetime_payment`
+
+**Purpose and Behavior:**
+The function `fulfill_lifetime_payment` processes a lifetime purchase request by updating user subscription data, logging actions, and handling referrals. It ensures that the user's subscription is marked as active, logs relevant information, and tracks referral conversions if applicable.
+
+**Key Implementation Details:**
+- **User Resolution:** The function first resolves the user associated with the session using `_resolve_user_for_session`.
+- **Referral Handling:** If a valid referral code exists and hasn't been used before, it updates the user's `referralCodeUsed` attribute.
+- **Subscription Update:** It sets various subscription fields such as `subscriptionActive`, `subscriptionStatus`, and `stripeCustomerId`.
+- **Audit Logging:** Logs actions related to the lifetime purchase activation.
+- **Session Cleanup:** Removes temporary registration data from the session.
+
+**When/Why to Use:**
+This function is used when a user completes a lifetime purchase, ensuring that all necessary updates are made to their subscription status and any associated referral tracking. It's critical for maintaining accurate user records and generating meaningful analytics.
+
+**Patterns and Gotchas:**
+- **Error Handling:** The function uses comprehensive error handling with detailed logging, which helps in debugging issues.
+- **Database Updates:** Using `UserModel.objects.update_one` ensures atomic updates to the database, preventing partial state changes.
+- **Referral Code Check:** It checks if a referral code has already been used before applying it, avoiding redundant updates.
+
+---
+
+*Generated by CodeWorm on 2026-03-11 16:16*
