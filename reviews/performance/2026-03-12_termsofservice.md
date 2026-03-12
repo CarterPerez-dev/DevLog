@@ -1,0 +1,134 @@
+# TermsOfService
+
+**Type:** Performance Analysis
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/public/legal/ui/terms.tsx
+**Language:** tsx
+**Lines:** 13-275
+**Complexity:** 9.0
+
+---
+
+## Source Code
+
+```tsx
+function TermsOfService(): React.ReactElement {
+  const { isSimple } = useTheme();
+  const styles = isSimple ? simpleStyles : defaultStyles;
+  const sections = [
+    {
+      id: 'acceptance',
+      title: '1. Acceptance of Terms',
+      content: (
+        <p>
+          Welcome to Cert Games! These Terms of Service ("Terms") govern your
+          access to and use of certgames.com and all related services
+          (collectively, the "Services"). By accessing or using our Services,
+          you agree to be bound by these Terms. If you do not agree to these
+          Terms, you may not access or use the Services.
+        </p>
+      ),
+    },
+    {
+      id: 'changes',
+      title: '2. Changes to Terms',
+      content: (
+        <p>
+          We may modify these Terms at any time. We will provide notice of
+          any material changes by posting the updated Terms on our website
+          and updating the "Last updated" date. Your continued use of the
+          Services after any such changes constitutes your acceptance of the
+          new Terms.
+        </p>
+      ),
+    },
+    {
+      id: 'registration',
+      title: '3. Account Registration',
+      content: (
+        <>
+          <p>
+            To access certain features of our Services, you must register for
+            an account. You may register directly or through Google or Apple
+            authentication services. You agree to provide accurate, current,
+            and complete information during the registration process and to
+            update such information to keep it accurate, current, and
+            complete.
+          </p>
+          <p>
+            You are responsible for safeguarding your account credentials and
+            for all activities that occur under your account. You agree to
+            notify us immediately of any unauthorized use of your account.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: 'subscription',
+      title: '4. Subscription and Payment',
+      content: (
+        <>
+          <p>
+            Some aspects of our Services are available on a subscription
+            basis. By subscribing, you agree to pay the applicable fees.
+            Subscriptions automatically renew unless canceled before the
+            renewal date.
+          </p>
+          <p>
+            All payments are processed through third-party payment
+            processors. Your use of their services is subject to their terms
+            and conditions.
+          </p>
+          <div className={styles.legalCallout}>
+            <strong>Note:</strong>
+            <p>
+              You can cancel your subscription at any time through your
+              account settings. Refunds are provided in accordance with our
+              refund policy.
+            </p>
+          </div>
+        </>
+      ),
+    },
+    {
+      id: 'conduct',
+      title: '5. User Conduct',
+      content: (
+        <>
+          <p>You agree not to:</p>
+          <ul>
+            <li>
+              Use the S
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+#### Time Complexity (Big O Notation)
+The time complexity of `TermsOfService` is \(O(1)\), as the function does not contain any loops, recursive calls, or operations that scale with input size.
+
+#### Space Complexity and Memory Allocation
+- **Space Complexity**: The space complexity is also \(O(1)\) since the function uses a fixed amount of memory for its state and does not depend on the input size.
+- **Memory Allocation**: The `sections` array holds static content, which doesn't impact performance significantly.
+
+#### Bottlenecks or Inefficiencies
+- **Redundant Operations**: The conditional check for `isSimple` to determine styles is redundant if it's called every time this component renders. Consider caching the result.
+- **Large Content Blocks**: Each section contains large blocks of text, which could be optimized by breaking them into smaller chunks or using lazy loading techniques.
+
+#### Optimization Opportunities
+1. **Memoize Styles**: Use React.memo or a similar technique to memoize the `styles` calculation if it doesn't change frequently.
+2. **Lazy Load Text Content**: Break down long paragraphs into smaller components or use lazy-loaded text snippets.
+
+#### Resource Usage Concerns
+- **No Blocking Calls**: The function does not contain any blocking calls, which is good for performance and responsiveness.
+- **N+1 Query Patterns**: There are no database queries in this component, so N+1 query patterns are not applicable here.
+- **Caching Opportunities**: Consider caching the `sections` data if it doesn't change frequently to reduce re-rendering.
+
+By applying these optimizations, you can ensure that the component remains performant and efficient.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 18:28*
