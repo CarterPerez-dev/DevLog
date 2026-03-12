@@ -1,0 +1,148 @@
+# update_tiktok_video
+
+**Type:** Security Review
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/core/integrations/mcp/server.py
+**Language:** python
+**Lines:** 681-766
+**Complexity:** 23.0
+
+---
+
+## Source Code
+
+```python
+async def update_tiktok_video(
+    video_id: str,
+    rank: int | None = None,
+    date_posted: str | None = None,
+    video_url: str | None = None,
+    views: int | None = None,
+    comments: int | None = None,
+    likes: int | None = None,
+    bookmarks: int | None = None,
+    shares: int | None = None,
+    avg_watch_time: float | None = None,
+    new_followers: int | None = None,
+    watched_full_video_percentage: float | None = None,
+    top_comment_words: dict[str, int] | None = None,
+    search_queries: dict[str, float] | None = None,
+    traffic_sources: dict[str, float] | None = None,
+    hook: str | None = None,
+    text_on_screen_hook: str | None = None,
+    length: float | None = None,
+    description: str | None = None,
+    hashtags: list[str] | None = None,
+    cta: str | None = None,
+    full_transcription: str | None = None,
+    notes: str | None = None,
+) -> dict:
+    """
+    Update a TikTok video record. Only updates provided fields.
+    Date format: YYYY-MM-DD.
+    """
+    update_data = {}
+    if rank is not None:
+        update_data["rank"] = rank
+    if date_posted is not None:
+        update_data["date_posted"] = date.fromisoformat(date_posted)
+    if video_url is not None:
+        update_data["video_url"] = video_url
+    if views is not None:
+        update_data["views"] = views
+    if comments is not None:
+        update_data["comments"] = comments
+    if likes is not None:
+        update_data["likes"] = likes
+    if bookmarks is not None:
+        update_data["bookmarks"] = bookmarks
+    if shares is not None:
+        update_data["shares"] = shares
+    if avg_watch_time is not None:
+        update_data["avg_watch_time"] = avg_watch_time
+    if new_followers is not None:
+        update_data["new_followers"] = new_followers
+    if watched_full_video_percentage is not None:
+        update_data["watched_full_video_percentage"] = (
+            watched_full_video_percentage
+        )
+    if top_comment_words is not None:
+        update_data["top_comment_words"] = top_comment_words
+    if search_queries is not None:
+        update_data["search_queries"] = search_queries
+    if traffic_sources is not None:
+        update_data["traffic_sources"] = traffic_sources
+    if hook is not None:
+        update_data["hook"] = hook
+    if text_on_screen_hook is not None:
+        update_data["text_on_screen_hook"] = text_on_screen_hook
+    if length is not None:
+        update_data["length"] = length
+    if description is not None:
+        update_data["description"] = description
+    if hashtags is not None:
+        update_data["hashtags"] = hashtags
+    if cta is not None:
+        update_data["cta"] = cta
+    if full_transcription is not None:
+        update_data["full_transcription"] = full_transcription
+    if notes is not None:
+        update_data["notes"] = notes
+
+    data = TikTokVideoUpdate(**update_data)
+
+    async with sessionmanager.session() as session:
+        result = await DataInputService.update_video(
+            session,
+     
+```
+
+---
+
+## Security Review
+
+### Security Review for `update_tiktok_video` Function
+
+#### Vulnerabilities and Severity:
+
+1. **Input Validation Gaps** - **Medium**
+   - The function accepts various parameters without validating their types or formats, which could lead to unexpected behavior.
+2. **Error Handling** - **Low**
+   - Error handling is minimal, potentially leaking information about the system's internal state.
+
+#### Attack Vectors:
+
+- **Improper Input Validation:** Malicious input could cause issues with data integrity and application logic.
+- **Information Leakage:** Poor error handling might expose sensitive details of the database or service operations.
+
+#### Recommended Fixes:
+
+1. **Input Validation:**
+   - Add type checks and format validations for each parameter to ensure they meet expected criteria.
+   ```python
+   from datetime import date
+
+   def update_tiktok_video(...):
+       if not isinstance(date_posted, str) or not date.fromisoformat(date_posted):
+           raise ValueError("Invalid date_posted format")
+       ...
+   ```
+
+2. **Error Handling:**
+   - Implement proper error handling to catch and handle exceptions gracefully.
+   ```python
+   try:
+       result = await DataInputService.update_video(session, UUID(video_id), data)
+   except Exception as e:
+       return {"error": str(e)}, 500
+   ```
+
+3. **Overall Security Posture:**
+   - Ensure all user inputs are validated and sanitized.
+   - Use context managers for database sessions to prevent TOCTOU bugs.
+
+By addressing these issues, the overall security posture of the function can be significantly improved.
+
+---
+
+*Generated by CodeWorm on 2026-03-11 23:55*
