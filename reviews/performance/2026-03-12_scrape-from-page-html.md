@@ -1,0 +1,133 @@
+# scrape_from_page_html
+
+**Type:** Performance Analysis
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/scripts/scrape_tiktok.py
+**Language:** python
+**Lines:** 208-310
+**Complexity:** 14.0
+
+---
+
+## Source Code
+
+```python
+async def scrape_from_page_html(
+    username: str,
+    ms_token: str,
+) -> list[dict]:
+    """
+    Fallback: extract videos from the embedded JSON in the profile page HTML.
+    Gets fewer videos (only first page) but works when the API endpoint is blocked.
+    """
+    url = f"https://www.tiktok.com/@{username}"
+    cookies = {"msToken": ms_token}
+
+    async with httpx.AsyncClient(
+        headers=TIKTOK_HEADERS,
+        cookies=cookies,
+        follow_redirects=True,
+        timeout=30.0,
+    ) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+
+        match = re.search(
+            r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>',
+            resp.text,
+            re.DOTALL,
+        )
+        if not match:
+            match = re.search(
+                r'<script id="SIGI_STATE"[^>]*>(.*?)</script>',
+                resp.text,
+                re.DOTALL,
+            )
+
+        if not match:
+            raise ValueError("Could not find video data in profile page HTML")
+
+        page_data = json.loads(match.group(1))
+
+        default_scope = page_data.get("__DEFAULT_SCOPE__", page_data)
+        user_post = default_scope.get("webapp.user-detail", {})
+
+        item_module = page_data.get("ItemModule", {})
+        if item_module:
+            raw_videos = list(item_module.values())
+        else:
+            raw_videos = []
+
+        videos = []
+        for raw in raw_videos:
+            stats = raw.get("stats", {})
+            video_meta = raw.get("video", {})
+            challenges = raw.get("challenges", [])
+            create_time = raw.get("createTime", 0)
+
+            hashtags = [
+                f"#{c.get('title', '')}" for c in challenges
+                if c.get("title")
+            ]
+
+            desc = raw.get("desc", "")
+            hook = desc.split("\n")[0].strip() if desc else ""
+            if not hook:
+                hook = desc[:100].strip() if desc else "No description"
+
+            posted_date = datetime.fromtimestamp(
+                int(create_time)
+            ).strftime("%Y-%m-%d") if create_time else date.today().isoformat()
+
+            video_id = raw.get("id", "")
+
+            mapped = {
+                "tiktok_id": video_id,
+                "rank": len(videos) + 1,
+                "date_posted": posted_date,
+                "video_url": f"https://www.tiktok.com/@{username}/video/{video_id}",
+                "views": stats.get("playCount", 0),
+                "comments": stats.get("commentCount", 0),
+                "likes": stats.get("diggCount", 0),
+                "bookmarks": stats.get("collectCount", 0),
+                "shares": stats.get("shareCount", 0),
+                "avg_watch_time": 0.0,
+                "new_followers": 0,
+                "watched_full_video_percentage": 0.0,
+                "top_comment_words": None,
+                "search_queries": None,
+                "traffic_sources": None,
+                "hook": hook if hook else "No hook",
+            
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(n)\), where \(n\) is the number of videos returned by `ItemModule`. The primary bottlenecks are the JSON parsing and the nested dictionary lookups.
+
+**Space Complexity:** The space complexity is also \(O(n)\) due to storing video metadata in the `videos` list. Memory usage can be optimized by processing data directly without intermediate storage when possible.
+
+**Bottlenecks or Inefficiencies:**
+1. **Redundant Regex Searches:** Searching for script tags twice with similar patterns can be inefficient.
+2. **Unnecessary Iterations:** The nested loops and dictionary lookups are redundant, especially if the same keys are accessed multiple times.
+3. **Blocking Print Statements:** `print` statements inside the loop block the event loop, causing potential delays.
+
+**Optimization Opportunities:**
+1. **Combine Regex Searches:** Use a single regex to search for both script tags.
+2. **Minimize Dictionary Lookups:** Cache frequently accessed dictionary keys or use more efficient data structures like `defaultdict`.
+3. **Remove Blocking Print Statements:** Move print statements outside the loop or use logging instead.
+
+**Resource Usage Concerns:**
+- Ensure proper handling of HTTP responses to avoid memory leaks.
+- Use context managers for file handles if any are used in future code (none here).
+- Consider caching results using libraries like `functools.lru_cache` to reduce redundant requests.
+
+By addressing these points, the function can be made more efficient and maintainable.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 19:41*
