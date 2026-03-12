@@ -1,0 +1,129 @@
+# update_tiktok_video
+
+**Type:** Performance Analysis
+**Repository:** angelamos-operations
+**File:** CarterOS-Server/src/core/integrations/mcp/server.py
+**Language:** python
+**Lines:** 681-766
+**Complexity:** 23.0
+
+---
+
+## Source Code
+
+```python
+async def update_tiktok_video(
+    video_id: str,
+    rank: int | None = None,
+    date_posted: str | None = None,
+    video_url: str | None = None,
+    views: int | None = None,
+    comments: int | None = None,
+    likes: int | None = None,
+    bookmarks: int | None = None,
+    shares: int | None = None,
+    avg_watch_time: float | None = None,
+    new_followers: int | None = None,
+    watched_full_video_percentage: float | None = None,
+    top_comment_words: dict[str, int] | None = None,
+    search_queries: dict[str, float] | None = None,
+    traffic_sources: dict[str, float] | None = None,
+    hook: str | None = None,
+    text_on_screen_hook: str | None = None,
+    length: float | None = None,
+    description: str | None = None,
+    hashtags: list[str] | None = None,
+    cta: str | None = None,
+    full_transcription: str | None = None,
+    notes: str | None = None,
+) -> dict:
+    """
+    Update a TikTok video record. Only updates provided fields.
+    Date format: YYYY-MM-DD.
+    """
+    update_data = {}
+    if rank is not None:
+        update_data["rank"] = rank
+    if date_posted is not None:
+        update_data["date_posted"] = date.fromisoformat(date_posted)
+    if video_url is not None:
+        update_data["video_url"] = video_url
+    if views is not None:
+        update_data["views"] = views
+    if comments is not None:
+        update_data["comments"] = comments
+    if likes is not None:
+        update_data["likes"] = likes
+    if bookmarks is not None:
+        update_data["bookmarks"] = bookmarks
+    if shares is not None:
+        update_data["shares"] = shares
+    if avg_watch_time is not None:
+        update_data["avg_watch_time"] = avg_watch_time
+    if new_followers is not None:
+        update_data["new_followers"] = new_followers
+    if watched_full_video_percentage is not None:
+        update_data["watched_full_video_percentage"] = (
+            watched_full_video_percentage
+        )
+    if top_comment_words is not None:
+        update_data["top_comment_words"] = top_comment_words
+    if search_queries is not None:
+        update_data["search_queries"] = search_queries
+    if traffic_sources is not None:
+        update_data["traffic_sources"] = traffic_sources
+    if hook is not None:
+        update_data["hook"] = hook
+    if text_on_screen_hook is not None:
+        update_data["text_on_screen_hook"] = text_on_screen_hook
+    if length is not None:
+        update_data["length"] = length
+    if description is not None:
+        update_data["description"] = description
+    if hashtags is not None:
+        update_data["hashtags"] = hashtags
+    if cta is not None:
+        update_data["cta"] = cta
+    if full_transcription is not None:
+        update_data["full_transcription"] = full_transcription
+    if notes is not None:
+        update_data["notes"] = notes
+
+    data = TikTokVideoUpdate(**update_data)
+
+    async with sessionmanager.session() as session:
+        result = await DataInputService.update_video(
+            session,
+     
+```
+
+---
+
+## Performance Analysis
+
+### Performance Analysis
+
+**Time Complexity:** The function has a time complexity of \(O(n)\), where \(n\) is the number of non-`None` parameters passed to the function. This is because each parameter check and potential dictionary update contributes linearly to the execution time.
+
+**Space Complexity:** The space complexity is also \(O(n)\) due to the creation of the `update_data` dictionary, which can grow with the number of non-`None` parameters.
+
+**Bottlenecks or Inefficiencies:**
+1. **Redundant Operations:** The function checks each parameter individually and conditionally updates the `update_data` dictionary. This results in unnecessary iterations for each `None` value.
+2. **Blocking Calls in Async Contexts:** The use of `await DataInputService.update_video()` is fine, but ensure that this call does not block or introduce significant latency.
+
+**Optimization Opportunities:**
+1. **Reduce Redundant Iterations:** Use a dictionary comprehension to initialize `update_data` directly from the parameters.
+   ```python
+   update_data = {k: v for k, v in locals().items() if k != 'video_id' and v is not None}
+   ```
+2. **Simplify Parameter Handling:** Consider using a more structured approach with dataclasses or a dedicated class to handle the parameter validation and transformation.
+
+**Resource Usage Concerns:**
+- Ensure that `sessionmanager.session()` returns an efficiently managed session, avoiding resource leaks.
+- Verify that `DataInputService.update_video()` is designed for asynchronous operations to fully leverage the async context.
+
+By applying these optimizations, you can reduce unnecessary iterations and improve both time and space efficiency.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 08:27*
