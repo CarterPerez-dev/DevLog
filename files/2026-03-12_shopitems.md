@@ -1,0 +1,166 @@
+# shopItems
+
+**Type:** File Overview
+**Repository:** CertGames-Core
+**File:** backend/devtools/data/shop_items/shopItems.js
+**Language:** javascript
+**Lines:** 1-269
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```javascript
+[
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cd2'),
+    type: 'avatar',
+    title: 'Nyxara',
+    description: 'The moon whispers secrets only the stars understand',
+    cost: 77500,
+    imageUrl: '/avatars/avatar150.png',
+    unlockLevel: 150,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cc9'),
+    type: 'avatar',
+    title: 'Zephyrbane',
+    description: 'Darkness follows the storm, not as a shadow but as its heir',
+    cost: 70000,
+    imageUrl: '/avatars/avatar120.png',
+    unlockLevel: 120,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8033dafc1b9f001544cd9'),
+    type: 'xpBoost',
+    title: 'XP Boost 100',
+    description: 'Increase your XP gain by 100%.',
+    cost: 100000,
+    imageUrl: '/xp/xp100.svg',
+    effectValue: 2
+  },
+  {
+    _id: ObjectId('67c8033dafc1b9f001544cda'),
+    type: 'xpBoost',
+    title: 'XP Boost 200',
+    description: 'Increase your XP gain by 200%.',
+    cost: 200000,
+    imageUrl: '/xp/xp200.svg',
+    effectValue: 3
+  },
+  {
+    _id: ObjectId('67c8033dafc1b9f001544cdb'),
+    type: 'xpBoost',
+    title: 'XP Boost 10',
+    description: 'Increase your XP gain by 10%.',
+    cost: 15000,
+    imageUrl: '/xp/xp10.svg',
+    effectValue: 1.1
+  },
+  {
+    _id: ObjectId('67c8033dafc1b9f001544cdc'),
+    type: 'xpBoost',
+    title: 'XP Boost 50',
+    description: 'Increase your XP gain by 50%.',
+    cost: 75000,
+    imageUrl: '/xp/xp50.svg',
+    effectValue: 1.5
+  },
+  {
+    _id: ObjectId('67c8033dafc1b9f001544cd8'),
+    type: 'xpBoost',
+    title: 'XP Boost 25',
+    description: 'Increase your XP gain by 25%.',
+    cost: 40000,
+    imageUrl: '/xp/xp25.svg',
+    effectValue: 1.25
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cc6'),
+    type: 'avatar',
+    title: 'Hellblade',
+    description: 'Ashes fall like snow, a requiem for the unworthy',
+    cost: 60000,
+    imageUrl: '/avatars/avatar1000.png',
+    unlockLevel: 100,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cc7'),
+    type: 'avatar',
+    title: 'Dark Nexus',
+    description: 'Infinity bends, but chaos never breaks',
+    cost: 125000,
+    imageUrl: '/avatars/avatar250.png',
+    unlockLevel: 250,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cca'),
+    type: 'avatar',
+    title: 'Infernal Bastion',
+    description: 'A soul consumed by flames',
+    cost: 45000,
+    imageUrl: '/avatars/avatar70.png',
+    unlockLevel: 70,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cc3'),
+    type: 'avatar',
+    title: 'Astral Revenant',
+    description: 'Craftsman of the unknown',
+    cost: 22500,
+    imageUrl: '/avatars/avatar30.png',
+    unlockLevel: 30,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('67c8019eafc1b9f001544cc4'),
+    type: 'avatar',
+    title: 'Celestial Bloom',
+    description: 'A flower that grows where light and shadow converge',
+    cost: 50000,
+    imageUrl: '/avatars/avatar80.png',
+    unlockLevel: 80,
+    effectValue: null
+  },
+  {
+    _id: ObjectId('6
+```
+
+---
+
+## File Overview
+
+# shopItems.js Documentation
+
+## Purpose and Responsibility
+This file contains a collection of objects representing various in-game items, specifically avatars and XP boosts. These items are used to populate the game's shop. Each item object includes properties like `type`, `title`, `description`, `cost`, `imageUrl`, `unlockLevel`, and `effectValue`.
+
+## Key Exports or Public Interface
+The file exports a single constant `shopItems` which is an array of objects representing in-game items.
+
+```javascript
+export const shopItems = [
+  // Array of item objects as shown above
+];
+```
+
+## How It Fits In the Project
+This file serves as a central repository for all in-game items. It is imported into other parts of the application to initialize the game's shop, ensuring that all available items are easily accessible and can be dynamically displayed or interacted with.
+
+## Notable Design Decisions
+- **Type Discrimination**: The `type` field distinguishes between different item types (avatars and XP boosts), allowing for specialized handling in other parts of the application.
+- **Null Values**: For some avatar items, `effectValue` is set to `null`, indicating that these avatars do not provide any additional effects beyond visual or narrative enhancements.
+- **Consistent Structure**: Each item object follows a consistent structure, making it easy to add new items and ensuring uniformity across the game's inventory system.
+```
+
+This documentation provides an overview of the file’s purpose, key exports, integration within the project, and design decisions.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 11:58*
