@@ -1,0 +1,140 @@
+# firewall_fury_ctrl
+
+**Type:** Code Evolution
+**Repository:** CertGames-Core
+**File:** backend/api/domains/games/controllers/firewall_fury/firewall_fury_ctrl.py
+**Language:** python
+**Lines:** 1-1
+**Complexity:** 0.0
+
+---
+
+## Source Code
+
+```python
+Commit: e2d4992b
+Message: dev v2.1.3 (#194)
+
+* version v2.1.3
+closes issue: https://github.com/CarterPerez-dev/CertGames-Core/issues/183
+closes issue: https://github.com/CarterPerez-dev/CertGames-Core/issues/151
+closes issue: https://github.com/CarterPerez-dev/CertGames-Core/issues/142
+
+* eslint is gay
+Author: Carter Perez
+File: backend/api/domains/games/controllers/firewall_fury/firewall_fury_ctrl.py
+Change type: new file
+
+Diff:
+@@ -0,0 +1,121 @@
++"""
++©AngelaMos | 2026
++firewall_fury_ctrl.py
++"""
++
++from flask import g
++from typing import Any
++
++from settings import Business
++from api.domains.account.models.User import User
++from api.domains.progression.services.progression_ops import (
++    ProgressionService,
++)
++from api.domains.progression.services.unlock_engine import (
++    process_achievements_for_user,
++)
++
++from ...services.firewall_fury.firewall_fury_ops import FirewallFuryService
++
++
++def get_firewall_fury_missions() -> list[dict[str, Any]]:
++    """
++    Return all mission packs serialized for the client.
++    """
++    missions = g.firewall_fury_missions
++    return [m.to_dict() for m in missions]
++
++
++def get_firewall_fury_mission_scenarios() -> dict[str, Any]:
++    """
++    Return a mission and its ordered scenarios.
++    Scenario phases are sanitized to strip isTrap flags.
++    """
++    mission = g.firewall_fury_mission
++    scenarios = g.firewall_fury_scenarios
++
++    return {
++        "mission": mission.to_dict() if mission else None,
++        "scenarios": [s.to_dict() for s in scenarios],
++    }
++
++
++def evaluate_firewall_fury_ruleset() -> dict[str, Any]:
++    """
++    Evaluate the user's ordered ruleset against the phase's test traffic.
++    Returns per-traffic results and scoring breakdown.
++    """
++    scenario = g.firewall_fury_scenario
++    phase_number: int = g.validated.get("phaseNumber")
++    selected_rule_ids: list[str] = g.validated.get("selectedRuleIds")
++
++    phase = None
++    for p in scenario.phases:
++        if p.get("phaseNumber") == phase_number:
++            phase = p
++            break
++
++    if not phase:
++        return {"error": "Phase not found"}
++
++    return FirewallFuryService.evaluate_ruleset(selected_rule_ids, phase)
++
++
++def submit_firewall_fury_score() -> dict[str, Any]:
++    """
++    Save mission score, store game history, award XP/coins,
++    and check for achievement unlocks.
++    """
++    user: User = g.user
++    score: int = g.validated.get('score')
++    mission_id: str = g.validated.get('missionId')
++    scenario_ids: list[str] = g.validated.get('scenarioIds', [])
++
++    FirewallFuryService.save_score(user.id, score, mission_id)
++
++    if scenario_ids:
++        FirewallFuryService.store_game_history(user, mission_id, scenario_ids)
++
++    xp_to_award = score // Business.FIREWALL_FURY_XP_DIVISOR
++    coins_to_award = score // Business.FIREWALL_FURY_COINS_DIVISOR
++
++    ProgressionService.update_xp_and_coins(user, xp_to_award, coins_to_award)
++
++    newly_unlocked = process_achievements_for_u
+```
+
+---
+
+## Code Evolution
+
+### Change Analysis for Commit `e2d4992b`
+
+**What was Changed:**
+The commit introduces a new file, `firewall_fury_ctrl.py`, which contains several functions to handle operations related to the "Firewall Fury" game domain in the CertGames-Core backend. These include retrieving mission packs and scenarios, evaluating rulesets, submitting scores, and generating leaderboards.
+
+**Why it was Likely Changed:**
+This change likely addresses issues reported in GitHub issues #183, #151, and #142, as indicated by the commit message. The introduction of new functions suggests that these are intended to provide a comprehensive set of operations for managing game progress and user achievements.
+
+**Impact on Behavior:**
+The new file adds functionality for handling various aspects of the "Firewall Fury" game domain, such as mission retrieval, scenario evaluation, score submission, and leaderboard generation. This will enable better management of game state and user progression within the application.
+
+**Risks or Concerns:**
+- **Dependency Injection:** The use of `g` object to pass data between functions might introduce issues if not managed properly.
+- **Error Handling:** Some functions (e.g., `evaluate_firewall_fury_ruleset`) return a dictionary with an error message, which could be improved for better clarity and handling.
+- **Performance:** Iterating over scenarios and missions in the leaderboard function may impact performance if the data set is large.
+
+Overall, this change appears to be well-integrated into existing services and models, addressing specific issues while adding necessary functionality.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 13:20*
