@@ -1,0 +1,156 @@
+# IOSTermsOfService
+
+**Type:** Security Review
+**Repository:** CertGames-Core
+**File:** frontend/user-app/src/domains/public/legal/ui/ios.terms.tsx
+**Language:** tsx
+**Lines:** 13-275
+**Complexity:** 9.0
+
+---
+
+## Source Code
+
+```tsx
+function IOSTermsOfService(): React.ReactElement {
+  const { isSimple } = useTheme();
+  const styles = isSimple ? simpleStyles : defaultStyles;
+  const sections = [
+    {
+      id: 'acceptance',
+      title: '1. Acceptance of Terms',
+      content: (
+        <p>
+          Welcome to Cert Games! These Terms of Service ("Terms") govern your
+          access to and use of certgames.com and all related services
+          (collectively, the "Services"). By accessing or using our Services,
+          you agree to be bound by these Terms. If you do not agree to these
+          Terms, you may not access or use the Services.
+        </p>
+      ),
+    },
+    {
+      id: 'changes',
+      title: '2. Changes to Terms',
+      content: (
+        <p>
+          We may modify these Terms at any time. We will provide notice of
+          any material changes by posting the updated Terms on our website
+          and updating the "Last updated" date. Your continued use of the
+          Services after any such changes constitutes your acceptance of the
+          new Terms.
+        </p>
+      ),
+    },
+    {
+      id: 'registration',
+      title: '3. Account Registration',
+      content: (
+        <>
+          <p>
+            To access certain features of our Services, you must register for
+            an account. You may register directly or through Google or Apple
+            authentication services. You agree to provide accurate, current,
+            and complete information during the registration process and to
+            update such information to keep it accurate, current, and
+            complete.
+          </p>
+          <p>
+            You are responsible for safeguarding your account credentials and
+            for all activities that occur under your account. You agree to
+            notify us immediately of any unauthorized use of your account.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: 'subscription',
+      title: '4. Subscription and Payment',
+      content: (
+        <>
+          <p>
+            Some aspects of our Services are available on a subscription
+            basis. By subscribing, you agree to pay the applicable fees.
+            Subscriptions automatically renew unless canceled before the
+            renewal date.
+          </p>
+          <p>
+            All payments are processed through third-party payment
+            processors. Your use of their services is subject to their terms
+            and conditions.
+          </p>
+          <div className={styles.legalCallout}>
+            <strong>Note:</strong>
+            <p>
+              You can cancel your subscription at any time through your
+              account settings. Refunds are provided in accordance with our
+              refund policy.
+            </p>
+          </div>
+        </>
+      ),
+    },
+    {
+      id: 'conduct',
+      title: '5. User Conduct',
+      content: (
+        <>
+          <p>You agree not to:</p>
+          <ul>
+            <li>
+              Use th
+```
+
+---
+
+## Security Review
+
+### Security Review for `IOSTermsOfService` Component
+
+#### Vulnerabilities Found:
+
+1. **Info:**
+   - The component does not contain any direct injection or deserialization vulnerabilities.
+   - No hardcoded secrets are present.
+
+2. **Info:**
+   - Input validation is minimal, but the content is static and does not involve user input processing.
+
+3. **Info:**
+   - Error handling is basic; however, there's no indication of sensitive information being leaked through errors.
+
+#### Attack Vectors:
+
+- **XSS (Cross-Site Scripting):** Although unlikely due to static content, if any dynamic content were added, it could be a vector.
+- **Information Disclosure:** Minimal risk as the component does not handle user input or external data.
+
+#### Recommended Fixes:
+
+1. **Ensure Static Content Security:**
+   - Review and ensure that all static content is properly sanitized in case of future updates.
+
+2. **Enhance Error Handling:**
+   - Implement generic error handling to avoid leaking sensitive information through errors.
+   
+3. **Code Reviews:**
+   - Regularly review the component for any potential changes that might introduce vulnerabilities.
+
+#### Overall Security Posture:
+
+The current implementation is secure, but maintaining a vigilant approach is crucial as the application evolves. Ensure all dynamic content and user interactions are properly validated and sanitized to prevent future vulnerabilities.
+
+```tsx
+// Example of enhanced error handling
+try {
+  // Code logic here
+} catch (error) {
+  console.error("An unexpected error occurred:", error);
+  return <p>Error loading terms.</p>;
+}
+```
+
+This review focuses on the current static content, but ongoing security practices should be maintained.
+
+---
+
+*Generated by CodeWorm on 2026-03-12 12:59*
